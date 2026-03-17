@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 14% 4%;
+    --foreground: 0 0% 92%;
+
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 92%;
+
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 92%;
+
+    --primary: 37 91% 55%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 240 12% 10%;
+    --secondary-foreground: 0 0% 80%;
+
+    --muted: 240 10% 14%;
+    --muted-foreground: 240 5% 50%;
+
+    --accent: 176 56% 55%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 100% 71%;
+    --destructive-foreground: 0 0% 0%;
+
+    --success: 147 50% 63%;
+    --success-foreground: 0 0% 0%;
+
+    --border: 0 0% 100% / 0.08;
+    --input: 0 0% 100% / 0.08;
+    --ring: 37 91% 55%;
+
+    --radius: 0.5rem;
+
+    --surface-1: 240 10% 6%;
+    --surface-2: 240 12% 10%;
+
+    --sidebar-background: 240 10% 6%;
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-primary: 37 91% 55%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 240 12% 10%;
+    --sidebar-accent-foreground: 0 0% 92%;
+    --sidebar-border: 0 0% 100% / 0.08;
+    --sidebar-ring: 37 91% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Fraunces', serif;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .glass-surface {
+    @apply bg-card/80 backdrop-blur-md;
+    border: 0.5px solid hsl(0 0% 100% / 0.08);
+  }
+
+  .glass-surface-elevated {
+    @apply bg-secondary/80 backdrop-blur-md;
+    border: 0.5px solid hsl(0 0% 100% / 0.1);
+    box-shadow: 0 1px 1px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.4);
+  }
+
+  .amber-glow {
+    box-shadow: 0 0 20px rgba(245, 166, 35, 0.15);
+  }
+
+  .border-thin {
+    border: 0.5px solid hsl(0 0% 100% / 0.08);
+  }
+}
