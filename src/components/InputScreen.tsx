@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { Globe, Plus, ChevronDown, X } from "lucide-react";
 
 const SAMPLE_SITES = ["apollo.io", "linear.app", "hubspot.com", "notion.so"];
+
+const staggerContainer = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
