@@ -1,16 +1,30 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState, useCallback } from "react";
+import InputScreen from "@/components/InputScreen";
+import ProgressScreen from "@/components/ProgressScreen";
+import ReportScreen from "@/components/ReportScreen";
 
-// IMPORTANT: Fully REPLACE this with your own code
-const PlaceholderIndex = () => {
-  // PLACEHOLDER: Replace this entire return statement with the user's app.
-  // The inline background color is intentionally not part of the design system.
+type Screen = "input" | "progress" | "report";
+
+const Index = () => {
+  const [screen, setScreen] = useState<Screen>("input");
+  const [url, setUrl] = useState("");
+
+  const handleAnalyze = (inputUrl: string, _competitors: string[]) => {
+    setUrl(inputUrl);
+    setScreen("progress");
+  };
+
+  const handleComplete = useCallback(() => {
+    setScreen("report");
+  }, []);
+
   return (
-    <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#fcfbf8' }}>
-      <img data-lovable-blank-page-placeholder="REMOVE_THIS" src="/placeholder.svg" alt="Your app will live here!" />
+    <div className="min-h-screen bg-background">
+      {screen === "input" && <InputScreen onAnalyze={handleAnalyze} />}
+      {screen === "progress" && <ProgressScreen url={url} onComplete={handleComplete} />}
+      {screen === "report" && <ReportScreen url={url} />}
     </div>
   );
 };
-
-const Index = PlaceholderIndex;
 
 export default Index;
