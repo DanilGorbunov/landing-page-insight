@@ -68,7 +68,8 @@ const InputScreen = ({ onAnalyze }: InputScreenProps) => {
           className="font-display italic text-4xl md:text-5xl lg:text-6xl font-light tracking-tight leading-[1.1] mb-6"
           style={{ letterSpacing: "-0.03em" }}
         >
-          How does your landing page stack up against competitors?
+          How does your landing page{" "}
+          <span className="text-yellow-500">stack up</span> against competitors?
         </motion.h1>
 
         <motion.p variants={staggerItem} className="text-muted-foreground text-base mb-10 max-w-md mx-auto">
