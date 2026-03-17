@@ -1,82 +1,125 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Loader2, Circle } from "lucide-react";
+import { getStreamUrl } from "@/lib/api";
+import type { AnalysisResult } from "@/lib/api";
 
 const STEPS = [
   { label: "Discovering competitors", detail: "Scanning industry landscape..." },
-  { label: "Competitors found", detail: "Identified 4 competitors in category" },
-  { label: "Screenshots captured", detail: "Rendering pages at 1440px viewport" },
+  { label: "Competitors found", detail: "Identified competitors in category" },
+  { label: "Screenshots captured", detail: "Rendering pages..." },
   { label: "AI analyzing sections", detail: "Evaluating hero, value prop, CTA..." },
   { label: "Synthesizing insights", detail: "Generating actionable report" },
 ];
 
-const LOG_MESSAGES = [
-  "Fetching landing page metadata...",
-  "Extracting H1 from target site...",
-  "Running competitor discovery via SimilarWeb...",
-  "Found: linear.app, notion.so, monday.com, asana.com",
-  "Capturing viewport screenshot for apollo.io...",
-  "Screenshot captured (1440×900)",
-  "Capturing viewport screenshot for linear.app...",
-  "Analyzing hero section copy effectiveness...",
-  "Evaluating CTA contrast ratio: 4.8:1 (AA pass)",
-  "Comparing value proposition clarity across 4 sites...",
-  "Social proof density: 2 logos detected (below median)...",
-  "Generating competitive position score...",
-  "Synthesis complete. Score: 6.2/10",
-];
-
-interface ProgressScreenProps {
-  url: string;
-  onComplete: () => void;
+function stepFromProgress(step: string, index?: number, total?: number): number {
+  switch (step) {
+    case "started":
+    case "discovering":
+      return 0;
+    case "competitors":
+      return 1;
+    case "screenshot":
+      if (total != null && total > 0 && index != null) {
+        if (index >= total) return 2;
+        return 1 + Math.floor((index / total) * 1.5); // 1 -> 2
+      }
+      return 2;
+    case "analyzing":
+      return 3;
+    case "synthesis":
+      return 4;
+    default:
+      return 0;
+  }
 }
 
-const ProgressScreen = ({ url, onComplete }: ProgressScreenProps) => {
+interface ProgressScreenProps {
+  jobId: string;
+  url: string;
+  onComplete: (result: AnalysisResult | null) => void;
+  onBack?: () => void;
+}
+
+const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps) => {
   const [activeStep, setActiveStep] = useState(0);
-  const [logIndex, setLogIndex] = useState(0);
+  const [logMessage, setLogMessage] = useState("Connecting...");
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const doneRef = useRef(false);
+  const serverErrorRef = useRef(false);
 
   const domain = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
   useEffect(() => {
-    const stepInterval = setInterval(() => {
-      setActiveStep((prev) => {
-        if (prev >= STEPS.length - 1) {
-          clearInterval(stepInterval);
-          setTimeout(onComplete, 800);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 1800);
+    if (doneRef.current) return;
+    const es = new EventSource(getStreamUrl(jobId));
 
-    const logInterval = setInterval(() => {
-      setLogIndex((prev) => {
-        if (prev >= LOG_MESSAGES.length - 1) {
-          clearInterval(logInterval);
-          return prev;
+    es.addEventListener("progress", (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data as string);
+        const step = data.step ?? "started";
+        const next = stepFromProgress(step, data.index, data.total);
+        setActiveStep((prev) => Math.max(prev, next));
+        if (data.message) setLogMessage(data.message);
+        if (data.competitors?.length) setLogMessage(`Found: ${data.competitors.join(", ")}`);
+        if (step === "screenshot" && data.url) setLogMessage(`Capturing ${data.url}...`);
+      } catch {
+        // ignore parse errors
+      }
+    });
+
+    es.addEventListener("done", (event: MessageEvent) => {
+      if (doneRef.current) return;
+      doneRef.current = true;
+      es.close();
+      try {
+        const data = JSON.parse(event.data as string) as AnalysisResult;
+        setLogMessage("Report ready.");
+        setActiveStep(STEPS.length);
+        setTimeout(() => onComplete(data), 600);
+      } catch {
+        onComplete(null);
+      }
+    });
+
+    es.addEventListener("error", (event: MessageEvent & { data?: string }) => {
+      if (doneRef.current) return;
+      try {
+        const data = JSON.parse(event.data || "{}");
+        if (data.error) {
+          serverErrorRef.current = true;
+          setLogMessage(data.error);
+          setStreamError(data.error);
         }
-        return prev + 1;
-      });
-    }, 700);
+      } catch {
+        setStreamError("Connection error.");
+      }
+    });
+
+    es.onerror = () => {
+      if (doneRef.current) return;
+      if (!serverErrorRef.current) {
+        setLogMessage("Stream error. Retry or check backend.");
+        setStreamError("Stream error. Retry or check backend.");
+      }
+      es.close();
+    };
 
     return () => {
-      clearInterval(stepInterval);
-      clearInterval(logInterval);
+      es.close();
     };
-  }, [onComplete]);
+  }, [jobId, onComplete]);
 
   return (
     <div className="min-h-screen flex flex-col relative z-10">
-      {/* Top bar */}
       <div className="h-14 flex items-center px-6 border-b border-border">
         <span className="font-display italic text-lg font-semibold text-foreground mr-4">Landing Lens</span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="w-2 h-2 rounded-full bg-primary animate-pulse-amber" />
+          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           <span>Analyzing <span className="font-mono text-foreground">{domain}</span></span>
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 flex items-center justify-center px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -84,7 +127,6 @@ const ProgressScreen = ({ url, onComplete }: ProgressScreenProps) => {
           transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
           className="w-full max-w-lg"
         >
-          {/* Steps */}
           <div className="space-y-0">
             {STEPS.map((step, i) => {
               const isDone = i < activeStep;
@@ -99,7 +141,6 @@ const ProgressScreen = ({ url, onComplete }: ProgressScreenProps) => {
                   transition={{ delay: i * 0.1, duration: 0.4 }}
                   className="flex items-start gap-4 py-3"
                 >
-                  {/* Icon */}
                   <div className="mt-0.5 w-5 h-5 flex items-center justify-center shrink-0">
                     {isDone && (
                       <motion.div
@@ -117,8 +158,6 @@ const ProgressScreen = ({ url, onComplete }: ProgressScreenProps) => {
                       <Circle className="w-3.5 h-3.5 text-muted-foreground/40" />
                     )}
                   </div>
-
-                  {/* Text */}
                   <div>
                     <p
                       className={`text-sm font-medium ${
@@ -136,23 +175,31 @@ const ProgressScreen = ({ url, onComplete }: ProgressScreenProps) => {
             })}
           </div>
 
-          {/* Live log */}
-          <div className="mt-8 glass-surface rounded-md p-3 h-24 overflow-hidden">
+          <div className="mt-8 glass-surface rounded-md p-3 min-h-24 overflow-hidden">
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-amber" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
               <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Live Log</span>
             </div>
-            <AnimatePresence mode="popLayout">
+            <AnimatePresence mode="wait">
               <motion.p
-                key={logIndex}
+                key={logMessage}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className="text-xs font-mono text-muted-foreground"
+                className={`text-xs font-mono ${streamError ? "text-destructive" : "text-muted-foreground"}`}
               >
-                {LOG_MESSAGES[logIndex]}
+                {logMessage}
               </motion.p>
             </AnimatePresence>
+            {streamError && onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="mt-4 px-4 py-2 text-sm rounded-md border border-white/10 text-foreground hover:bg-white/5 transition-colors"
+              >
+                ← Back to try again
+              </button>
+            )}
           </div>
         </motion.div>
       </div>

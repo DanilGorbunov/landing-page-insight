@@ -34,7 +34,11 @@ export async function synthesizeReport(input) {
 
   const prompt = `${parts.join("")}
 
-Based on the above, write a final competitive analysis report in markdown. Include:
+Based on the above, write a final competitive analysis report in markdown.
+
+**Required:** Start the report with a single line: "Overall score: X/10" where X is a number from 0 to 10 (e.g. 6.2) based on the competitive position.
+
+Then include:
 1. Executive summary
 2. Strengths of the user's landing vs competitors
 3. Gaps and recommendations (with evidence from the sections)

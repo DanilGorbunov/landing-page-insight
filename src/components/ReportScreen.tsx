@@ -1,6 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, ArrowUpRight, Check, X, ExternalLink } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Check, X, ExternalLink, ArrowLeft } from "lucide-react";
+import type { HistoryEntry } from "@/lib/analysisHistory";
+import type { AnalysisResult } from "@/lib/api";
+
+const SECTION_TO_BACKEND: Record<string, string> = {
+  Hero: "hero",
+  "Value Prop": "value proposition",
+  Features: "features",
+  "Social Proof": "social proof",
+  CTA: "CTA",
+};
+
+function parseScoreFromReport(report: string | undefined): number | null {
+  if (!report) return null;
+  const m = report.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
+  return m ? parseFloat(m[1], 10) : null;
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -23,6 +39,9 @@ type SectionTab = (typeof SECTION_TABS)[number];
 
 interface ReportScreenProps {
   url: string;
+  result?: AnalysisResult | null;
+  savedEntry?: HistoryEntry | null;
+  onBack?: () => void;
 }
 
 const AnimatedScore = ({ target }: { target: number }) => {
@@ -41,7 +60,11 @@ const AnimatedScore = ({ target }: { target: number }) => {
     ref.current = requestAnimationFrame(animate);
     return () => { if (ref.current) cancelAnimationFrame(ref.current); };
   }, [target]);
-  return <span>{val.toFixed(1)}</span>;
+  return (
+    <span className="tabular-nums" style={{ letterSpacing: 0 }}>
+      {val.toFixed(1)}
+    </span>
+  );
 };
 
 const PriorityBadge = ({ level }: { level: "P1" | "P2" }) => (
@@ -213,30 +236,51 @@ const sectionData: Record<SectionTab, { sites: { name: string; score: number; is
   },
 };
 
-const ReportScreen = ({ url }: ReportScreenProps) => {
+const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [activeSection, setActiveSection] = useState<SectionTab>("Hero");
   const domain = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const apiResult = result ?? savedEntry?.result;
+  const score =
+    apiResult?.synthesis?.overall_score ??
+    parseScoreFromReport(apiResult?.report) ??
+    6.2;
+  const synthesisText =
+    apiResult?.report ??
+    "Your landing page communicates core features but lacks the persuasive elements that top competitors use.";
+  const hasRealData = Boolean(apiResult?.userAnalysis || apiResult?.competitors?.length);
 
   return (
     <div className="min-h-screen flex flex-col relative z-10">
-      {/* Top bar */}
-      <div className="h-14 flex items-center px-6 border-b border-border">
-        <span className="font-display italic text-lg font-semibold text-foreground mr-6">Landing Lens</span>
-        <div className="flex gap-1">
-          {TABS.map((tab) => (
+      {/* Top bar — aligned to content container start */}
+      <div className="h-14 flex items-center border-b border-border">
+        <div className="max-w-6xl mx-auto w-full px-4 md:px-8 flex items-center">
+          {onBack && (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm rounded-sm transition-colors ${
-                activeTab === tab
-                  ? "bg-secondary text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              type="button"
+              onClick={onBack}
+              className="mr-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+              aria-label="Back"
             >
-              {tab}
+              <ArrowLeft className="w-5 h-5" />
             </button>
-          ))}
+          )}
+          <span className="font-display italic text-lg font-semibold text-foreground mr-6">Landing Lens</span>
+          <nav className="flex gap-1">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-sm rounded-sm transition-colors ${
+                  activeTab === tab
+                    ? "bg-secondary text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
         </div>
       </div>
 
@@ -247,8 +291,7 @@ const ReportScreen = ({ url }: ReportScreenProps) => {
             {/* Synthesis card */}
             <motion.div
               variants={itemVariants}
-              className="glass-surface-elevated rounded-md p-6 mb-8"
-              style={{ borderLeft: "2px solid hsl(37 91% 55%)" }}
+              className="glass-surface-elevated rounded-md p-6 mb-8 border-l-2 border-primary"
             >
               <div className="flex flex-col md:flex-row md:items-start gap-6">
                 <div className="flex-1">
@@ -260,24 +303,22 @@ const ReportScreen = ({ url }: ReportScreenProps) => {
                   </div>
                   <div className="flex items-baseline gap-3 mb-4">
                     <span className="text-7xl font-mono font-bold text-foreground tabular-nums leading-none">
-                      <AnimatedScore target={6.2} />
+                      <AnimatedScore target={score} />
                     </span>
-                    <span className="text-2xl font-mono text-muted-foreground">/10</span>
+                    <span className="text-2xl font-mono text-muted-foreground tabular-nums" style={{ letterSpacing: 0 }}>/10</span>
                   </div>
                   <div className="flex items-center gap-2 mb-4">
                     <AlertTriangle className="w-4 h-4 text-primary" />
                     <span className="text-sm font-medium text-primary">Moderate competitive position</span>
                   </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-                    Your landing page communicates core features but lacks the persuasive elements that top competitors use.
-                    The hero section needs a stronger value proposition, social proof is significantly below the competitive median,
-                    and your CTA copy doesn't set clear expectations for what happens next.
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-xl whitespace-pre-wrap">
+                    {synthesisText}
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 text-xs">
                   <div className="glass-surface rounded-sm px-3 py-2 flex items-center gap-2">
                     <span className="text-muted-foreground">Competitors analyzed:</span>
-                    <span className="font-mono text-foreground">4</span>
+                    <span className="font-mono text-foreground">{hasRealData && apiResult?.competitors ? apiResult.competitors.length : 4}</span>
                   </div>
                   <div className="glass-surface rounded-sm px-3 py-2 flex items-center gap-2">
                     <span className="text-muted-foreground">Confidence:</span>
@@ -292,16 +333,28 @@ const ReportScreen = ({ url }: ReportScreenProps) => {
               </div>
             </motion.div>
 
-            {/* Critical gaps */}
-            <motion.div variants={itemVariants}>
-              <h2 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-                Critical Gaps
-                <span className="text-xs font-normal text-muted-foreground">({criticalGaps.length} identified)</span>
-              </h2>
-            </motion.div>
+            {hasRealData && apiResult?.report && (
+              <motion.div variants={itemVariants} className="mb-8">
+                <h2 className="text-sm font-semibold text-foreground mb-4">Full Report</h2>
+                <div className="glass-surface rounded-md p-6 prose prose-invert prose-sm max-w-none">
+                  <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground leading-relaxed">
+                    {apiResult.report}
+                  </pre>
+                </div>
+              </motion.div>
+            )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {criticalGaps.map((gap, i) => (
+            {!hasRealData && (
+              <>
+                <motion.div variants={itemVariants}>
+                  <h2 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                    Critical Gaps
+                    <span className="text-xs font-normal text-muted-foreground">({criticalGaps.length} identified)</span>
+                  </h2>
+                </motion.div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {criticalGaps.map((gap, i) => (
                 <motion.div
                   key={i}
                   variants={itemVariants}
@@ -325,13 +378,14 @@ const ReportScreen = ({ url }: ReportScreenProps) => {
                   </a>
                 </motion.div>
               ))}
-            </div>
+                </div>
+              </>
+            )}
           </motion.div>
         )}
 
         {activeTab === "Sections" && (
           <motion.div variants={containerVariants} initial="hidden" animate="visible">
-            {/* Section tabs */}
             <motion.div variants={itemVariants} className="flex gap-1 mb-6 flex-wrap">
               {SECTION_TABS.map((tab) => (
                 <button
@@ -348,60 +402,118 @@ const ReportScreen = ({ url }: ReportScreenProps) => {
               ))}
             </motion.div>
 
-            {/* Screenshot comparison */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {sectionData[activeSection].sites.map((site, i) => (
-                <motion.div
-                  key={site.name}
-                  variants={itemVariants}
-                  className="glass-surface rounded-md overflow-hidden"
-                  style={{
-                    borderTop: `2px solid ${site.isTarget ? "hsl(37 91% 55%)" : "hsl(176 56% 55%)"}`,
-                  }}
-                >
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm text-foreground">{site.name}</span>
-                        {site.isTarget && (
+              {hasRealData && apiResult ? (
+                <>
+                  {/* Target site */}
+                  <motion.div
+                    variants={itemVariants}
+                    className="glass-surface rounded-md overflow-hidden border-l-2 border-primary"
+                  >
+                    <div className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-foreground">{domain}</span>
                           <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-primary/15 text-primary font-semibold">
                             You
                           </span>
-                        )}
+                        </div>
                       </div>
-                      <span
-                        className={`font-mono text-lg font-bold tabular-nums ${
-                          site.score >= 8 ? "text-success" : site.score >= 6 ? "text-primary" : "text-destructive"
-                        }`}
+                      {apiResult.targetScreenshotUrl ? (
+                        <img
+                          src={apiResult.targetScreenshotUrl}
+                          alt={`Screenshot of ${domain}`}
+                          className="w-full h-40 rounded-sm object-cover object-top border border-white/5 mb-4"
+                        />
+                      ) : (
+                        <div className="w-full h-40 rounded-sm bg-secondary/50 border border-white/5 mb-4 flex items-center justify-center">
+                          <span className="text-xs text-muted-foreground font-mono">Screenshot unavailable</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                        {apiResult.userAnalysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—"}
+                      </p>
+                    </div>
+                  </motion.div>
+                  {/* Competitors */}
+                  {apiResult.competitors?.map((comp) => {
+                    const compDomain = comp.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+                    return (
+                      <motion.div
+                        key={comp.url}
+                        variants={itemVariants}
+                        className="glass-surface rounded-md overflow-hidden border-l-2 border-primary/50"
                       >
-                        {site.score.toFixed(1)}
-                      </span>
-                    </div>
-
-                    {/* Screenshot placeholder */}
-                    <div className="w-full h-32 rounded-sm bg-secondary/50 border-thin mb-4 flex items-center justify-center">
-                      <span className="text-xs text-muted-foreground font-mono">Screenshot: {site.name}</span>
-                    </div>
-
-                    {/* Insights */}
-                    <div className="space-y-2">
-                      {site.insights.map((insight, j) => (
-                        <div key={j} className="flex items-start gap-2">
-                          {insight.pass ? (
-                            <Check className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" />
+                        <div className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="font-mono text-sm text-foreground">{compDomain}</span>
+                          </div>
+                          {comp.screenshotUrl ? (
+                            <img
+                              src={comp.screenshotUrl}
+                              alt={`Screenshot of ${compDomain}`}
+                              className="w-full h-40 rounded-sm object-cover object-top border border-white/5 mb-4"
+                            />
                           ) : (
-                            <X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />
+                            <div className="w-full h-40 rounded-sm bg-secondary/50 border border-white/5 mb-4 flex items-center justify-center">
+                              <span className="text-xs text-muted-foreground font-mono">Screenshot unavailable</span>
+                            </div>
                           )}
-                          <span className="text-xs text-muted-foreground leading-relaxed">{insight.text}</span>
-                          <div className="ml-auto shrink-0">
+                          <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                            {comp.analysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—"}
+                          </p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </>
+              ) : (
+                sectionData[activeSection].sites.map((site, i) => (
+                  <motion.div
+                    key={site.name}
+                    variants={itemVariants}
+                    className="glass-surface rounded-md overflow-hidden"
+                    style={{
+                      borderTop: `2px solid ${site.isTarget ? "hsl(var(--primary))" : "hsl(176 56% 55%)"}`,
+                    }}
+                  >
+                    <div className="p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-foreground">{site.name}</span>
+                          {site.isTarget && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-primary/15 text-primary font-semibold">
+                              You
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className={`font-mono text-lg font-bold tabular-nums`}
+                          style={{ letterSpacing: 0 }}
+                        >
+                          {site.score.toFixed(1)}
+                        </span>
+                      </div>
+                      <div className="w-full h-32 rounded-sm bg-secondary/50 border-thin mb-4 flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground font-mono">Screenshot: {site.name}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {site.insights.map((insight, j) => (
+                          <div key={j} className="flex items-start gap-2">
+                            {insight.pass ? (
+                              <Check className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" />
+                            ) : (
+                              <X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />
+                            )}
+                            <span className="text-xs text-muted-foreground leading-relaxed">{insight.text}</span>
                             <ConfidencePill level={insight.confidence} />
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                ))
+              )}
             </div>
           </motion.div>
         )}
@@ -410,46 +522,93 @@ const ReportScreen = ({ url }: ReportScreenProps) => {
           <motion.div variants={containerVariants} initial="hidden" animate="visible">
             <motion.div variants={itemVariants} className="mb-6">
               <h2 className="text-sm font-semibold text-foreground mb-1">Competitor Overview</h2>
-              <p className="text-xs text-muted-foreground">4 competitors analyzed across 5 sections</p>
+              <p className="text-xs text-muted-foreground">
+                {hasRealData && apiResult?.competitors
+                  ? `${apiResult.competitors.length} competitors analyzed across 5 sections`
+                  : "4 competitors analyzed across 5 sections"}
+              </p>
             </motion.div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { name: "linear.app", score: 8.9, position: "#1" },
-                { name: "notion.so", score: 8.7, position: "#2" },
-                { name: "hubspot.com", score: 8.4, position: "#3" },
-                { name: "monday.com", score: 7.1, position: "#4" },
-              ].map((comp, i) => (
-                <motion.div
-                  key={comp.name}
-                  variants={itemVariants}
-                  className="glass-surface rounded-md p-4"
-                  style={{ borderTop: "2px solid hsl(176 56% 55%)" }}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs text-accent font-semibold">{comp.position}</span>
-                    <a href="#" className="text-muted-foreground hover:text-foreground">
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                  <p className="font-mono text-sm text-foreground mb-1">{comp.name}</p>
-                  <p className="font-mono text-3xl font-bold text-success tabular-nums">{comp.score.toFixed(1)}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1 font-mono">/10 overall</p>
-                </motion.div>
-              ))}
+              {hasRealData && apiResult?.competitors ? (
+                apiResult.competitors.map((comp, i) => {
+                  const compDomain = comp.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+                  return (
+                    <motion.div
+                      key={comp.url}
+                      variants={itemVariants}
+                      className="glass-surface rounded-md overflow-hidden"
+                      style={{ borderTop: "2px solid hsl(176 56% 55%)" }}
+                    >
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs text-accent font-semibold">#{i + 1}</span>
+                          <a
+                            href={comp.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                        {comp.screenshotUrl ? (
+                          <img
+                            src={comp.screenshotUrl}
+                            alt={`Screenshot of ${compDomain}`}
+                            className="w-full h-24 rounded-sm object-cover object-top mb-3 border border-white/5"
+                          />
+                        ) : (
+                          <div className="w-full h-24 rounded-sm bg-secondary/50 border border-white/5 mb-3 flex items-center justify-center">
+                            <span className="text-[10px] text-muted-foreground font-mono">No screenshot</span>
+                          </div>
+                        )}
+                        <p className="font-mono text-sm text-foreground mb-1">{compDomain}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">/10 overall</p>
+                      </div>
+                    </motion.div>
+                  );
+                })
+              ) : (
+                [
+                  { name: "linear.app", score: 8.9, position: "#1" },
+                  { name: "notion.so", score: 8.7, position: "#2" },
+                  { name: "hubspot.com", score: 8.4, position: "#3" },
+                  { name: "monday.com", score: 7.1, position: "#4" },
+                ].map((comp) => (
+                  <motion.div
+                    key={comp.name}
+                    variants={itemVariants}
+                    className="glass-surface rounded-md p-4"
+                    style={{ borderTop: "2px solid hsl(176 56% 55%)" }}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs text-accent font-semibold">{comp.position}</span>
+                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    </div>
+                    <p className="font-mono text-sm text-foreground mb-1">{comp.name}</p>
+                    <p className="font-mono text-3xl font-bold text-success tabular-nums" style={{ letterSpacing: 0 }}>
+                      {comp.score.toFixed(1)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-1 font-mono">/10 overall</p>
+                  </motion.div>
+                ))
+              )}
             </div>
 
-            {/* Your position */}
             <motion.div
               variants={itemVariants}
-              className="mt-4 glass-surface rounded-md p-4"
-              style={{ borderTop: "2px solid hsl(37 91% 55%)" }}
+              className="mt-4 glass-surface rounded-md p-4 border-l-2 border-primary"
             >
               <div className="flex items-center gap-3">
-                <span className="text-xs text-primary font-semibold">#5</span>
+                <span className="text-xs text-primary font-semibold">
+                  #{hasRealData && apiResult?.competitors ? apiResult.competitors.length + 1 : "5"}
+                </span>
                 <span className="font-mono text-sm text-foreground">{domain}</span>
                 <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-primary/15 text-primary font-semibold">You</span>
-                <span className="ml-auto font-mono text-3xl font-bold text-primary tabular-nums">6.2</span>
+                <span className="ml-auto font-mono text-3xl font-bold text-primary tabular-nums" style={{ letterSpacing: 0 }}>
+                  {score.toFixed(1)}
+                </span>
                 <span className="text-muted-foreground font-mono text-sm">/10</span>
               </div>
             </motion.div>

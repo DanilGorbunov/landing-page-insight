@@ -52,7 +52,8 @@ export async function analyzeSection(input) {
 }
 
 /**
- * Analyze all 5 sections for one URL (screenshot + markdown). Runs section analyses in parallel.
+ * Analyze all 5 sections for one URL (screenshot + markdown).
+ * Runs sections sequentially to avoid Claude API rate limit (30k input tokens/min).
  * @param {{ markdown: string, screenshotUrl?: string, screenshotBase64?: string }} scrapeResult
  * @returns {Promise<Record<string, string>>} Map section -> analysis
  */
@@ -64,17 +65,13 @@ export async function analyzeLandingSections(scrapeResult) {
     if (res.ok) base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
   }
 
-  const sectionPromises = SECTIONS.map((section) =>
-    analyzeSection({
+  const out = {};
+  for (const section of SECTIONS) {
+    out[section] = await analyzeSection({
       section,
       markdown,
       screenshotBase64: base64,
-    })
-  );
-  const results = await Promise.all(sectionPromises);
-  const out = {};
-  SECTIONS.forEach((s, i) => {
-    out[s] = results[i];
-  });
+    });
+  }
   return out;
 }

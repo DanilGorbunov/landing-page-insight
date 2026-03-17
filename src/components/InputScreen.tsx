@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Globe, Plus, ChevronDown, X } from "lucide-react";
+import { Globe, Plus, ChevronDown, X, History } from "lucide-react";
 
 const SAMPLE_SITES = ["apollo.io", "linear.app", "hubspot.com", "notion.so"];
 
@@ -18,18 +18,27 @@ const staggerItem = {
 };
 
 interface InputScreenProps {
-  onAnalyze: (url: string, competitors: string[]) => void;
+  onAnalyze: (url: string, competitors: string[]) => void | Promise<void>;
+  onOpenHistory?: () => void;
+  historyCount?: number;
+  analyzeError?: string | null;
 }
 
-const InputScreen = ({ onAnalyze }: InputScreenProps) => {
+const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError }: InputScreenProps) => {
   const [url, setUrl] = useState("");
   const [showCompetitors, setShowCompetitors] = useState(false);
   const [competitors, setCompetitors] = useState<string[]>([""]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    if (!url.trim()) return;
-    const validCompetitors = competitors.filter((c) => c.trim());
-    onAnalyze(url.trim(), validCompetitors);
+  const handleSubmit = async () => {
+    if (!url.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const validCompetitors = competitors.filter((c) => c.trim());
+      await onAnalyze(url.trim(), validCompetitors);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const addCompetitor = () => {
@@ -47,7 +56,27 @@ const InputScreen = ({ onAnalyze }: InputScreenProps) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 relative z-10">
+    <div className="min-h-screen flex flex-col relative z-10">
+      {/* Topbar: History (right) */}
+      {onOpenHistory && (
+        <header className="absolute top-0 left-0 right-0 h-14 flex items-center justify-end px-4 md:px-8 border-b border-transparent">
+          <button
+            type="button"
+            onClick={onOpenHistory}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+          >
+            <History className="w-4 h-4" />
+            History
+            {historyCount > 0 && (
+              <span className="ml-1 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary/20 text-primary text-xs font-semibold flex items-center justify-center">
+                {historyCount}
+              </span>
+            )}
+          </button>
+        </header>
+      )}
+
+      <div className="flex-1 flex flex-col items-center justify-center px-4 pt-14">
         <motion.div
           variants={staggerContainer}
           initial="hidden"
@@ -97,15 +126,20 @@ const InputScreen = ({ onAnalyze }: InputScreenProps) => {
               className="flex-1 bg-transparent font-mono text-sm text-foreground placeholder:text-muted-foreground outline-none h-full"
             />
             <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98, y: 2 }}
+              whileHover={!isSubmitting ? { scale: 1.02 } : undefined}
+              whileTap={!isSubmitting ? { scale: 0.98, y: 2 } : undefined}
               onClick={handleSubmit}
-              className="h-full px-6 bg-primary text-primary-foreground font-semibold text-sm rounded-none transition-colors hover:brightness-110"
+              disabled={isSubmitting}
+              className="h-full px-6 bg-primary text-primary-foreground font-semibold text-sm rounded-none transition-colors hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Analyze →
+              {isSubmitting ? "Starting…" : "Analyze →"}
             </motion.button>
           </div>
         </motion.div>
+
+        {analyzeError && (
+          <p className="mt-3 text-sm text-destructive">{analyzeError}</p>
+        )}
 
         {/* Try chips */}
         <motion.div variants={staggerItem} className="mt-5 flex flex-wrap items-center justify-center gap-2">
@@ -173,6 +207,7 @@ const InputScreen = ({ onAnalyze }: InputScreenProps) => {
           )}
         </motion.div>
       </motion.div>
+      </div>
     </div>
   );
 };

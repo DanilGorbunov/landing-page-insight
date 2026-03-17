@@ -66,7 +66,7 @@ analyzeRouter.get("/analyze/stream/:jobId", async (req, res) => {
       scrapeResults.push({ url: item.url, isUser: item.isUser, ...data });
     }
 
-    // 3) Analyze each landing (5 sections in parallel per site)
+    // 3) Analyze each landing — one site at a time to stay under Claude rate limit (30k tokens/min)
     sendSSE(res, "progress", { step: "analyzing", message: "Analyzing with Claude Vision..." });
     const userScrape = scrapeResults.find((r) => r.isUser);
     const competitorScrapes = scrapeResults.filter((r) => !r.isUser);
@@ -74,14 +74,12 @@ analyzeRouter.get("/analyze/stream/:jobId", async (req, res) => {
     const userAnalysis = userScrape
       ? await analyzeLandingSections({ markdown: userScrape.markdown, screenshotUrl: userScrape.screenshot })
       : {};
-    const competitorAnalyses = await Promise.all(
-      competitorScrapes.map((s) =>
-        analyzeLandingSections({ markdown: s.markdown, screenshotUrl: s.screenshot }).then((analysis) => ({
-          url: s.url,
-          analysis,
-        }))
-      )
-    );
+
+    const competitorAnalyses = [];
+    for (const s of competitorScrapes) {
+      const analysis = await analyzeLandingSections({ markdown: s.markdown, screenshotUrl: s.screenshot });
+      competitorAnalyses.push({ url: s.url, analysis });
+    }
 
     // 4) Synthesize report
     sendSSE(res, "progress", { step: "synthesis", message: "Writing report..." });
@@ -91,9 +89,29 @@ analyzeRouter.get("/analyze/stream/:jobId", async (req, res) => {
       competitors: competitorAnalyses,
     });
 
-    jobStore.updateJob(jobId, { status: "completed", result: { report, userAnalysis, competitorAnalyses } });
-    sendSSE(res, "done", { report, userAnalysis, competitors: competitorAnalyses });
+    // Attach screenshot URLs for frontend
+    const targetScreenshotUrl = userScrape?.screenshot || null;
+    const competitorsWithScreenshots = competitorAnalyses.map((c) => {
+      const scraped = scrapeResults.find((r) => r.url === c.url);
+      return { ...c, screenshotUrl: scraped?.screenshot || null };
+    });
+
+    // Parse overall score from report if present (e.g. "6.2/10" or "Overall score: 6.2/10")
+    let overallScore;
+    const scoreMatch = report.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
+    if (scoreMatch) overallScore = parseFloat(scoreMatch[1], 10);
+
+    const result = {
+      report,
+      userAnalysis,
+      competitors: competitorsWithScreenshots,
+      targetScreenshotUrl,
+      synthesis: overallScore != null ? { overall_score: overallScore } : undefined,
+    };
+    jobStore.updateJob(jobId, { status: "completed", result });
+    sendSSE(res, "done", result);
   } catch (err) {
+    console.error("[analyze] Error:", err.message || err);
     jobStore.updateJob(jobId, { status: "failed", error: err.message });
     sendSSE(res, "error", { error: err.message });
   } finally {
