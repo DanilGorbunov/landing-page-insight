@@ -1,4 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+// In production (Vercel) set VITE_API_BASE_URL to your Railway backend URL, e.g. https://your-app.up.railway.app
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").trim() || "http://localhost:3000";
 
 export interface AnalysisResult {
   report: string;
@@ -12,13 +13,23 @@ export interface AnalysisResult {
   synthesis?: { overall_score?: number };
 }
 
+export function getApiBase(): string {
+  return API_BASE;
+}
+
 export async function startAnalysis(url: string): Promise<{ jobId: string }> {
-  const res = await fetch(`${API_BASE}/api/analyze`, {
+  const urlToCall = `${API_BASE}/api/analyze`;
+  const res = await fetch(urlToCall, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
   if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error(
+        "Backend not found (404). On Vercel: set VITE_API_BASE_URL to your Railway backend URL in Project → Settings → Environment Variables, then redeploy."
+      );
+    }
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `Analysis failed: ${res.status}`);
   }
