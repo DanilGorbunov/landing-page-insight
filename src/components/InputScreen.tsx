@@ -48,31 +48,33 @@ const InputScreen = ({ onAnalyze }: InputScreenProps) => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative z-10">
-      <motion.div
-        variants={staggerContainer}
-        initial="hidden"
-        animate="visible"
-        className="w-full max-w-2xl text-center"
-      >
-        {/* Badge */}
-        <motion.div variants={staggerItem} className="mb-8">
-          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-sm glass-surface text-xs font-medium text-primary">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-amber" />
-            AI-powered analysis
-          </span>
-        </motion.div>
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="w-full max-w-2xl text-center"
+        >
+          {/* Logo: Landing Lens by AI — Lens and "by" kept separate so space doesn't collapse */}
+          <motion.div variants={staggerItem} className="mb-8">
+            <span className="font-sans text-xl sm:text-2xl font-medium tracking-tight">
+              <span className="text-primary">Landing </span>
+              <span className="text-primary">Lens</span>
+              <span className="text-primary"> </span>
+              <span className="text-muted-foreground">by AI</span>
+            </span>
+          </motion.div>
 
-        {/* Headline */}
+        {/* Headline — same font as logo (sans) */}
         <motion.h1
           variants={staggerItem}
-          className="font-display italic text-4xl md:text-5xl lg:text-6xl font-light tracking-tight leading-[1.1] mb-6"
-          style={{ letterSpacing: "-0.03em" }}
+          className="font-sans text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight leading-[1.15] mb-6"
+          style={{ letterSpacing: "-0.02em" }}
         >
           How does your landing page{" "}
-          <span className="text-yellow-500">stack up</span> against competitors?
+          <span className="text-primary">stack up</span> against competitors?
         </motion.h1>
 
-        <motion.p variants={staggerItem} className="text-muted-foreground text-base mb-10 max-w-md mx-auto">
+        <motion.p variants={staggerItem} className="font-sans text-muted-foreground text-base mb-10 max-w-md mx-auto">
           Paste a URL. Get an AI-powered audit with actionable insights in seconds.
         </motion.p>
 

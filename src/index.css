@@ -15,7 +15,7 @@
     --popover: 240 10% 6%;
     --popover-foreground: 0 0% 92%;
 
-    --primary: 37 91% 55%;
+    --primary: 152 72% 52%;
     --primary-foreground: 0 0% 0%;
 
     --secondary: 240 12% 10%;
@@ -24,7 +24,7 @@
     --muted: 240 10% 14%;
     --muted-foreground: 240 5% 50%;
 
-    --accent: 176 56% 55%;
+    --accent: 152 72% 52%;
     --accent-foreground: 0 0% 0%;
 
     --destructive: 0 100% 71%;
@@ -35,7 +35,7 @@
 
     --border: 0 0% 100% / 0.08;
     --input: 0 0% 100% / 0.08;
-    --ring: 37 91% 55%;
+    --ring: 152 72% 52%;
 
     --radius: 0.5rem;
 
@@ -44,12 +44,12 @@
 
     --sidebar-background: 240 10% 6%;
     --sidebar-foreground: 0 0% 92%;
-    --sidebar-primary: 37 91% 55%;
+    --sidebar-primary: 152 72% 52%;
     --sidebar-primary-foreground: 0 0% 0%;
     --sidebar-accent: 240 12% 10%;
     --sidebar-accent-foreground: 0 0% 92%;
     --sidebar-border: 0 0% 100% / 0.08;
-    --sidebar-ring: 37 91% 55%;
+    --sidebar-ring: 152 72% 52%;
   }
 }
 
@@ -95,7 +95,7 @@
   }
 
   .amber-glow {
-    box-shadow: 0 0 20px rgba(245, 166, 35, 0.15);
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
   }
 
   .border-thin {

@@ -69,7 +69,7 @@ const ProgressScreen = ({ url, onComplete }: ProgressScreenProps) => {
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Top bar */}
       <div className="h-14 flex items-center px-6 border-b border-border">
-        <span className="font-display italic text-lg font-semibold text-foreground mr-4">LandingLens</span>
+        <span className="font-display italic text-lg font-semibold text-foreground mr-4">Landing Lens</span>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse-amber" />
           <span>Analyzing <span className="font-mono text-foreground">{domain}</span></span>

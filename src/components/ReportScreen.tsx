@@ -222,7 +222,7 @@ const ReportScreen = ({ url }: ReportScreenProps) => {
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Top bar */}
       <div className="h-14 flex items-center px-6 border-b border-border">
-        <span className="font-display italic text-lg font-semibold text-foreground mr-6">LandingLens</span>
+        <span className="font-display italic text-lg font-semibold text-foreground mr-6">Landing Lens</span>
         <div className="flex gap-1">
           {TABS.map((tab) => (
             <button
