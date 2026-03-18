@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Globe, Plus, ChevronDown, X, History } from "lucide-react";
 import { staggerContainer, staggerItem } from "@/lib/motion";
@@ -47,7 +48,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Topbar: History (right) */}
       {onOpenHistory && (
-        <header className="absolute top-0 left-0 right-0 h-14 flex items-center justify-end px-4 md:px-8 border-b border-transparent">
+        <header className="sticky top-0 z-20 left-0 right-0 h-14 flex items-center justify-end px-4 md:px-8 border-b border-transparent bg-background/80 backdrop-blur-sm">
           <button
             type="button"
             onClick={onOpenHistory}
@@ -71,14 +72,14 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
           animate="visible"
           className="w-full max-w-2xl text-center"
         >
-          {/* Logo: Landing Lens by AI — Lens and "by" kept separate so space doesn't collapse */}
+          {/* Logo: Landing Lens by AI — clickable to home */}
           <motion.div variants={staggerItem} className="mb-8">
-            <span className="font-sans text-xl sm:text-2xl font-medium tracking-tight">
+            <Link to="/" className="font-sans text-xl sm:text-2xl font-medium tracking-tight inline-flex items-baseline hover:opacity-90 transition-opacity">
               <span className="text-primary">Landing </span>
               <span className="text-primary">Lens</span>
               <span className="text-primary"> </span>
               <span className="text-muted-foreground">by AI</span>
-            </span>
+            </Link>
           </motion.div>
 
         {/* Headline — same font as logo (sans) */}

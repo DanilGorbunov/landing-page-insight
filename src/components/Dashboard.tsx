@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { History, Trash2, FileText } from "lucide-react";
+import { ArrowLeft, Trash2, FileText } from "lucide-react";
 import { getHistory, clearHistory, type HistoryEntry } from "@/lib/analysisHistory";
 
 const FAVICON = (domain: string) =>
@@ -36,11 +36,12 @@ function formatTime(iso: string): string {
 
 interface DashboardProps {
   onBack: () => void;
+  onGoHome: () => void;
   onViewReport: (entry: HistoryEntry) => void;
   historyCount: number;
 }
 
-const Dashboard = ({ onBack, onViewReport, historyCount }: DashboardProps) => {
+const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardProps) => {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
 
   useEffect(() => {
@@ -54,24 +55,43 @@ const Dashboard = ({ onBack, onViewReport, historyCount }: DashboardProps) => {
 
   return (
     <div className="min-h-screen flex flex-col relative z-10">
-      <header className="h-14 flex items-center border-b border-border">
-        <div className="max-w-4xl mx-auto w-full px-4 md:px-8 flex items-center justify-between">
+      <header className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background">
+        <div className="max-w-6xl mx-auto w-full px-4 md:px-8 flex items-center">
           <button
             type="button"
             onClick={onBack}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="mr-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+            aria-label="Back"
           >
-            ← Back
+            <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="font-sans text-lg font-semibold text-foreground flex items-center gap-2">
-            <History className="w-5 h-5" />
-            History
-          </h1>
-          <div className="w-16" />
+          <button
+            type="button"
+            onClick={onGoHome}
+            className="font-sans text-lg font-medium tracking-tight text-primary mr-6 hover:opacity-90 text-left"
+          >
+            Landing Lens
+          </button>
+          <nav className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-4 py-2 text-sm rounded-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 text-sm rounded-sm bg-secondary text-foreground font-medium"
+              aria-current="page"
+            >
+              History
+            </button>
+          </nav>
         </div>
       </header>
 
-      <main className="flex-1 px-4 md:px-8 py-8 max-w-4xl mx-auto w-full">
+      <main className="flex-1 px-4 md:px-8 py-8 max-w-6xl mx-auto w-full">
         {entries.length === 0 ? (
           <div
             className="rounded-lg border border-white/5 p-12 text-center"

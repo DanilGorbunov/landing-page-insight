@@ -16,6 +16,8 @@ const Index = () => {
   const [savedEntryForReport, setSavedEntryForReport] = useState<HistoryEntry | null>(null);
   const [historyCount, setHistoryCount] = useState(getHistoryCount);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  /** When user opened History from Report, back should return to Report; otherwise to Input */
+  const [screenBeforeDashboard, setScreenBeforeDashboard] = useState<"input" | "report">("input");
 
   const handleAnalyze = useCallback(async (inputUrl: string, _competitors: string[]) => {
     setAnalyzeError(null);
@@ -44,8 +46,9 @@ const Index = () => {
 
   const handleOpenHistory = useCallback(() => {
     setHistoryCount(getHistoryCount());
+    setScreenBeforeDashboard(screen === "report" ? "report" : "input");
     setScreen("dashboard");
-  }, []);
+  }, [screen]);
 
   const handleViewReport = useCallback((entry: HistoryEntry) => {
     setUrl(`https://${entry.domain}`);
@@ -67,11 +70,19 @@ const Index = () => {
 
   const handleBackFromDashboard = useCallback(() => {
     setHistoryCount(getHistoryCount());
-    setScreen("input");
-  }, []);
+    if (screenBeforeDashboard === "report") {
+      setScreen("report");
+    } else {
+      setScreen("input");
+    }
+  }, [screenBeforeDashboard]);
 
   const handleBackFromProgress = useCallback(() => {
     setJobId(null);
+    setScreen("input");
+  }, []);
+
+  const handleGoHome = useCallback(() => {
     setScreen("input");
   }, []);
 
@@ -90,6 +101,7 @@ const Index = () => {
       {screen === "dashboard" && (
         <Dashboard
           onBack={handleBackFromDashboard}
+          onGoHome={handleGoHome}
           onViewReport={handleViewReport}
           historyCount={historyCount}
         />
@@ -100,6 +112,7 @@ const Index = () => {
           url={url}
           onComplete={handleComplete}
           onBack={handleBackFromProgress}
+          onGoHome={handleGoHome}
         />
       )}
       {screen === "report" && (
@@ -108,6 +121,8 @@ const Index = () => {
           result={reportResult}
           savedEntry={savedEntryForReport}
           onBack={handleBackFromReport}
+          onOpenHistory={handleOpenHistory}
+          onGoHome={handleGoHome}
         />
       )}
     </div>

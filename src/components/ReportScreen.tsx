@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import { AlertTriangle, ArrowUpRight, Check, X, ExternalLink, ArrowLeft } from "lucide-react";
 import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult } from "@/lib/api";
-import { getDomain, parseScoreFromReport } from "@/lib/utils";
+import { Link } from "react-router-dom";
+import { getDomain, parseScoreFromReport, getCompetitorOverallScore, analysisToBullets } from "@/lib/utils";
 import { containerVariants, itemVariants } from "@/lib/motion";
 
 const SECTION_TO_BACKEND: Record<string, string> = {
@@ -14,7 +15,7 @@ const SECTION_TO_BACKEND: Record<string, string> = {
   CTA: "CTA",
 };
 
-const TABS = ["Overview", "Sections", "Competitors"] as const;
+const TABS = ["Overview"] as const;
 const SECTION_TABS = ["Hero", "Value Prop", "Features", "Social Proof", "CTA"] as const;
 
 type Tab = (typeof TABS)[number];
@@ -25,6 +26,8 @@ interface ReportScreenProps {
   result?: AnalysisResult | null;
   savedEntry?: HistoryEntry | null;
   onBack?: () => void;
+  onOpenHistory?: () => void;
+  onGoHome?: () => void;
 }
 
 const AnimatedScore = ({ target }: { target: number }) => {
@@ -219,7 +222,110 @@ const sectionData: Record<SectionTab, { sites: { name: string; score: number; is
   },
 };
 
-const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) => {
+const RATING_LOW_THRESHOLD = 7;
+const TEAL = "hsl(176 56% 45%)";
+
+function ratingTheme(score: number | null) {
+  const value = score ?? 0;
+  const isLow = value < RATING_LOW_THRESHOLD;
+  return {
+    border: isLow ? "hsl(var(--primary))" : TEAL,
+    dot: isLow ? "bg-primary" : "bg-[hsl(176,56%,55%)]",
+    badge: isLow ? "bg-primary text-primary-foreground" : "bg-[hsl(176,56%,55%)] text-[hsl(176,30%,12%)]",
+  };
+}
+
+const RATING_TOOLTIP = "Average of section scores (Hero, Value prop, Features, Social proof, CTA). We look for “X/10” or “X.Y/10” in each section’s analysis text and average them.";
+
+function SectionCard({
+  domain,
+  siteUrl,
+  isUser,
+  score,
+  screenshotUrl,
+  analysisText,
+  variants,
+}: {
+  domain: string;
+  siteUrl: string;
+  isUser: boolean;
+  score: number | null;
+  screenshotUrl?: string | null;
+  analysisText?: string;
+  variants: typeof itemVariants;
+}) {
+  const bullets = analysisToBullets(analysisText, 4);
+  const href = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
+  const theme = ratingTheme(score);
+  const displayScore = score != null ? score.toFixed(1) : "—";
+  return (
+    <motion.div
+      variants={variants}
+      className="glass-surface rounded-lg overflow-hidden border border-white/10"
+      style={{ borderLeft: `4px solid ${theme.border}` }}
+    >
+      <div className="p-4">
+        {/* Header: dot, domain (link) ← you, rating badge (always visible, color by score) */}
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${theme.dot}`} />
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-sm text-muted-foreground truncate hover:text-foreground hover:underline"
+            >
+              {domain}
+            </a>
+            {isUser && <span className="text-[10px] text-muted-foreground shrink-0">← you</span>}
+          </div>
+          <span
+            title={RATING_TOOLTIP}
+            className={`font-mono text-sm font-bold tabular-nums shrink-0 cursor-help px-2.5 py-1 rounded-md ${theme.badge}`}
+            style={{ letterSpacing: 0 }}
+          >
+            {displayScore} <span className="font-normal opacity-90">/ 10</span>
+          </span>
+        </div>
+        {screenshotUrl ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block w-full rounded-sm overflow-hidden border border-white/5 mb-4 bg-secondary/30 hover:opacity-90 transition-opacity"
+          >
+            <img
+              src={screenshotUrl}
+              alt={`Screenshot of ${domain}`}
+              className="w-full h-auto block"
+            />
+          </a>
+        ) : (
+          <div className="w-full h-28 rounded-sm bg-secondary/50 border border-white/5 mb-4 flex items-center justify-center">
+            <span className="text-xs text-muted-foreground font-mono">[ screenshot ]</span>
+          </div>
+        )}
+        <div className="space-y-2">
+          {bullets.length > 0 ? (
+            bullets.map((b, j) => (
+              <div key={j} className="flex items-start gap-2">
+                {b.pass ? <Check className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" /> : <X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />}
+                <span className="text-xs text-muted-foreground leading-relaxed">{b.text}</span>
+              </div>
+            ))
+          ) : (
+            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              {analysisText?.slice(0, 200) ?? "—"}
+              {analysisText && analysisText.length > 200 ? "…" : ""}
+            </p>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome }: ReportScreenProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [activeSection, setActiveSection] = useState<SectionTab>("Hero");
   const domain = getDomain(url);
@@ -236,7 +342,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
   return (
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Top bar — aligned to content container start */}
-      <div className="h-14 flex items-center border-b border-border">
+      <div className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background">
         <div className="max-w-6xl mx-auto w-full px-4 md:px-8 flex items-center">
           {onBack && (
             <button
@@ -248,8 +354,20 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
-          <span className="font-display italic text-lg font-semibold text-foreground mr-6">Landing Lens</span>
-          <nav className="flex gap-1">
+          {onGoHome ? (
+            <button
+              type="button"
+              onClick={onGoHome}
+              className="font-sans text-lg font-medium tracking-tight text-primary mr-6 hover:opacity-90 text-left"
+            >
+              Landing Lens
+            </button>
+          ) : (
+            <Link to="/" className="font-sans text-lg font-medium tracking-tight text-primary mr-6 hover:opacity-90">
+              Landing Lens
+            </Link>
+          )}
+          <nav className="flex items-center gap-1">
             {TABS.map((tab) => (
               <button
                 key={tab}
@@ -263,6 +381,15 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
                 {tab}
               </button>
             ))}
+            {onOpenHistory && (
+              <button
+                type="button"
+                onClick={onOpenHistory}
+                className="px-4 py-2 text-sm rounded-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                History
+              </button>
+            )}
           </nav>
         </div>
       </div>
@@ -270,100 +397,171 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
       {/* Content */}
       <div className="flex-1 px-4 md:px-8 py-8 max-w-6xl mx-auto w-full">
         {activeTab === "Overview" && (
-          <motion.div variants={containerVariants} initial="hidden" animate="visible">
-            {/* Synthesis card */}
+          <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-10">
+            {/* 1. Competitive position — minimal info, expand → Pricing */}
             <motion.div
               variants={itemVariants}
-              className="glass-surface-elevated rounded-md p-6 mb-8 border-l-2 border-primary"
+              className="glass-surface-elevated rounded-xl p-6 border border-white/10 border-l-4 border-l-primary"
             >
-              <div className="flex flex-col md:flex-row md:items-start gap-6">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="font-mono text-xs text-muted-foreground">{domain}</span>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-primary/15 text-primary text-[10px] font-semibold">
-                      You
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-3 mb-4">
-                    <span className="text-7xl font-mono font-bold text-foreground tabular-nums leading-none">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground mb-2">Competitive position — {domain}</h2>
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className="text-5xl font-mono font-bold text-primary tabular-nums leading-none">
                       <AnimatedScore target={score} />
                     </span>
-                    <span className="text-2xl font-mono text-muted-foreground tabular-nums" style={{ letterSpacing: 0 }}>/10</span>
+                    <span className="text-sm font-mono text-muted-foreground tabular-nums">/10 overall</span>
                   </div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <AlertTriangle className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-medium text-primary">Moderate competitive position</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-xl whitespace-pre-wrap">
-                    {synthesisText}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 text-xs">
-                  <div className="glass-surface rounded-sm px-3 py-2 flex items-center gap-2">
-                    <span className="text-muted-foreground">Competitors analyzed:</span>
-                    <span className="font-mono text-foreground">{hasRealData && apiResult?.competitors ? apiResult.competitors.length : 3}</span>
-                  </div>
-                  <div className="glass-surface rounded-sm px-3 py-2 flex items-center gap-2">
-                    <span className="text-muted-foreground">Confidence:</span>
-                    <ConfidencePill level="High" />
-                    <span className="font-mono text-foreground">(94%)</span>
-                  </div>
-                  <div className="glass-surface rounded-sm px-3 py-2 flex items-center gap-2">
-                    <span className="text-muted-foreground">Sections scored:</span>
-                    <span className="font-mono text-foreground">5</span>
+                  <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-destructive/15 text-destructive text-xs font-medium">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Moderate position
                   </div>
                 </div>
               </div>
+              <p className="mt-4 text-sm text-muted-foreground leading-relaxed max-w-2xl">
+                {(() => {
+                  let raw = synthesisText || "";
+                  raw = raw.replace(/^[\s\S]*?Overall score:\s*[\d.]+\s*\/\s*10\s*/i, "").trim();
+                  raw = raw.replace(/^\s*#+\s*[^\n]*(\n|$)/gm, "").trim();
+                  const sentences = raw.split(/(?<=[.!?])\s+/).filter(Boolean);
+                  const short = sentences.slice(0, 2).join(" ").trim();
+                  return short || raw.slice(0, 280);
+                })()}
+              </p>
+              <div className="mt-5 pt-4 border-t border-white/5">
+                <Link
+                  to="/pricing"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                  See full report and insights
+                </Link>
+              </div>
             </motion.div>
 
-            {hasRealData && apiResult?.report && (
-              <motion.div variants={itemVariants} className="mb-8">
-                <h2 className="text-sm font-semibold text-foreground mb-4">Full Report</h2>
-                <div className="glass-surface rounded-md p-6 prose prose-invert prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap font-sans text-sm text-muted-foreground leading-relaxed">
-                    {apiResult.report}
-                  </pre>
-                </div>
-              </motion.div>
-            )}
-
-            {!hasRealData && (
-              <>
-                <motion.div variants={itemVariants}>
-                  <h2 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-                    Critical Gaps
-                    <span className="text-xs font-normal text-muted-foreground">({criticalGaps.length} identified)</span>
-                  </h2>
-                </motion.div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  {criticalGaps.map((gap, i) => (
-                <motion.div
-                  key={i}
-                  variants={itemVariants}
-                  className="glass-surface rounded-md p-4"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <PriorityBadge level={gap.priority} />
-                    <span className="text-xs text-muted-foreground">{gap.area}</span>
-                    <div className="ml-auto">
-                      <ConfidencePill level={gap.confidence} />
-                    </div>
-                  </div>
-                  <p className="text-sm font-medium text-foreground mb-2">{gap.problem}</p>
-                  <p className="text-xs text-muted-foreground leading-relaxed mb-3">{gap.recommendation}</p>
-                  <a
-                    href="#"
-                    className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+            {/* 2. Critical Gaps */}
+            <motion.div variants={itemVariants}>
+              <h2 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+                Critical Gaps
+                <span className="text-xs font-normal text-muted-foreground">({criticalGaps.length} identified)</span>
+              </h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {criticalGaps.map((gap, i) => (
+                  <motion.div
+                    key={i}
+                    variants={itemVariants}
+                    className="glass-surface rounded-md p-4"
                   >
-                    <ArrowUpRight className="w-3 h-3" />
-                    {gap.competitor} does it better
-                  </a>
-                </motion.div>
-              ))}
-                </div>
-              </>
-            )}
+                    <div className="flex items-center gap-2 mb-2">
+                      <PriorityBadge level={gap.priority} />
+                      <span className="text-xs text-muted-foreground">{gap.area}</span>
+                      <div className="ml-auto">
+                        <ConfidencePill level={gap.confidence} />
+                      </div>
+                    </div>
+                    <p className="text-sm font-medium text-foreground mb-2">{gap.problem}</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed mb-3">{gap.recommendation}</p>
+                    <a
+                      href="#"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
+                    >
+                      <ArrowUpRight className="w-3 h-3" />
+                      {gap.competitor} does it better
+                    </a>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* 3. Section breakdown — 4 cards: 1 you + 3 competitors, same style as reference */}
+            <motion.div variants={itemVariants}>
+              <h2 className="text-sm font-semibold text-foreground mb-4">Section breakdown</h2>
+              <div className="flex gap-1 mb-6 flex-wrap">
+                {SECTION_TABS.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveSection(tab)}
+                    className={`px-4 py-2 text-xs rounded-sm transition-colors ${
+                      activeSection === tab
+                        ? "bg-primary text-primary-foreground font-semibold"
+                        : "glass-surface text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {hasRealData && apiResult ? (
+                  <>
+                    {/* Your site */}
+                    <SectionCard
+                      domain={domain}
+                      siteUrl={url}
+                      isUser
+                      score={getCompetitorOverallScore(apiResult.userAnalysis)}
+                      screenshotUrl={apiResult.targetScreenshotUrl}
+                      analysisText={apiResult.userAnalysis?.[SECTION_TO_BACKEND[activeSection]]}
+                      variants={itemVariants}
+                    />
+                    {/* 3 competitors */}
+                    {(apiResult.competitors ?? []).slice(0, 3).map((comp) => (
+                      <SectionCard
+                        key={comp.url}
+                        domain={getDomain(comp.url)}
+                        siteUrl={comp.url}
+                        isUser={false}
+                        score={getCompetitorOverallScore(comp.analysis)}
+                        screenshotUrl={comp.screenshotUrl ?? undefined}
+                        analysisText={comp.analysis?.[SECTION_TO_BACKEND[activeSection]]}
+                        variants={itemVariants}
+                      />
+                    ))}
+                  </>
+                ) : (
+                  sectionData[activeSection].sites.map((site) => (
+                    <motion.div
+                      key={site.name}
+                      variants={itemVariants}
+                      className="glass-surface rounded-md overflow-hidden"
+                      style={{
+                        borderLeft: `3px solid ${site.isTarget ? "hsl(var(--primary))" : "hsl(176 56% 55%)"}`,
+                      }}
+                    >
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${site.isTarget ? "bg-primary" : "bg-[hsl(176,56%,55%)]"}`} />
+                            <span className="font-mono text-sm text-foreground">{site.name}</span>
+                            {site.isTarget && <span className="text-[10px] text-muted-foreground">← you</span>}
+                          </div>
+                          <span className="font-mono text-sm font-bold tabular-nums px-2 py-0.5 rounded-sm bg-secondary" style={{ letterSpacing: 0 }}>{site.score.toFixed(1)}/10</span>
+                        </div>
+                        <div className="w-full h-32 rounded-sm bg-secondary/50 border border-white/5 mb-4 flex items-center justify-center">
+                          <span className="text-xs text-muted-foreground font-mono">[ screenshot ]</span>
+                        </div>
+                        <div className="space-y-2">
+                          {site.insights.map((insight, j) => (
+                            <div key={j} className="flex items-start gap-2">
+                              {insight.pass ? <Check className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" /> : <X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />}
+                              <span className="text-xs text-muted-foreground leading-relaxed">{insight.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+              <div className="mt-6 flex justify-center">
+                <Link
+                  to="/pricing"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors"
+                >
+                  Get more
+                </Link>
+              </div>
+            </motion.div>
           </motion.div>
         )}
 
@@ -516,6 +714,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
               {hasRealData && apiResult?.competitors ? (
                 apiResult.competitors.map((comp, i) => {
                   const compDomain = getDomain(comp.url);
+                  const overallScore = getCompetitorOverallScore(comp.analysis);
                   return (
                     <motion.div
                       key={comp.url}
@@ -547,7 +746,14 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
                           </div>
                         )}
                         <p className="font-mono text-sm text-foreground mb-1">{compDomain}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">/10 overall</p>
+                        {overallScore != null ? (
+                          <p className="font-mono text-lg font-bold text-success tabular-nums" style={{ letterSpacing: 0 }}>
+                            {overallScore.toFixed(1)}
+                            <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/10 overall</span>
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground font-mono">Analyzing...</p>
+                        )}
                       </div>
                     </motion.div>
                   );
