@@ -33,7 +33,7 @@ async function runPipeline(jobId) {
     const competitors = await findCompetitors(userUrl);
     pushProgress(jobId, { step: "competitors", competitors: competitors.map((c) => c.url) });
 
-    const toScrape = [{ url: userUrl, isUser: true }, ...competitors.slice(0, 4).map((c) => ({ url: c.url, isUser: false }))];
+    const toScrape = [{ url: userUrl, isUser: true }, ...competitors.slice(0, 3).map((c) => ({ url: c.url, isUser: false }))];
     pushProgress(jobId, { step: "screenshot", message: "Capturing screenshots..." });
     const scrapeResults = await Promise.all(
       toScrape.map(async (item) => {
@@ -50,7 +50,7 @@ async function runPipeline(jobId) {
       ...(userScrape ? [{ scrape: userScrape, isUser: true }] : []),
       ...competitorScrapes.map((s) => ({ scrape: s, isUser: false })),
     ];
-    const CONCURRENCY = 2;
+    const CONCURRENCY = 4; // all 4 sites in parallel; use 2 or 1 if you get 429 from Anthropic
     const runPool = async () => {
       const results = [];
       let next = 0;
@@ -111,10 +111,22 @@ async function runPipeline(jobId) {
  * Body: { url: string }
  * Returns: { jobId: string } immediately. Pipeline runs in background; poll GET /api/analyze/job/:jobId for progress.
  */
+function isValidHttpUrl(str) {
+  try {
+    const u = new URL(str);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 analyzeRouter.post("/analyze", (req, res) => {
   const url = req.body?.url?.trim();
   if (!url) {
     return res.status(400).json({ error: "Missing url" });
+  }
+  if (!isValidHttpUrl(url)) {
+    return res.status(400).json({ error: "Invalid url: must be http or https" });
   }
   const job = jobStore.createJob({ url });
   runPipeline(job.id).catch((e) => console.error("[analyze] runPipeline error:", e));

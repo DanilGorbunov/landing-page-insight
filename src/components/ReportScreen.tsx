@@ -3,6 +3,8 @@ import { motion } from "framer-motion";
 import { AlertTriangle, ArrowUpRight, Check, X, ExternalLink, ArrowLeft } from "lucide-react";
 import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult } from "@/lib/api";
+import { getDomain, parseScoreFromReport } from "@/lib/utils";
+import { containerVariants, itemVariants } from "@/lib/motion";
 
 const SECTION_TO_BACKEND: Record<string, string> = {
   Hero: "hero",
@@ -10,25 +12,6 @@ const SECTION_TO_BACKEND: Record<string, string> = {
   Features: "features",
   "Social Proof": "social proof",
   CTA: "CTA",
-};
-
-function parseScoreFromReport(report: string | undefined): number | null {
-  if (!report) return null;
-  const m = report.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
-  return m ? parseFloat(m[1], 10) : null;
-}
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.05, delayChildren: 0.1 },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.2, 0.8, 0.2, 1] as const } },
 };
 
 const TABS = ["Overview", "Sections", "Competitors"] as const;
@@ -239,7 +222,7 @@ const sectionData: Record<SectionTab, { sites: { name: string; score: number; is
 const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [activeSection, setActiveSection] = useState<SectionTab>("Hero");
-  const domain = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const domain = getDomain(url);
   const apiResult = result ?? savedEntry?.result;
   const score =
     apiResult?.synthesis?.overall_score ??
@@ -318,7 +301,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
                 <div className="flex flex-col gap-2 text-xs">
                   <div className="glass-surface rounded-sm px-3 py-2 flex items-center gap-2">
                     <span className="text-muted-foreground">Competitors analyzed:</span>
-                    <span className="font-mono text-foreground">{hasRealData && apiResult?.competitors ? apiResult.competitors.length : 4}</span>
+                    <span className="font-mono text-foreground">{hasRealData && apiResult?.competitors ? apiResult.competitors.length : 3}</span>
                   </div>
                   <div className="glass-surface rounded-sm px-3 py-2 flex items-center gap-2">
                     <span className="text-muted-foreground">Confidence:</span>
@@ -437,7 +420,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
                   </motion.div>
                   {/* Competitors */}
                   {apiResult.competitors?.map((comp) => {
-                    const compDomain = comp.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+                    const compDomain = getDomain(comp.url);
                     return (
                       <motion.div
                         key={comp.url}
@@ -532,7 +515,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack }: ReportScreenProps) =>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {hasRealData && apiResult?.competitors ? (
                 apiResult.competitors.map((comp, i) => {
-                  const compDomain = comp.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+                  const compDomain = getDomain(comp.url);
                   return (
                     <motion.div
                       key={comp.url}

@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 const MODEL = "claude-sonnet-4-20250514";
+const SECTION_MAX_CHARS = 700;
 
 /**
  * Synthesize a final competitive analysis report from all site analyses.
@@ -13,11 +14,13 @@ export async function synthesizeReport(input) {
 
   const client = new Anthropic({ apiKey });
 
+  const trunc = (text) => (typeof text === "string" ? text.slice(0, SECTION_MAX_CHARS) : "");
+
   const parts = [
     `# Competitive analysis: ${input.userUrl}\n`,
     "## Your landing\n",
     Object.entries(input.userAnalysis || {})
-      .map(([section, text]) => `### ${section}\n${text}`)
+      .map(([section, text]) => `### ${section}\n${trunc(text)}`)
       .join("\n"),
     "\n## Competitors\n",
   ];
@@ -26,7 +29,7 @@ export async function synthesizeReport(input) {
     parts.push(`### ${c.url}\n`);
     parts.push(
       Object.entries(c.analysis || {})
-        .map(([section, text]) => `#### ${section}\n${text}`)
+        .map(([section, text]) => `#### ${section}\n${trunc(text)}`)
         .join("\n")
     );
     parts.push("\n");
@@ -34,14 +37,14 @@ export async function synthesizeReport(input) {
 
   const prompt = `${parts.join("")}
 
-Based on the above, write a final competitive analysis report in markdown.
+Write a final competitive analysis in markdown.
 
-**Required:** Start the report with a single line: "Overall score: X/10" where X is a number from 0 to 10 (e.g. 6.2) based on the competitive position.
+**Required:** Start with one line: "Overall score: X/10" (X from 0 to 10, e.g. 6.2) based on competitive position.
 
 Then include:
 1. Executive summary
 2. Strengths of the user's landing vs competitors
-3. Gaps and recommendations (with evidence from the sections)
+3. Gaps and recommendations (with evidence)
 4. Top 3 actionable next steps.`;
 
   const msg = await client.messages.create({

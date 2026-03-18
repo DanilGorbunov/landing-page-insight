@@ -1,20 +1,11 @@
+import type { AnalysisResult } from "@/lib/api";
+import { getDomain } from "@/lib/utils";
+
 const STORAGE_KEY = "ll_history";
 const MAX_ENTRIES = 10;
 const TTL_MS = 60 * 60 * 1000; // 1 hour
 
-export interface AnalysisResult {
-  jobId?: string;
-  synthesis?: { overall_score?: number };
-  report?: string;
-  userAnalysis?: Record<string, string>;
-  competitors?: Array<{
-    url: string;
-    analysis: Record<string, string>;
-    screenshotUrl?: string | null;
-  }>;
-  targetScreenshotUrl?: string | null;
-  [key: string]: unknown;
-}
+export type { AnalysisResult };
 
 export interface HistoryEntry {
   id: string;
@@ -27,7 +18,7 @@ export interface HistoryEntry {
 
 export function saveToHistory(url: string, result: AnalysisResult): void {
   cleanExpired();
-  const domain = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const domain = getDomain(url);
   const history = getHistory();
   const entry: HistoryEntry = {
     id: String(result.jobId ?? Date.now()),

@@ -2,9 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 
 const MODEL = "claude-sonnet-4-20250514";
-const MAX_IMAGE_WIDTH = 1200;
-const JPEG_QUALITY = 82;
-const MARKDOWN_MAX_CHARS = 4000;
+const MAX_IMAGE_WIDTH = 1000;
+const JPEG_QUALITY = 78;
+const MARKDOWN_MAX_CHARS = 3000;
 const SECTIONS = [
   "hero",
   "value proposition",
@@ -14,7 +14,9 @@ const SECTIONS = [
 ];
 
 /**
- * Resize and compress image to reduce Vision API tokens. Returns { data: base64, mediaType }.
+ * Resize and compress image to reduce Vision API tokens.
+ * @param {string} base64 - Base64 image (optional data: URL prefix).
+ * @returns {Promise<{ data: string, mediaType: string }>} Raw base64 and MIME type.
  */
 async function compressImageForVision(base64) {
   const raw = base64.replace(/^data:image\/\w+;base64,/, "");
@@ -61,6 +63,8 @@ function parseSectionsResponse(text) {
 /**
  * Analyze entire landing in one Vision call: all 5 sections from one screenshot + markdown.
  * Uses compressed image and shorter text to reduce tokens (faster + cheaper).
+ * @param {{ markdown?: string, screenshotUrl?: string, screenshotBase64?: string }} scrapeResult - Scrape output.
+ * @returns {Promise<Record<string, string>>} Map of section name to analysis text.
  */
 export async function analyzeLandingSections(scrapeResult) {
   const { markdown, screenshotUrl, screenshotBase64 } = scrapeResult;
@@ -98,8 +102,8 @@ export async function analyzeLandingSections(scrapeResult) {
   const sectionList = SECTIONS.map((s) => `"${s}"`).join(", ");
   const textParts = [
     `Analyze this landing page for the following sections: ${sectionList}.`,
-    "For each section provide concise insights: what works, what could be improved, and evidence from the page.",
-    "Reply in markdown. Use exactly these headers (one per section) and write the analysis under each:",
+    "For each section: what works, what to improve, with evidence.",
+    "Reply in markdown with exactly these headers and analysis under each:",
     SECTIONS.map((s) => `## ${s}`).join("\n"),
   ];
   if (markdown) {

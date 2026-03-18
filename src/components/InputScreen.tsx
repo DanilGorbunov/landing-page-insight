@@ -1,21 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Globe, Plus, ChevronDown, X, History } from "lucide-react";
+import { staggerContainer, staggerItem } from "@/lib/motion";
 
 const SAMPLE_SITES = ["apollo.io", "linear.app", "hubspot.com", "notion.so"];
-
-const staggerContainer = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08, delayChildren: 0.2 },
-  },
-};
-
-const staggerItem = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.2, 0.8, 0.2, 1] as const } },
-};
 
 interface InputScreenProps {
   onAnalyze: (url: string, competitors: string[]) => void | Promise<void>;

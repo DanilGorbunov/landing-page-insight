@@ -28,7 +28,7 @@ export async function findCompetitors(domainOrProduct) {
 
   const data = await res.json();
   const results = data.results || [];
-  return results.slice(0, 4).map((r) => ({
+  return results.slice(0, 3).map((r) => ({
     url: r.url,
     title: r.title,
   }));

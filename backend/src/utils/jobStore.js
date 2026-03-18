@@ -2,6 +2,11 @@ const TTL_MS = 60 * 60 * 1000; // 1 hour
 
 const jobs = new Map();
 
+/**
+ * Create a new analysis job.
+ * @param {Record<string, unknown>} [initial] - Optional initial job fields (e.g. { url }).
+ * @returns {{ id: string, status: string, progress: unknown[], result: unknown, error: unknown, createdAt: number }}
+ */
 function createJob(initial = {}) {
   const id = `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const job = {
@@ -18,10 +23,21 @@ function createJob(initial = {}) {
   return job;
 }
 
+/**
+ * Get job by id.
+ * @param {string} id - Job id.
+ * @returns {object | null} Job or null.
+ */
 function getJob(id) {
   return jobs.get(id) || null;
 }
 
+/**
+ * Update job with partial fields.
+ * @param {string} id - Job id.
+ * @param {Record<string, unknown>} updates - Fields to merge into job.
+ * @returns {object | null} Updated job or null.
+ */
 function updateJob(id, updates) {
   const job = jobs.get(id);
   if (!job) return null;

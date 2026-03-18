@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Loader2, Circle } from "lucide-react";
+import { getDomain } from "@/lib/utils";
 import { getJobStatus, type JobProgressEntry, type AnalysisResult } from "@/lib/api";
 
 const STEPS = [
@@ -54,7 +55,9 @@ const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps)
   const [streamError, setStreamError] = useState<string | null>(null);
   const doneRef = useRef(false);
 
-  const domain = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const domain = getDomain(url);
+
+  const MAX_POLL_FAILURES = 8;
 
   useEffect(() => {
     if (doneRef.current) return;
@@ -62,12 +65,14 @@ const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps)
 
     const POLL_MS = 2000;
     let cancelled = false;
+    let failCount = 0;
 
     const poll = async () => {
       while (!cancelled && !doneRef.current) {
         try {
           const job = await getJobStatus(jobId);
           if (cancelled) return;
+          failCount = 0;
           const progress = job.progress || [];
           if (progress.length > 0) {
             const last = progress[progress.length - 1];
@@ -90,10 +95,15 @@ const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps)
             setStreamError(err);
             return;
           }
-        } catch (e) {
-          if (!cancelled && !doneRef.current) {
-            setLogMessage("Connection error. Retrying...");
+        } catch {
+          if (cancelled || doneRef.current) return;
+          failCount += 1;
+          if (failCount >= MAX_POLL_FAILURES) {
+            setLogMessage("Connection failed after several retries.");
+            setStreamError("Connection failed. Back to try again.");
+            return;
           }
+          setLogMessage("Connection error. Retrying...");
         }
         await new Promise((r) => setTimeout(r, POLL_MS));
       }
