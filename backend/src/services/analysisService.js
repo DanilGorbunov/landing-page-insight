@@ -1,9 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 
-// Use model IDs that exist in your Anthropic account (4-5 IDs can 404)
 const MODEL_SONNET = "claude-sonnet-4-20250514";
-const MODEL_HAIKU = "claude-sonnet-4-20250514";
+const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 const MAX_IMAGE_WIDTH = 1200;
 const JPEG_QUALITY = 82;
 const MARKDOWN_MAX_CHARS = 4000;
