@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const DISCOVERY_MODEL = "claude-sonnet-4-20250514";
+const DISCOVERY_MODEL = "claude-haiku-4-5-20251001";
 const TAVILY_API = "https://api.tavily.com/search";
 
 const SKIP_PATHS = ["/blog/", "/alternatives", "/competitors", "/vs-"];
@@ -120,13 +120,15 @@ Rules:
   let results = filtered.slice(0, 4).map((url) => ({ url, title: undefined }));
 
   if (tavilyKey) {
-    const validated = [];
-    for (const { url } of results) {
-      const domainForCheck = url.replace(/^https?:\/\//, "").split("/")[0];
-      const ok = await tavilyValidateDomain(domainForCheck, tavilyKey);
-      if (ok) validated.push({ url, title: domainForCheck });
-    }
-    results = validated.length > 0 ? validated : results;
+    const checks = await Promise.all(
+      results.map(async ({ url }) => {
+        const domainForCheck = url.replace(/^https?:\/\//, "").split("/")[0];
+        const ok = await tavilyValidateDomain(domainForCheck, tavilyKey);
+        return ok ? { url, title: domainForCheck } : null;
+      })
+    );
+    const validated = checks.filter(Boolean);
+    if (validated.length > 0) results = validated;
   }
 
   return results.slice(0, 4);

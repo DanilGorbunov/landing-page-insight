@@ -83,10 +83,8 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
         >
           {/* Logo: Landing Lens by AI — clickable to home */}
           <motion.div variants={staggerItem} className="mb-8">
-            <Link to="/" className="font-sans text-xl sm:text-2xl font-medium tracking-tight inline-flex items-baseline hover:opacity-90 transition-opacity">
-              <span className="text-primary">Landing </span>
-              <span className="text-primary">Lens</span>
-              <span className="text-primary"> </span>
+            <Link to="/" className="font-sans text-xl sm:text-2xl font-medium tracking-tight inline-flex items-baseline gap-2 hover:opacity-90 transition-opacity">
+              <span className="text-primary">Landing Lens</span>
               <span className="text-muted-foreground">by AI</span>
             </Link>
           </motion.div>

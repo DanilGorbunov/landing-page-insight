@@ -74,20 +74,9 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
             Landing Lens
           </button>
           <nav className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onBack}
-              className="touch-target px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-            >
-              Overview
-            </button>
-            <button
-              type="button"
-              className="touch-target px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg bg-secondary text-foreground"
-              aria-current="page"
-            >
+            <span className="px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg bg-secondary text-foreground" aria-current="page">
               History
-            </button>
+            </span>
           </nav>
         </div>
       </header>

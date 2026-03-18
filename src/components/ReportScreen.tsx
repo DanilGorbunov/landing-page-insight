@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { AlertTriangle, ArrowUpRight, Check, X, ExternalLink, ArrowLeft } from "lucide-react";
 import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult } from "@/lib/api";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getDomain, parseScoreFromReport, getCompetitorOverallScore, analysisToBullets, stripMarkdownFormatting, ensureScore, inferScoreFromAnalysis } from "@/lib/utils";
 import { containerVariants, itemVariants } from "@/lib/motion";
 import { CompetitiveCharts } from "@/components/CompetitiveCharts";
@@ -334,10 +334,23 @@ function SectionCard({
   );
 }
 
+const REPORT_RETURN_KEY = "landinglens_report_return";
+
 const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome }: ReportScreenProps) => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [activeSection, setActiveSection] = useState<SectionTab>("Hero");
   const domain = getDomain(url);
+
+  const handleSeeFullReport = () => {
+    try {
+      sessionStorage.setItem(
+        REPORT_RETURN_KEY,
+        JSON.stringify({ url, result: result ?? null, savedEntry: savedEntry ?? null })
+      );
+    } catch (_) {}
+    navigate("/pricing", { state: { fromReport: true } });
+  };
   const apiResult = result ?? savedEntry?.result;
   const score = ensureScore(
     apiResult?.synthesis?.overall_score ??
@@ -437,13 +450,14 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                       aria-hidden
                     />
                   </div>
-                  <Link
-                    to="/pricing"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-3"
+                  <button
+                    type="button"
+                    onClick={handleSeeFullReport}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-3 text-left"
                   >
                     <ArrowUpRight className="w-4 h-4" />
                     See full report and insights
-                  </Link>
+                  </button>
                 </div>
                 <div className="shrink-0 order-1 sm:order-2">
                   <div className="flex flex-col gap-0.5 mb-2 mt-5">
@@ -591,12 +605,13 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                 ))}
               </div>
               <div className="mt-6 flex justify-center">
-                <Link
-                  to="/pricing"
+                <button
+                  type="button"
+                  onClick={handleSeeFullReport}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors"
                 >
                   Get more
-                </Link>
+                </button>
               </div>
             </motion.div>
           </motion.div>

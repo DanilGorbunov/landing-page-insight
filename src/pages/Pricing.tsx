@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Check } from "lucide-react";
 
 const TOUCH_TARGET = "min-h-[44px] min-w-[44px] inline-flex items-center justify-center";
@@ -35,13 +35,24 @@ const PLANS = [
 
 const Pricing = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const fromReport = location.state?.fromReport === true;
+
+  const handleBack = () => {
+    if (fromReport) {
+      navigate("/", { state: { restoreReport: true } });
+    } else {
+      navigate(-1);
+    }
+  };
+
   return (
   <div className="min-h-screen bg-background flex flex-col">
     <header className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background">
       <div className="max-w-5xl mx-auto w-full px-4 flex items-center justify-between">
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           className={`${TOUCH_TARGET} gap-2 px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors`}
         >
           <ArrowLeft className="w-4 h-4" />

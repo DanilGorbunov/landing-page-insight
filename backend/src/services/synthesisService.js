@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 const MODEL = "claude-sonnet-4-20250514";
-const SECTION_MAX_CHARS = 1200;
+const SECTION_MAX_CHARS = 800;
 
 /** Section keys as in analysis output. Weights: Hero & CTA matter most for conversion; Features least. */
 const WEIGHTS = {
@@ -130,15 +130,9 @@ Output ONLY the JSON array inside a single code block, e.g. \`\`\`json\\n[ ... ]
 
   const prompt = `${parts.join("")}
 
-Write a final competitive analysis in markdown.
+Write a concise competitive analysis in markdown. Start with exactly: "${scoreLine}"
 
-**Required:** Start with exactly this line (use the score as given): "${scoreLine}"
-
-Then include:
-1. Executive summary
-2. Strengths of the user's landing vs competitors
-3. Gaps and recommendations (with evidence from the analyses above only — every gap must reference specific text or elements from this run; never reuse gaps from a previous analysis)
-4. Top 3 actionable next steps.
+Then: 1) Executive summary (2-4 sentences) 2) Strengths vs competitors 3) Gaps and recommendations (evidence from above only) 4) Top 3 next steps. Be concise.
 
 ---
 CRITICAL GAPS (structured output)
@@ -147,7 +141,7 @@ ${gapsPrompt}`;
 
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 4096,
+    max_tokens: 3072,
     messages: [{ role: "user", content: prompt }],
   });
 

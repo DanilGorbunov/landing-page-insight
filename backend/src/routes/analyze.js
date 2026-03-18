@@ -74,28 +74,55 @@ async function runPipeline(jobId) {
   pushProgress(jobId, { step: "started", message: "Starting analysis" });
 
   try {
+    const t0 = Date.now();
     const manualUrls = (job.competitors || [])
       .map(normalizeCompetitorUrl)
       .filter(Boolean)
       .slice(0, 3);
-    pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
-    const autoDiscovered = await findCompetitors(userUrl);
-    const userDomain = getDomain(userUrl);
-    const combined = [...manualUrls];
-    for (const c of autoDiscovered) {
-      if (combined.length >= 3) break;
-      const u = c.url;
-      const d = getDomain(u);
-      if (d && d !== userDomain && !combined.some((x) => getDomain(x) === d)) combined.push(u);
+    let combined;
+    if (manualUrls.length >= 3) {
+      combined = manualUrls.slice(0, 3);
+      pushProgress(jobId, { step: "discovering", message: "Using provided competitors" });
+      pushProgress(jobId, { step: "competitors", competitors: combined });
+    } else {
+      pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
+      const autoDiscovered = await findCompetitors(userUrl);
+      const userDomain = getDomain(userUrl);
+      combined = [...manualUrls];
+      for (const c of autoDiscovered) {
+        if (combined.length >= 3) break;
+        const u = c.url;
+        const d = getDomain(u);
+        if (d && d !== userDomain && !combined.some((x) => getDomain(x) === d)) combined.push(u);
+      }
+      pushProgress(jobId, { step: "competitors", competitors: combined });
     }
-    pushProgress(jobId, { step: "competitors", competitors: combined });
+    console.log("[analyze] discovery done", Date.now() - t0, "ms");
 
     const toScrape = [{ url: userUrl, isUser: true }, ...combined.map((url) => ({ url, isUser: false }))];
     pushProgress(jobId, { step: "screenshot", message: "Capturing screenshots..." });
-    const scrapeResults = await Promise.all(
+    const t1 = Date.now();
+    let scrapeResults = await Promise.all(
       toScrape.map(async (item) => {
         const data = await scrapeWithScreenshot(item.url);
         return { url: item.url, isUser: item.isUser, ...data };
+      })
+    );
+    console.log("[analyze] scrape done", Date.now() - t1, "ms");
+    // Pre-fetch screenshot bytes so analysis workers don't wait on network
+    scrapeResults = await Promise.all(
+      scrapeResults.map(async (r) => {
+        if (!r.screenshot) return { ...r, screenshotBase64: null };
+        try {
+          const res = await fetch(r.screenshot);
+          if (res.ok) {
+            const buf = Buffer.from(await res.arrayBuffer());
+            return { ...r, screenshotBase64: buf.toString("base64") };
+          }
+        } catch (e) {
+          console.warn("[analyze] pre-fetch screenshot failed", r.url, e.message);
+        }
+        return r;
       })
     );
     pushProgress(jobId, { step: "screenshot", index: toScrape.length, total: toScrape.length, message: "Screenshots captured" });
@@ -107,6 +134,7 @@ async function runPipeline(jobId) {
       ...(userScrape ? [{ scrape: userScrape, isUser: true }] : []),
       ...competitorScrapes.map((s) => ({ scrape: s, isUser: false })),
     ];
+    const t2 = Date.now();
     const CONCURRENCY = 4; // all 4 sites in parallel; use 2 or 1 if you get 429 from Anthropic
     const runPool = async () => {
       const results = [];
@@ -115,7 +143,12 @@ async function runPipeline(jobId) {
         if (idx >= analysisTasks.length) return null;
         const { scrape, isUser } = analysisTasks[idx];
         const analysis = await analyzeLandingSections(
-          { markdown: scrape.markdown, screenshotUrl: scrape.screenshot, url: scrape.url },
+          {
+            markdown: scrape.markdown,
+            screenshotUrl: scrape.screenshot,
+            screenshotBase64: scrape.screenshotBase64,
+            url: scrape.url,
+          },
           isUser
         );
         return { isUser, url: scrape.url, analysis };
@@ -134,6 +167,7 @@ async function runPipeline(jobId) {
       return results;
     };
     const analysisResults = await runPool();
+    console.log("[analyze] vision done", Date.now() - t2, "ms");
     const byUrl = new Map(analysisResults.map((r) => [r.url, r]));
     const userAnalysis = (userScrape && byUrl.get(userScrape.url))?.analysis ?? {};
     const competitorAnalyses = competitorScrapes.map((s) => ({
@@ -142,6 +176,7 @@ async function runPipeline(jobId) {
     }));
 
     pushProgress(jobId, { step: "synthesis", message: "Writing report..." });
+    const t3 = Date.now();
     const { report, overall_score: overallScore, gaps: synthesisGaps } = await synthesizeReport({
       userUrl,
       userAnalysis,
@@ -162,6 +197,7 @@ async function runPipeline(jobId) {
       synthesis: overallScore != null ? { overall_score: overallScore } : undefined,
       gaps: Array.isArray(synthesisGaps) ? synthesisGaps : [],
     };
+    console.log("[analyze] synthesis done", Date.now() - t3, "ms | total", Date.now() - t0, "ms");
     resultCache.set(cacheKey, { result, cachedAt: Date.now() });
     jobStore.updateJob(jobId, { status: "completed", result });
   } catch (err) {

@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import InputScreen from "@/components/InputScreen";
 import ProgressScreen from "@/components/ProgressScreen";
 import ReportScreen from "@/components/ReportScreen";
@@ -8,7 +9,11 @@ import { saveToHistory, getHistoryCount, type HistoryEntry, type AnalysisResult 
 
 type Screen = "input" | "progress" | "report" | "dashboard";
 
+const REPORT_RETURN_KEY = "landinglens_report_return";
+
 const Index = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [screen, setScreen] = useState<Screen>("input");
   const [url, setUrl] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
@@ -18,6 +23,22 @@ const Index = () => {
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   /** When user opened History from Report, back should return to Report; otherwise to Input */
   const [screenBeforeDashboard, setScreenBeforeDashboard] = useState<"input" | "report">("input");
+
+  useEffect(() => {
+    if (location.pathname !== "/" || location.state?.restoreReport !== true) return;
+    try {
+      const raw = sessionStorage.getItem(REPORT_RETURN_KEY);
+      if (raw) {
+        const data = JSON.parse(raw) as { url?: string; result?: AnalysisResult | null; savedEntry?: HistoryEntry | null };
+        if (data.url) setUrl(data.url);
+        if (data.result != null) setLastResult(data.result);
+        if (data.savedEntry != null) setSavedEntryForReport(data.savedEntry);
+        setScreen("report");
+        sessionStorage.removeItem(REPORT_RETURN_KEY);
+      }
+    } catch (_) {}
+    navigate(".", { state: {}, replace: true });
+  }, [location.pathname, location.state?.restoreReport, navigate]);
 
   const normalizeUrl = useCallback((raw: string) => {
     const u = raw.trim();
