@@ -104,7 +104,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
         </motion.h1>
 
         <motion.p variants={staggerItem} className="font-sans text-muted-foreground text-base mb-10 max-w-md mx-auto">
-          Paste a URL. Get an AI-powered audit with actionable insights in seconds.
+          Paste a URL. Get an AI-powered audit with actionable insights in seconds
         </motion.p>
 
         {/* Input */}

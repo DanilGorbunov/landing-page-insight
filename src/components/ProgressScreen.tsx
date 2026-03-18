@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Loader2, Circle } from "lucide-react";
-import { getStreamUrl } from "@/lib/api";
-import type { AnalysisResult } from "@/lib/api";
+import { getJobStatus, type JobProgressEntry, type AnalysisResult } from "@/lib/api";
 
 const STEPS = [
   { label: "Discovering competitors", detail: "Scanning industry landscape..." },
@@ -22,7 +21,7 @@ function stepFromProgress(step: string, index?: number, total?: number): number 
     case "screenshot":
       if (total != null && total > 0 && index != null) {
         if (index >= total) return 2;
-        return 1 + Math.floor((index / total) * 1.5); // 1 -> 2
+        return 1 + Math.floor((index / total) * 1.5);
       }
       return 2;
     case "analyzing":
@@ -32,6 +31,14 @@ function stepFromProgress(step: string, index?: number, total?: number): number 
     default:
       return 0;
   }
+}
+
+function messageFromProgress(entry: JobProgressEntry): string {
+  if (entry.message) return entry.message;
+  if (entry.competitors?.length) return `Found: ${entry.competitors.join(", ")}`;
+  if (entry.step === "screenshot" && entry.index != null && entry.total != null)
+    return `Capturing ${entry.index}/${entry.total}...`;
+  return "";
 }
 
 interface ProgressScreenProps {
@@ -46,67 +53,55 @@ const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps)
   const [logMessage, setLogMessage] = useState("Connecting...");
   const [streamError, setStreamError] = useState<string | null>(null);
   const doneRef = useRef(false);
-  const serverErrorRef = useRef(false);
 
   const domain = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
   useEffect(() => {
     if (doneRef.current) return;
-    const es = new EventSource(getStreamUrl(jobId));
+    setLogMessage("Connecting...");
 
-    es.addEventListener("progress", (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data as string);
-        const step = data.step ?? "started";
-        const next = stepFromProgress(step, data.index, data.total);
-        setActiveStep((prev) => Math.max(prev, next));
-        if (data.message) setLogMessage(data.message);
-        if (data.competitors?.length) setLogMessage(`Found: ${data.competitors.join(", ")}`);
-        if (step === "screenshot" && data.url) setLogMessage(`Capturing ${data.url}...`);
-      } catch {
-        // ignore parse errors
-      }
-    });
+    const POLL_MS = 2000;
+    let cancelled = false;
 
-    es.addEventListener("done", (event: MessageEvent) => {
-      if (doneRef.current) return;
-      doneRef.current = true;
-      es.close();
-      try {
-        const data = JSON.parse(event.data as string) as AnalysisResult;
-        setLogMessage("Report ready.");
-        setActiveStep(STEPS.length);
-        setTimeout(() => onComplete(data), 600);
-      } catch {
-        onComplete(null);
-      }
-    });
-
-    es.addEventListener("error", (event: MessageEvent & { data?: string }) => {
-      if (doneRef.current) return;
-      try {
-        const data = JSON.parse(event.data || "{}");
-        if (data.error) {
-          serverErrorRef.current = true;
-          setLogMessage(data.error);
-          setStreamError(data.error);
+    const poll = async () => {
+      while (!cancelled && !doneRef.current) {
+        try {
+          const job = await getJobStatus(jobId);
+          if (cancelled) return;
+          const progress = job.progress || [];
+          if (progress.length > 0) {
+            const last = progress[progress.length - 1];
+            const step = last.step ?? "started";
+            const next = stepFromProgress(step, last.index, last.total);
+            setActiveStep((prev) => Math.max(prev, next));
+            const msg = messageFromProgress(last);
+            if (msg) setLogMessage(msg);
+          }
+          if (job.status === "completed" && job.result) {
+            doneRef.current = true;
+            setLogMessage("Report ready.");
+            setActiveStep(STEPS.length);
+            setTimeout(() => onComplete(job.result as AnalysisResult), 600);
+            return;
+          }
+          if (job.status === "failed") {
+            const err = job.error || "Analysis failed.";
+            setLogMessage(err);
+            setStreamError(err);
+            return;
+          }
+        } catch (e) {
+          if (!cancelled && !doneRef.current) {
+            setLogMessage("Connection error. Retrying...");
+          }
         }
-      } catch {
-        setStreamError("Connection error.");
+        await new Promise((r) => setTimeout(r, POLL_MS));
       }
-    });
-
-    es.onerror = () => {
-      if (doneRef.current) return;
-      if (!serverErrorRef.current) {
-        setLogMessage("Stream error. Retry or check backend.");
-        setStreamError("Stream error. Retry or check backend.");
-      }
-      es.close();
     };
 
+    poll();
     return () => {
-      es.close();
+      cancelled = true;
     };
   }, [jobId, onComplete]);
 

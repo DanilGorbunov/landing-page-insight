@@ -39,3 +39,25 @@ export async function startAnalysis(url: string): Promise<{ jobId: string }> {
 export function getStreamUrl(jobId: string): string {
   return `${API_BASE}/api/analyze/stream/${jobId}`;
 }
+
+export interface JobProgressEntry {
+  step?: string;
+  message?: string;
+  index?: number;
+  total?: number;
+  competitors?: string[];
+}
+
+export interface JobStatus {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  progress: JobProgressEntry[];
+  result?: AnalysisResult | null;
+  error?: string | null;
+}
+
+export async function getJobStatus(jobId: string): Promise<JobStatus> {
+  const res = await fetch(`${API_BASE}/api/analyze/job/${jobId}`);
+  if (!res.ok) throw new Error("Job not found");
+  return res.json();
+}
