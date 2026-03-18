@@ -56,30 +56,57 @@ analyzeRouter.get("/analyze/stream/:jobId", async (req, res) => {
     const competitors = await findCompetitors(userUrl);
     sendSSE(res, "progress", { step: "competitors", competitors: competitors.map((c) => c.url) });
 
-    // 2) Scrape user + 4 competitors (screenshot + markdown)
+    // 2) Scrape user + 4 competitors in parallel (screenshot + markdown)
     const toScrape = [{ url: userUrl, isUser: true }, ...competitors.slice(0, 4).map((c) => ({ url: c.url, isUser: false }))];
-    const scrapeResults = [];
-    for (let i = 0; i < toScrape.length; i++) {
-      const item = toScrape[i];
-      sendSSE(res, "progress", { step: "screenshot", index: i + 1, total: toScrape.length, url: item.url });
-      const data = await scrapeWithScreenshot(item.url);
-      scrapeResults.push({ url: item.url, isUser: item.isUser, ...data });
-    }
+    sendSSE(res, "progress", { step: "screenshot", message: "Capturing screenshots..." });
+    const scrapeResults = await Promise.all(
+      toScrape.map(async (item) => {
+        const data = await scrapeWithScreenshot(item.url);
+        return { url: item.url, isUser: item.isUser, ...data };
+      })
+    );
+    sendSSE(res, "progress", { step: "screenshot", index: toScrape.length, total: toScrape.length, message: "Screenshots captured" });
 
-    // 3) Analyze each landing — one site at a time to stay under Claude rate limit (30k tokens/min)
+    // 3) Analyze landings with limited concurrency (2 at a time) to balance speed vs rate limit
     sendSSE(res, "progress", { step: "analyzing", message: "Analyzing with Claude Vision..." });
     const userScrape = scrapeResults.find((r) => r.isUser);
     const competitorScrapes = scrapeResults.filter((r) => !r.isUser);
 
-    const userAnalysis = userScrape
-      ? await analyzeLandingSections({ markdown: userScrape.markdown, screenshotUrl: userScrape.screenshot })
-      : {};
+    const analysisTasks = [
+      ...(userScrape ? [{ scrape: userScrape, isUser: true }] : []),
+      ...competitorScrapes.map((s) => ({ scrape: s, isUser: false })),
+    ];
+    const CONCURRENCY = 2;
+    const runPool = async () => {
+      const results = [];
+      let next = 0;
+      const runOne = async (idx) => {
+        if (idx >= analysisTasks.length) return null;
+        const { scrape, isUser } = analysisTasks[idx];
+        const analysis = await analyzeLandingSections({ markdown: scrape.markdown, screenshotUrl: scrape.screenshot });
+        return { isUser, url: scrape.url, analysis };
+      };
+      const workers = Array.from({ length: Math.min(CONCURRENCY, analysisTasks.length) }, () =>
+        (async () => {
+          while (true) {
+            const idx = next++;
+            if (idx >= analysisTasks.length) return;
+            const one = await runOne(idx);
+            if (one) results.push(one);
+          }
+        })()
+      );
+      await Promise.all(workers);
+      return results;
+    };
+    const analysisResults = await runPool();
+    const byUrl = new Map(analysisResults.map((r) => [r.url, r]));
 
-    const competitorAnalyses = [];
-    for (const s of competitorScrapes) {
-      const analysis = await analyzeLandingSections({ markdown: s.markdown, screenshotUrl: s.screenshot });
-      competitorAnalyses.push({ url: s.url, analysis });
-    }
+    const userAnalysis = (userScrape && byUrl.get(userScrape.url))?.analysis ?? {};
+    const competitorAnalyses = competitorScrapes.map((s) => ({
+      url: s.url,
+      analysis: byUrl.get(s.url)?.analysis ?? {},
+    }));
 
     // 4) Synthesize report
     sendSSE(res, "progress", { step: "synthesis", message: "Writing report..." });
