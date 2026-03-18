@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 
-const MODEL = "claude-sonnet-4-20250514";
-const MAX_IMAGE_WIDTH = 1000;
-const JPEG_QUALITY = 78;
-const MARKDOWN_MAX_CHARS = 3000;
+const MODEL_SONNET = "claude-sonnet-4-5-20251022";
+const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+const MAX_IMAGE_WIDTH = 1200;
+const JPEG_QUALITY = 82;
+const MARKDOWN_MAX_CHARS = 4000;
 const SECTIONS = [
   "hero",
   "value proposition",
@@ -63,11 +64,14 @@ function parseSectionsResponse(text) {
 /**
  * Analyze entire landing in one Vision call: all 5 sections from one screenshot + markdown.
  * Uses compressed image and shorter text to reduce tokens (faster + cheaper).
- * @param {{ markdown?: string, screenshotUrl?: string, screenshotBase64?: string }} scrapeResult - Scrape output.
+ * @param {{ markdown?: string, screenshotUrl?: string, screenshotBase64?: string, url?: string }} scrapeResult - Scrape output.
+ * @param {boolean} [isUserSite=false] - If true use Sonnet, else Haiku.
  * @returns {Promise<Record<string, string>>} Map of section name to analysis text.
  */
-export async function analyzeLandingSections(scrapeResult) {
+export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
   const { markdown, screenshotUrl, screenshotBase64 } = scrapeResult;
+  const model = isUserSite ? MODEL_SONNET : MODEL_HAIKU;
+  console.log("[analyze] model:", model, "url:", scrapeResult.url || "(no url)");
   let base64 = screenshotBase64;
   if (!base64 && screenshotUrl) {
     const res = await fetch(screenshotUrl);
@@ -112,7 +116,7 @@ export async function analyzeLandingSections(scrapeResult) {
   content.push({ type: "text", text: textParts.join("\n") });
 
   const msg = await client.messages.create({
-    model: MODEL,
+    model,
     max_tokens: 4096,
     messages: [{ role: "user", content }],
   });

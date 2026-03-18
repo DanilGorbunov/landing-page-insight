@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router } from "express";
 import { jobStore } from "../utils/jobStore.js";
 import { scrapeWithScreenshot } from "../services/screenshotService.js";
@@ -6,6 +7,7 @@ import { analyzeLandingSections } from "../services/analysisService.js";
 import { synthesizeReport } from "../services/synthesisService.js";
 
 export const analyzeRouter = Router();
+const resultCache = new Map();
 
 function pushProgress(jobId, entry) {
   const job = jobStore.getJob(jobId);
@@ -27,6 +29,18 @@ async function runPipeline(jobId) {
   const userUrl = job.url;
   jobStore.updateJob(jobId, { status: "running" });
   pushProgress(jobId, { step: "started", message: "Starting analysis" });
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const cacheKey = crypto.createHash("md5").update(userUrl + dateStr).digest("hex");
+  if (resultCache.has(cacheKey)) {
+    pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
+    pushProgress(jobId, { step: "competitors", competitors: [] });
+    pushProgress(jobId, { step: "screenshot", message: "Screenshots captured" });
+    pushProgress(jobId, { step: "analyzing", message: "Analyzing with Claude Vision..." });
+    pushProgress(jobId, { step: "synthesis", message: "Writing report..." });
+    jobStore.updateJob(jobId, { status: "completed", result: resultCache.get(cacheKey) });
+    return;
+  }
 
   try {
     pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
@@ -57,7 +71,10 @@ async function runPipeline(jobId) {
       const runOne = async (idx) => {
         if (idx >= analysisTasks.length) return null;
         const { scrape, isUser } = analysisTasks[idx];
-        const analysis = await analyzeLandingSections({ markdown: scrape.markdown, screenshotUrl: scrape.screenshot });
+        const analysis = await analyzeLandingSections(
+          { markdown: scrape.markdown, screenshotUrl: scrape.screenshot, url: scrape.url },
+          isUser
+        );
         return { isUser, url: scrape.url, analysis };
       };
       const workers = Array.from({ length: Math.min(CONCURRENCY, analysisTasks.length) }, () =>
@@ -99,6 +116,7 @@ async function runPipeline(jobId) {
       targetScreenshotUrl,
       synthesis: overallScore != null ? { overall_score: overallScore } : undefined,
     };
+    resultCache.set(cacheKey, result);
     jobStore.updateJob(jobId, { status: "completed", result });
   } catch (err) {
     console.error("[analyze] Error:", err.message || err);

@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 const MODEL = "claude-sonnet-4-20250514";
-const SECTION_MAX_CHARS = 700;
+const SECTION_MAX_CHARS = 1200;
 
 /**
  * Synthesize a final competitive analysis report from all site analyses.
