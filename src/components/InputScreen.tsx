@@ -129,14 +129,14 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
           <p className="mt-3 text-sm text-destructive">{analyzeError}</p>
         )}
 
-        {/* Try chips */}
+        {/* Try chips — 2 on mobile, all 4 from sm */}
         <motion.div variants={staggerItem} className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <span className="text-xs text-muted-foreground">Try:</span>
-          {SAMPLE_SITES.map((site) => (
+          {SAMPLE_SITES.map((site, i) => (
             <button
               key={site}
               onClick={() => setUrl(`https://${site}`)}
-              className="px-3 py-1 rounded-sm text-xs font-mono text-secondary-foreground glass-surface hover:border-primary/30 transition-colors"
+              className={`px-3 py-1 rounded-sm text-xs font-mono text-secondary-foreground glass-surface hover:border-primary/30 transition-colors ${i >= 2 ? "hidden sm:inline-flex" : ""}`}
             >
               {site}
             </button>
