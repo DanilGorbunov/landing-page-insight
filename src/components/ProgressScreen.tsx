@@ -4,6 +4,7 @@ import { Check, Loader2, Circle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getDomain } from "@/lib/utils";
 import { getJobStatus, type JobProgressEntry, type AnalysisResult } from "@/lib/api";
+import WaitingSlider from "@/components/WaitingSlider";
 
 const STEPS = [
   { label: "Discovering competitors", detail: "Scanning industry landscape..." },
@@ -51,7 +52,7 @@ interface ProgressScreenProps {
   onGoHome?: () => void;
 }
 
-const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps) => {
+const ProgressScreen = ({ jobId, url, onComplete, onBack, onGoHome }: ProgressScreenProps) => {
   const [activeStep, setActiveStep] = useState(0);
   const [logMessage, setLogMessage] = useState("Connecting...");
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -124,11 +125,11 @@ const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps)
         <div className="max-w-6xl mx-auto w-full px-4 md:px-8">
           <div className="h-14 flex items-center gap-6">
             {onGoHome ? (
-              <button type="button" onClick={onGoHome} className="font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90 text-left">
+              <button type="button" onClick={onGoHome} className="touch-target font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90 text-left flex items-center">
                 Landing Lens
               </button>
             ) : (
-              <Link to="/" className="font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90">Landing Lens</Link>
+              <Link to="/" className="touch-target font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90 flex items-center">Landing Lens</Link>
             )}
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -183,7 +184,7 @@ const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps)
               <button
                 type="button"
                 onClick={onBack}
-                className="px-4 py-2 text-sm rounded-md border border-white/10 text-foreground hover:bg-white/5 transition-colors shrink-0"
+                className="touch-target px-4 py-3 text-sm rounded-md border border-white/10 text-foreground hover:bg-white/5 transition-colors shrink-0"
               >
                 ← Back to try again
               </button>
@@ -192,12 +193,12 @@ const ProgressScreen = ({ jobId, url, onComplete, onBack }: ProgressScreenProps)
         </div>
       </header>
 
-      {/* Spacer so content doesn't sit under header; optional minimal center hint on mobile */}
-      <div className="flex-1 flex items-center justify-center px-4 py-8">
+      {/* Centered waiting slider while analysis runs */}
+      <div className="flex-1 flex items-center justify-center px-4 py-6 md:py-8 min-h-0">
         {!streamError && (
-          <p className="text-xs text-muted-foreground">
-            {activeStep < STEPS.length ? STEPS[activeStep].detail : "Preparing report…"}
-          </p>
+          <WaitingSlider
+            statusText={activeStep < STEPS.length ? STEPS[activeStep].detail : "Preparing report…"}
+          />
         )}
       </div>
     </div>

@@ -1,5 +1,5 @@
 import type { AnalysisResult } from "@/lib/api";
-import { getDomain } from "@/lib/utils";
+import { getDomain, parseScoreFromReport, getCompetitorOverallScore, DEFAULT_SCORE } from "@/lib/utils";
 
 const STORAGE_KEY = "ll_history";
 const MAX_ENTRIES = 10;
@@ -20,10 +20,15 @@ export function saveToHistory(url: string, result: AnalysisResult): void {
   cleanExpired();
   const domain = getDomain(url);
   const history = getHistory();
+  const score =
+    result.synthesis?.overall_score ??
+    parseScoreFromReport(result.report) ??
+    getCompetitorOverallScore(result.userAnalysis) ??
+    DEFAULT_SCORE;
   const entry: HistoryEntry = {
     id: String(result.jobId ?? Date.now()),
     domain,
-    score: result.synthesis?.overall_score,
+    score,
     analyzedAt: new Date().toISOString(),
     expiresAt: Date.now() + TTL_MS,
     result,

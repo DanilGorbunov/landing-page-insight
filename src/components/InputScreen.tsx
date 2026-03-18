@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Globe, Plus, ChevronDown, X, History } from "lucide-react";
 import { staggerContainer, staggerItem } from "@/lib/motion";
+import { isValidHttpUrl, normalizeInputUrl } from "@/lib/utils";
 
 const SAMPLE_SITES = ["apollo.io", "linear.app", "hubspot.com", "notion.so"];
 
@@ -15,23 +16,31 @@ interface InputScreenProps {
 
 const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError }: InputScreenProps) => {
   const [url, setUrl] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [showCompetitors, setShowCompetitors] = useState(false);
   const [competitors, setCompetitors] = useState<string[]>([""]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    setUrlError(null);
     if (!url.trim() || isSubmitting) return;
+    const normalized = normalizeInputUrl(url);
+    if (!normalized) return;
+    if (!isValidHttpUrl(normalized)) {
+      setUrlError("Enter a valid URL (e.g. https://example.com or example.com)");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const validCompetitors = competitors.filter((c) => c.trim());
-      await onAnalyze(url.trim(), validCompetitors);
+      await onAnalyze(normalized, validCompetitors);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const addCompetitor = () => {
-    if (competitors.length < 4) setCompetitors([...competitors, ""]);
+    if (competitors.length < 3) setCompetitors([...competitors, ""]);
   };
 
   const removeCompetitor = (i: number) => {
@@ -52,7 +61,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
           <button
             type="button"
             onClick={onOpenHistory}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+            className="touch-target inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
           >
             <History className="w-4 h-4" />
             History
@@ -65,7 +74,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
         </header>
       )}
 
-      <div className="flex-1 flex flex-col items-center justify-center px-4 pt-14">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 pt-14 pb-8 md:pb-10">
         <motion.div
           variants={staggerContainer}
           initial="hidden"
@@ -109,7 +118,10 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
             <input
               type="text"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                if (urlError) setUrlError(null);
+              }}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
               placeholder="https://yoursite.com"
               className="flex-1 bg-transparent font-mono text-sm text-foreground placeholder:text-muted-foreground outline-none h-full"
@@ -119,15 +131,15 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
               whileTap={!isSubmitting ? { scale: 0.98, y: 2 } : undefined}
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="h-full px-6 bg-primary text-primary-foreground font-semibold text-sm rounded-none transition-colors hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="h-full min-w-[100px] sm:min-w-[120px] px-4 sm:px-6 bg-primary text-primary-foreground font-semibold text-sm rounded-none transition-colors hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation"
             >
               {isSubmitting ? "Starting…" : "Analyze →"}
             </motion.button>
           </div>
         </motion.div>
 
-        {analyzeError && (
-          <p className="mt-3 text-sm text-destructive">{analyzeError}</p>
+        {(urlError || analyzeError) && (
+          <p className="mt-3 text-sm text-destructive">{urlError || analyzeError}</p>
         )}
 
         {/* Try chips — 2 on mobile, all 4 from sm */}
@@ -137,7 +149,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
             <button
               key={site}
               onClick={() => setUrl(`https://${site}`)}
-              className={`px-3 py-1 rounded-sm text-xs font-mono text-secondary-foreground glass-surface hover:border-primary/30 transition-colors ${i >= 2 ? "hidden sm:inline-flex" : ""}`}
+              className={`min-h-[40px] px-3 py-2 rounded-sm text-xs font-mono text-secondary-foreground glass-surface hover:border-primary/30 transition-colors ${i >= 2 ? "hidden sm:inline-flex" : ""}`}
             >
               {site}
             </button>
@@ -148,7 +160,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
         <motion.div variants={staggerItem} className="mt-8">
           <button
             onClick={() => setShowCompetitors(!showCompetitors)}
-            className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="touch-target inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
           >
             <Plus className="w-3.5 h-3.5" />
             Add competitor URLs manually
@@ -184,7 +196,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
                   )}
                 </div>
               ))}
-              {competitors.length < 4 && (
+              {competitors.length < 3 && (
                 <button
                   onClick={addCompetitor}
                   className="text-xs text-muted-foreground hover:text-primary transition-colors"

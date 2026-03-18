@@ -4,8 +4,9 @@ import { AlertTriangle, ArrowUpRight, Check, X, ExternalLink, ArrowLeft } from "
 import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult } from "@/lib/api";
 import { Link } from "react-router-dom";
-import { getDomain, parseScoreFromReport, getCompetitorOverallScore, analysisToBullets } from "@/lib/utils";
+import { getDomain, parseScoreFromReport, getCompetitorOverallScore, analysisToBullets, stripMarkdownFormatting, ensureScore, inferScoreFromAnalysis } from "@/lib/utils";
 import { containerVariants, itemVariants } from "@/lib/motion";
+import { CompetitiveCharts } from "@/components/CompetitiveCharts";
 
 const SECTION_TO_BACKEND: Record<string, string> = {
   Hero: "hero",
@@ -76,38 +77,46 @@ const ConfidencePill = ({ level }: { level: "High" | "Medium" | "Low" }) => {
   );
 };
 
-const criticalGaps = [
+/** Fallback gaps when no API result or empty gaps (e.g. demo/empty state) */
+const FALLBACK_CRITICAL_GAPS: Array<{
+  priority: "P1" | "P2";
+  area: string;
+  problem: string;
+  recommendation: string;
+  competitor: string;
+  confidence: "High" | "Medium" | "Low";
+}> = [
   {
-    priority: "P1" as const,
+    priority: "P1",
     area: "Hero Section",
     problem: "No clear value proposition above the fold",
     recommendation: 'Replace "Welcome to our platform" with a specific outcome statement. linear.app uses "Linear is a purpose-built tool for planning and building products."',
     competitor: "linear.app",
-    confidence: "High" as const,
+    confidence: "High",
   },
   {
-    priority: "P1" as const,
+    priority: "P1",
     area: "Social Proof",
     problem: "Missing social proof near primary CTA",
     recommendation: "Add customer logos or a testimonial directly above the sign-up button. hubspot.com shows \"Trusted by 205,000+ businesses\" with logo strip.",
     competitor: "hubspot.com",
-    confidence: "High" as const,
+    confidence: "High",
   },
   {
-    priority: "P2" as const,
+    priority: "P2",
     area: "CTA Clarity",
     problem: 'CTA button text "Get Started" is generic',
     recommendation: 'Use specific action copy like "Start free trial" or "See demo". notion.so uses "Get Notion free" which sets expectation.',
     competitor: "notion.so",
-    confidence: "Medium" as const,
+    confidence: "Medium",
   },
   {
-    priority: "P2" as const,
+    priority: "P2",
     area: "Feature Communication",
     problem: "Features listed without user benefits",
     recommendation: "Reframe each feature as an outcome. Instead of \"API Access\", use \"Integrate with your existing stack in minutes.\"",
     competitor: "linear.app",
-    confidence: "Medium" as const,
+    confidence: "Medium",
   },
 ];
 
@@ -231,7 +240,7 @@ function ratingTheme(score: number | null) {
   return {
     border: isLow ? "hsl(var(--primary))" : TEAL,
     dot: isLow ? "bg-primary" : "bg-[hsl(176,56%,55%)]",
-    badge: isLow ? "bg-primary text-primary-foreground" : "bg-[hsl(176,56%,55%)] text-[hsl(176,30%,12%)]",
+    badge: isLow ? "text-primary" : "text-[hsl(176,56%,55%)]",
   };
 }
 
@@ -256,13 +265,13 @@ function SectionCard({
 }) {
   const bullets = analysisToBullets(analysisText, 4);
   const href = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
-  const theme = ratingTheme(score);
-  const displayScore = score != null ? score.toFixed(1) : "—";
+  const resolvedScore = ensureScore(score);
+  const theme = ratingTheme(resolvedScore);
+  const displayScore = `${resolvedScore.toFixed(1)}`;
   return (
     <motion.div
       variants={variants}
       className="glass-surface rounded-lg overflow-hidden border border-white/10"
-      style={{ borderLeft: `4px solid ${theme.border}` }}
     >
       <div className="p-4">
         {/* Header: dot, domain (link) ← you, rating badge (always visible, color by score) */}
@@ -292,7 +301,7 @@ function SectionCard({
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="block w-full rounded-sm overflow-hidden border border-white/5 mb-4 bg-secondary/30 hover:opacity-90 transition-opacity"
+            className="block w-full rounded-sm overflow-hidden border border-white/5 mb-4 bg-black hover:opacity-90 transition-opacity"
           >
             <img
               src={screenshotUrl}
@@ -301,7 +310,7 @@ function SectionCard({
             />
           </a>
         ) : (
-          <div className="w-full h-28 rounded-sm bg-secondary/50 border border-white/5 mb-4 flex items-center justify-center">
+          <div className="w-full h-28 rounded-sm bg-black border border-white/5 mb-4 flex items-center justify-center">
             <span className="text-xs text-muted-foreground font-mono">[ screenshot ]</span>
           </div>
         )}
@@ -315,7 +324,7 @@ function SectionCard({
             ))
           ) : (
             <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-              {analysisText?.slice(0, 200) ?? "—"}
+              {analysisText ? stripMarkdownFormatting(analysisText).slice(0, 200) : "—"}
               {analysisText && analysisText.length > 200 ? "…" : ""}
             </p>
           )}
@@ -330,25 +339,28 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
   const [activeSection, setActiveSection] = useState<SectionTab>("Hero");
   const domain = getDomain(url);
   const apiResult = result ?? savedEntry?.result;
-  const score =
+  const score = ensureScore(
     apiResult?.synthesis?.overall_score ??
     parseScoreFromReport(apiResult?.report) ??
-    6.2;
+    (apiResult?.userAnalysis ? getCompetitorOverallScore(apiResult.userAnalysis) : null)
+  );
   const synthesisText =
     apiResult?.report ??
     "Your landing page communicates core features but lacks the persuasive elements that top competitors use.";
   const hasRealData = Boolean(apiResult?.userAnalysis || apiResult?.competitors?.length);
+  const criticalGaps =
+    hasRealData && apiResult && Array.isArray(apiResult.gaps) ? apiResult.gaps : FALLBACK_CRITICAL_GAPS;
 
   return (
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Top bar — aligned to content container start */}
       <div className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background">
-        <div className="max-w-6xl mx-auto w-full px-4 md:px-8 flex items-center">
+        <div className="max-w-6xl mx-auto w-full px-4 md:px-8 flex items-center min-w-0">
           {onBack && (
             <button
               type="button"
               onClick={onBack}
-              className="mr-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+              className="touch-target mr-2 sm:mr-4 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors flex items-center justify-center"
               aria-label="Back"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -367,15 +379,15 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
               Landing Lens
             </Link>
           )}
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1 sm:gap-2 overflow-x-auto scrollbar-hide shrink-0 min-h-[44px] py-1">
             {TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm rounded-sm transition-colors ${
+                className={`touch-target shrink-0 px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
                   activeTab === tab
-                    ? "bg-secondary text-foreground font-medium"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                 }`}
               >
                 {tab}
@@ -385,7 +397,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
               <button
                 type="button"
                 onClick={onOpenHistory}
-                className="px-4 py-2 text-sm rounded-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="touch-target shrink-0 px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
               >
                 History
               </button>
@@ -395,51 +407,149 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-4 md:px-8 py-8 max-w-6xl mx-auto w-full">
+      <div className="flex-1 px-4 md:px-8 py-6 sm:py-8 pb-10 sm:pb-8 max-w-6xl mx-auto w-full">
         {activeTab === "Overview" && (
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-10">
             {/* 1. Competitive position — minimal info, expand → Pricing */}
             <motion.div
               variants={itemVariants}
-              className="glass-surface-elevated rounded-xl p-6 border border-white/10 border-l-4 border-l-primary"
+              className="glass-surface-elevated rounded-xl p-6 border border-white/10"
             >
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                <div>
-                  <h2 className="text-sm font-semibold text-foreground mb-2">Competitive position — {domain}</h2>
-                  <div className="flex items-baseline gap-2 mb-2">
+              <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:gap-8">
+                <div className="flex-1 min-w-0 flex flex-col order-2 sm:order-1">
+                  <h2 className="text-sm font-semibold text-foreground mb-2">{domain}</h2>
+                  <div className="relative overflow-hidden max-h-[8rem] space-y-2 pr-1">
+                    {(() => {
+                      let raw = stripMarkdownFormatting(synthesisText || "");
+                      raw = raw.replace(/\s*I am analyzing\s+https?:\/\/[^\n.]*[.\n]?/gi, " ").trim();
+                      raw = raw.replace(/^[\s\S]*?Overall score:\s*[\d.]+\s*\/\s*10\s*/i, "").trim();
+                      raw = raw.replace(/^\s*#+\s*[^\n]*(\n|$)/gm, "").trim();
+                      const sentences = raw.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, 3);
+                      const paragraphs = sentences.length > 0 ? sentences : [raw.slice(0, 300) || "—"];
+                      return paragraphs.map((text, i) => (
+                        <p key={i} className="text-sm text-muted-foreground leading-relaxed">
+                          {text}
+                        </p>
+                      ));
+                    })()}
+                    <div
+                      className="absolute bottom-0 left-0 right-0 h-14 pointer-events-none bg-gradient-to-t from-secondary/95 to-transparent"
+                      aria-hidden
+                    />
+                  </div>
+                  <Link
+                    to="/pricing"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-3"
+                  >
+                    <ArrowUpRight className="w-4 h-4" />
+                    See full report and insights
+                  </Link>
+                </div>
+                <div className="shrink-0 order-1 sm:order-2">
+                  <div className="flex flex-col gap-0.5 mb-2 mt-5">
                     <span className="text-5xl font-mono font-bold text-primary tabular-nums leading-none">
                       <AnimatedScore target={score} />
                     </span>
                     <span className="text-sm font-mono text-muted-foreground tabular-nums">/10 overall</span>
                   </div>
-                  <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-destructive/15 text-destructive text-xs font-medium">
+                  <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-destructive/15 text-destructive text-xs font-medium mt-5">
                     <AlertTriangle className="w-3.5 h-3.5" />
                     Moderate position
                   </div>
                 </div>
               </div>
-              <p className="mt-4 text-sm text-muted-foreground leading-relaxed max-w-2xl">
-                {(() => {
-                  let raw = synthesisText || "";
-                  raw = raw.replace(/^[\s\S]*?Overall score:\s*[\d.]+\s*\/\s*10\s*/i, "").trim();
-                  raw = raw.replace(/^\s*#+\s*[^\n]*(\n|$)/gm, "").trim();
-                  const sentences = raw.split(/(?<=[.!?])\s+/).filter(Boolean);
-                  const short = sentences.slice(0, 2).join(" ").trim();
-                  return short || raw.slice(0, 280);
-                })()}
-              </p>
-              <div className="mt-5 pt-4 border-t border-white/5">
-                <Link
-                  to="/pricing"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                >
-                  <ArrowUpRight className="w-4 h-4" />
-                  See full report and insights
-                </Link>
+            </motion.div>
+
+            {/* 2. Section breakdown — 4 cards: 1 you + 3 competitors */}
+            <motion.div variants={itemVariants}>
+              <div className="flex gap-2 mb-6 flex-wrap">
+                {SECTION_TABS.map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveSection(tab)}
+                    className={`px-4 py-2.5 text-xs font-medium rounded-lg transition-colors ${
+                      activeSection === tab
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {hasRealData && apiResult ? (
+                  <>
+                    {/* Your site — use main report score (user's URL already has a rating) */}
+                    <SectionCard
+                      domain={domain}
+                      siteUrl={url}
+                      isUser
+                      score={score}
+                      screenshotUrl={apiResult.targetScreenshotUrl}
+                      analysisText={apiResult.userAnalysis?.[SECTION_TO_BACKEND[activeSection]]}
+                      variants={itemVariants}
+                    />
+                    {/* 3 competitors — score from X/10 in sections, or inferred from pass/fail bullets */}
+                    {(apiResult.competitors ?? []).slice(0, 3).map((comp) => (
+                      <SectionCard
+                        key={comp.url}
+                        domain={getDomain(comp.url)}
+                        siteUrl={comp.url}
+                        isUser={false}
+                        score={ensureScore(getCompetitorOverallScore(comp.analysis) ?? inferScoreFromAnalysis(comp.analysis))}
+                        screenshotUrl={comp.screenshotUrl ?? undefined}
+                        analysisText={comp.analysis?.[SECTION_TO_BACKEND[activeSection]]}
+                        variants={itemVariants}
+                      />
+                    ))}
+                  </>
+                ) : (
+                  sectionData[activeSection].sites.map((site) => (
+                    <motion.div
+                      key={site.name}
+                      variants={itemVariants}
+                      className="glass-surface rounded-md overflow-hidden"
+                    >
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${site.isTarget ? "bg-primary" : "bg-[hsl(176,56%,55%)]"}`} />
+                            <span className="font-mono text-sm text-foreground">{site.name}</span>
+                            {site.isTarget && <span className="text-[10px] text-muted-foreground">← you</span>}
+                          </div>
+                          <span className="font-mono text-sm font-bold tabular-nums px-2 py-0.5 rounded-sm bg-secondary" style={{ letterSpacing: 0 }}>{site.score.toFixed(1)}/10</span>
+                        </div>
+                        <div className="w-full h-32 rounded-sm bg-black border border-white/5 mb-4 flex items-center justify-center">
+                          <span className="text-xs text-muted-foreground font-mono">[ screenshot ]</span>
+                        </div>
+                        <div className="space-y-2">
+                          {site.insights.map((insight, j) => (
+                            <div key={j} className="flex items-start gap-2">
+                              {insight.pass ? <Check className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" /> : <X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />}
+                              <span className="text-xs text-muted-foreground leading-relaxed">{insight.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
               </div>
             </motion.div>
 
-            {/* 2. Critical Gaps */}
+            {/* Competitive radar + bar charts — above Critical Gaps */}
+            {hasRealData && apiResult && (
+              <motion.div variants={itemVariants} className="flex justify-center">
+                <CompetitiveCharts
+                  userUrl={url}
+                  userAnalysis={apiResult.userAnalysis}
+                  competitors={apiResult.competitors ?? undefined}
+                />
+              </motion.div>
+            )}
+
+            {/* 3. Critical Gaps */}
             <motion.div variants={itemVariants}>
               <h2 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
                 Critical Gaps
@@ -461,97 +571,24 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                     </div>
                     <p className="text-sm font-medium text-foreground mb-2">{gap.problem}</p>
                     <p className="text-xs text-muted-foreground leading-relaxed mb-3">{gap.recommendation}</p>
-                    <a
-                      href="#"
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
-                    >
-                      <ArrowUpRight className="w-3 h-3" />
-                      {gap.competitor} does it better
-                    </a>
+                    {gap.competitor ? (
+                      <a
+                        href={/^https?:\/\//i.test(gap.competitor) ? gap.competitor : `https://${gap.competitor}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:underline"
+                      >
+                        <ArrowUpRight className="w-3 h-3" />
+                        {gap.competitor} does it better
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                        <ArrowUpRight className="w-3 h-3" />
+                        See competitor for reference
+                      </span>
+                    )}
                   </motion.div>
                 ))}
-              </div>
-            </motion.div>
-
-            {/* 3. Section breakdown — 4 cards: 1 you + 3 competitors, same style as reference */}
-            <motion.div variants={itemVariants}>
-              <h2 className="text-sm font-semibold text-foreground mb-4">Section breakdown</h2>
-              <div className="flex gap-1 mb-6 flex-wrap">
-                {SECTION_TABS.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveSection(tab)}
-                    className={`px-4 py-2 text-xs rounded-sm transition-colors ${
-                      activeSection === tab
-                        ? "bg-primary text-primary-foreground font-semibold"
-                        : "glass-surface text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {hasRealData && apiResult ? (
-                  <>
-                    {/* Your site */}
-                    <SectionCard
-                      domain={domain}
-                      siteUrl={url}
-                      isUser
-                      score={getCompetitorOverallScore(apiResult.userAnalysis)}
-                      screenshotUrl={apiResult.targetScreenshotUrl}
-                      analysisText={apiResult.userAnalysis?.[SECTION_TO_BACKEND[activeSection]]}
-                      variants={itemVariants}
-                    />
-                    {/* 3 competitors */}
-                    {(apiResult.competitors ?? []).slice(0, 3).map((comp) => (
-                      <SectionCard
-                        key={comp.url}
-                        domain={getDomain(comp.url)}
-                        siteUrl={comp.url}
-                        isUser={false}
-                        score={getCompetitorOverallScore(comp.analysis)}
-                        screenshotUrl={comp.screenshotUrl ?? undefined}
-                        analysisText={comp.analysis?.[SECTION_TO_BACKEND[activeSection]]}
-                        variants={itemVariants}
-                      />
-                    ))}
-                  </>
-                ) : (
-                  sectionData[activeSection].sites.map((site) => (
-                    <motion.div
-                      key={site.name}
-                      variants={itemVariants}
-                      className="glass-surface rounded-md overflow-hidden"
-                      style={{
-                        borderLeft: `3px solid ${site.isTarget ? "hsl(var(--primary))" : "hsl(176 56% 55%)"}`,
-                      }}
-                    >
-                      <div className="p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${site.isTarget ? "bg-primary" : "bg-[hsl(176,56%,55%)]"}`} />
-                            <span className="font-mono text-sm text-foreground">{site.name}</span>
-                            {site.isTarget && <span className="text-[10px] text-muted-foreground">← you</span>}
-                          </div>
-                          <span className="font-mono text-sm font-bold tabular-nums px-2 py-0.5 rounded-sm bg-secondary" style={{ letterSpacing: 0 }}>{site.score.toFixed(1)}/10</span>
-                        </div>
-                        <div className="w-full h-32 rounded-sm bg-secondary/50 border border-white/5 mb-4 flex items-center justify-center">
-                          <span className="text-xs text-muted-foreground font-mono">[ screenshot ]</span>
-                        </div>
-                        <div className="space-y-2">
-                          {site.insights.map((insight, j) => (
-                            <div key={j} className="flex items-start gap-2">
-                              {insight.pass ? <Check className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" /> : <X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />}
-                              <span className="text-xs text-muted-foreground leading-relaxed">{insight.text}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
               </div>
               <div className="mt-6 flex justify-center">
                 <Link
@@ -567,15 +604,15 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
 
         {activeTab === "Sections" && (
           <motion.div variants={containerVariants} initial="hidden" animate="visible">
-            <motion.div variants={itemVariants} className="flex gap-1 mb-6 flex-wrap">
+            <motion.div variants={itemVariants} className="flex gap-2 mb-6 flex-wrap">
               {SECTION_TABS.map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveSection(tab)}
-                  className={`px-4 py-2 text-xs rounded-sm transition-colors ${
+                  className={`px-4 py-2.5 text-xs font-medium rounded-lg transition-colors ${
                     activeSection === tab
-                      ? "bg-primary text-primary-foreground font-semibold"
-                      : "glass-surface text-muted-foreground hover:text-foreground"
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-white/5"
                   }`}
                 >
                   {tab}
@@ -589,7 +626,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                   {/* Target site */}
                   <motion.div
                     variants={itemVariants}
-                    className="glass-surface rounded-md overflow-hidden border-l-2 border-primary"
+                    className="glass-surface rounded-md overflow-hidden"
                   >
                     <div className="p-4">
                       <div className="flex items-center justify-between mb-3">
@@ -601,18 +638,20 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                         </div>
                       </div>
                       {apiResult.targetScreenshotUrl ? (
-                        <img
-                          src={apiResult.targetScreenshotUrl}
-                          alt={`Screenshot of ${domain}`}
-                          className="w-full h-40 rounded-sm object-cover object-top border border-white/5 mb-4"
-                        />
+                        <div className="w-full h-40 rounded-sm overflow-hidden bg-black border border-white/5 mb-4">
+                          <img
+                            src={apiResult.targetScreenshotUrl}
+                            alt={`Screenshot of ${domain}`}
+                            className="w-full h-full object-cover object-top"
+                          />
+                        </div>
                       ) : (
-                        <div className="w-full h-40 rounded-sm bg-secondary/50 border border-white/5 mb-4 flex items-center justify-center">
+                        <div className="w-full h-40 rounded-sm bg-black border border-white/5 mb-4 flex items-center justify-center">
                           <span className="text-xs text-muted-foreground font-mono">Screenshot unavailable</span>
                         </div>
                       )}
                       <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                        {apiResult.userAnalysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—"}
+                        {stripMarkdownFormatting(apiResult.userAnalysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—")}
                       </p>
                     </div>
                   </motion.div>
@@ -623,25 +662,27 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                       <motion.div
                         key={comp.url}
                         variants={itemVariants}
-                        className="glass-surface rounded-md overflow-hidden border-l-2 border-primary/50"
+                        className="glass-surface rounded-md overflow-hidden"
                       >
                         <div className="p-4">
                           <div className="flex items-center justify-between mb-3">
                             <span className="font-mono text-sm text-foreground">{compDomain}</span>
                           </div>
                           {comp.screenshotUrl ? (
-                            <img
-                              src={comp.screenshotUrl}
-                              alt={`Screenshot of ${compDomain}`}
-                              className="w-full h-40 rounded-sm object-cover object-top border border-white/5 mb-4"
-                            />
+                            <div className="w-full h-40 rounded-sm overflow-hidden bg-black border border-white/5 mb-4">
+                              <img
+                                src={comp.screenshotUrl}
+                                alt={`Screenshot of ${compDomain}`}
+                                className="w-full h-full object-cover object-top"
+                              />
+                            </div>
                           ) : (
-                            <div className="w-full h-40 rounded-sm bg-secondary/50 border border-white/5 mb-4 flex items-center justify-center">
+                            <div className="w-full h-40 rounded-sm bg-black border border-white/5 mb-4 flex items-center justify-center">
                               <span className="text-xs text-muted-foreground font-mono">Screenshot unavailable</span>
                             </div>
                           )}
                           <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                            {comp.analysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—"}
+                            {stripMarkdownFormatting(comp.analysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—")}
                           </p>
                         </div>
                       </motion.div>
@@ -675,7 +716,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                           {site.score.toFixed(1)}
                         </span>
                       </div>
-                      <div className="w-full h-32 rounded-sm bg-secondary/50 border-thin mb-4 flex items-center justify-center">
+                      <div className="w-full h-32 rounded-sm bg-black border-thin border-white/5 mb-4 flex items-center justify-center">
                         <span className="text-xs text-muted-foreground font-mono">Screenshot: {site.name}</span>
                       </div>
                       <div className="space-y-2">
@@ -714,7 +755,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
               {hasRealData && apiResult?.competitors ? (
                 apiResult.competitors.map((comp, i) => {
                   const compDomain = getDomain(comp.url);
-                  const overallScore = getCompetitorOverallScore(comp.analysis);
+                  const overallScore = ensureScore(getCompetitorOverallScore(comp.analysis) ?? inferScoreFromAnalysis(comp.analysis));
                   return (
                     <motion.div
                       key={comp.url}
@@ -735,25 +776,23 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                           </a>
                         </div>
                         {comp.screenshotUrl ? (
-                          <img
-                            src={comp.screenshotUrl}
-                            alt={`Screenshot of ${compDomain}`}
-                            className="w-full h-24 rounded-sm object-cover object-top mb-3 border border-white/5"
-                          />
+                          <div className="w-full h-24 rounded-sm overflow-hidden bg-black mb-3 border border-white/5">
+                            <img
+                              src={comp.screenshotUrl}
+                              alt={`Screenshot of ${compDomain}`}
+                              className="w-full h-full object-cover object-top"
+                            />
+                          </div>
                         ) : (
-                          <div className="w-full h-24 rounded-sm bg-secondary/50 border border-white/5 mb-3 flex items-center justify-center">
+                          <div className="w-full h-24 rounded-sm bg-black border border-white/5 mb-3 flex items-center justify-center">
                             <span className="text-[10px] text-muted-foreground font-mono">No screenshot</span>
                           </div>
                         )}
                         <p className="font-mono text-sm text-foreground mb-1">{compDomain}</p>
-                        {overallScore != null ? (
-                          <p className="font-mono text-lg font-bold text-success tabular-nums" style={{ letterSpacing: 0 }}>
-                            {overallScore.toFixed(1)}
-                            <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/10 overall</span>
-                          </p>
-                        ) : (
-                          <p className="text-[10px] text-muted-foreground font-mono">Analyzing...</p>
-                        )}
+                        <p className="font-mono text-lg font-bold text-success tabular-nums" style={{ letterSpacing: 0 }}>
+                          {overallScore.toFixed(1)}
+                          <span className="text-[10px] font-normal text-muted-foreground ml-0.5">/10 overall</span>
+                        </p>
                       </div>
                     </motion.div>
                   );
@@ -787,7 +826,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
 
             <motion.div
               variants={itemVariants}
-              className="mt-4 glass-surface rounded-md p-4 border-l-2 border-primary"
+              className="mt-4 glass-surface rounded-md p-4"
             >
               <div className="flex items-center gap-3">
                 <span className="text-xs text-primary font-semibold">

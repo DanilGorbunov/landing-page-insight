@@ -19,19 +19,28 @@ const Index = () => {
   /** When user opened History from Report, back should return to Report; otherwise to Input */
   const [screenBeforeDashboard, setScreenBeforeDashboard] = useState<"input" | "report">("input");
 
-  const handleAnalyze = useCallback(async (inputUrl: string, _competitors: string[]) => {
+  const normalizeUrl = useCallback((raw: string) => {
+    const u = raw.trim();
+    if (!u) return u;
+    if (/^https?:\/\//i.test(u)) return u;
+    return `https://${u}`;
+  }, []);
+
+  const handleAnalyze = useCallback(async (inputUrl: string, competitorUrls: string[]) => {
     setAnalyzeError(null);
     setSavedEntryForReport(null);
     setLastResult(null);
+    const urlToUse = normalizeUrl(inputUrl);
+    if (!urlToUse) return;
     try {
-      const { jobId: id } = await startAnalysis(inputUrl);
+      const { jobId: id } = await startAnalysis(urlToUse, competitorUrls);
       setJobId(id);
-      setUrl(inputUrl);
+      setUrl(urlToUse);
       setScreen("progress");
     } catch (e) {
       setAnalyzeError(e instanceof Error ? e.message : "Failed to start analysis");
     }
-  }, []);
+  }, [normalizeUrl]);
 
   const handleComplete = useCallback((result: AnalysisResult | null) => {
     const urlToSave = url || "";

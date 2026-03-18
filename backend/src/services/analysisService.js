@@ -151,10 +151,97 @@ export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
   }
 
   const sectionList = SECTIONS.map((s) => `"${s}"`).join(", ");
+  const siteTypeAndRubric = `
+Before scoring, classify the site type from the screenshot and URL:
+
+SITE_TYPE (choose one):
+- "saas"        → subscription software product (e.g. linear.app, notion.so, hubspot.com)
+- "ecommerce"  → physical/digital product store (e.g. apple.com, samsung.com)
+- "utility"    → tool or search engine (e.g. google.com, figma.com)
+- "marketplace" → platform connecting buyers/sellers
+
+Then apply the correct scoring criteria:
+
+IF saas:
+  Evaluate: value proposition clarity, benefit messaging, social proof, CTA specificity, pain point addressing.
+
+IF ecommerce:
+  Evaluate: product clarity, visual impact, purchase intent, price/value communication, trust signals.
+  Ignore: "missing value prop" or "no social proof" if product imagery and brand recognition compensate.
+
+IF utility:
+  Evaluate: task clarity, speed to action, simplicity.
+  Ignore: hero messaging, benefit statements, CTAs.
+
+IF marketplace:
+  Evaluate: clarity of value for both sides, trust, discovery, CTAs.
+
+Score adjustment rules:
+- Never penalize a site for not being a SaaS if it is not a SaaS
+
+SCORING CALIBRATION — treat these as ground truth anchors.
+When scoring any site, find the closest anchor and justify deviation.
+
+── SAAS anchors ──
+linear.app    hero = 9/10  (specific outcome headline, product screenshot, zero ambiguity about what it does)
+apollo.io     hero = 8/10  (clear "find leads" value prop, social proof visible, strong CTA)
+notion.so     hero = 7/10  (creative concept but abstract for new visitors, no immediate product clarity)
+hubspot.com   hero = 7/10  (dual CTA smart, but headline generic)
+anthropic.com hero = 6/10  (strong brand but no conversion focus, research-first not product-first)
+
+── ECOMMERCE anchors ──
+apple.com     hero = 8/10  (instant product clarity, clean hierarchy, brand recognition = social proof)
+lg.com       hero = 6/10  (discount visible + CTA, but layout cluttered)
+samsung.com  hero = 5/10  (strong imagery undermined by cookie banner blocking hero content)
+
+── UTILITY anchors ──
+google.com    hero = 9/10  (single action, zero friction, globally understood)
+figma.com     hero = 8/10  (clear "design tool" + CTA above fold)
+
+── Generic bad examples ──
+generic saas  hero = 3/10  ("Welcome to our platform", stock photo, generic "Get Started" CTA)
+broken site   hero = 1/10  (no headline, no CTA, no product visible)
+
+CALIBRATION RULES:
+- Before scoring, find the closest anchor for this site type
+- State which anchor you used: "[closest anchor: apple.com = 8]"
+- To score LOWER than anchor: must cite specific missing element
+- To score HIGHER than anchor: must cite specific exceptional element
+- Never deviate more than 1.5 points from closest anchor without two pieces of explicit evidence
+- Never apply saas anchors to ecommerce sites and vice versa
+
+DEVIATION examples:
+✅ "Scores 7 not 8 like apple.com because cookie banner blocks 40% of hero on first load"
+✅ "Scores 9 not 8 like apollo.io because headline includes specific metric: '275M contacts'"
+❌ "Scores 4 because could be more specific" ← not enough evidence for 4-point deviation from anchor
+
+Always state SITE_TYPE at the start of each section analysis: "[SITE_TYPE: <type>] ..."
+For hero (and other sections when applicable), state: "[closest anchor: <domain> = <score>]"
+
+When scoring each section, use ABSOLUTE criteria — not relative to competitors.
+Scoring rubric (apply to every section independently):
+
+1-2  = Broken or missing entirely (no headline, no CTA, no content visible)
+3-4  = Present but significantly underperforms (vague headline, no value prop, generic stock photo)
+5-6  = Average — meets basic standards (clear headline, some value prop, functional CTA)
+7-8  = Good — above average execution (specific value prop, strong visual hierarchy, clear CTA with context)
+9-10 = Exceptional — industry-leading (immediately memorable, specific outcomes, strong social proof, every element earns its place)
+
+Rules:
+- Score each section independently based on its own merit
+- Do NOT lower a score because competitors are also strong; do NOT raise because competitors are weak
+- A score below 4 requires explicit evidence of what is broken
+- A score above 8 requires explicit evidence of what makes it exceptional
+- Never include metrics, quotes, or gaps from a previous analysis
+- Every gap must reference specific text or elements visible in the CURRENT screenshot only
+`.trim();
+
   const textParts = [
     `Analyze this landing page for the following sections: ${sectionList}.`,
     "For each section: what works, what to improve, with evidence.",
-    "Reply in markdown with exactly these headers and analysis under each:",
+    "Give each section a score out of 10 (e.g. 7/10) and justify it.",
+    siteTypeAndRubric,
+    "Reply in markdown with exactly these headers and analysis (including score and [SITE_TYPE: ...]) under each:",
     SECTIONS.map((s) => `## ${s}`).join("\n"),
   ];
   if (!isUserSite) {

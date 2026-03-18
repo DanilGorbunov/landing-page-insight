@@ -1,6 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Check } from "lucide-react";
 
+const TOUCH_TARGET = "min-h-[44px] min-w-[44px] inline-flex items-center justify-center";
+
 const PLANS = [
   {
     id: "one-time",
@@ -40,17 +42,17 @@ const Pricing = () => {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className={`${TOUCH_TARGET} gap-2 px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors`}
         >
           <ArrowLeft className="w-4 h-4" />
           Back
         </button>
-        <Link to="/" className="font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90">Landing Lens</Link>
+        <Link to="/" className={`${TOUCH_TARGET} font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90`}>Landing Lens</Link>
         <div className="w-16" />
       </div>
     </header>
 
-    <main className="flex-1 px-4 py-12 max-w-5xl mx-auto w-full">
+    <main className="flex-1 px-4 py-8 sm:py-12 pb-12 max-w-5xl mx-auto w-full">
       <div className="text-center mb-12">
         <h1 className="text-2xl md:text-3xl font-semibold text-foreground mb-2">Plans & pricing</h1>
         <p className="text-muted-foreground text-sm max-w-md mx-auto">
@@ -87,7 +89,7 @@ const Pricing = () => {
             </ul>
             <button
               type="button"
-              className="mt-6 w-full py-2.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors"
+              className="mt-6 w-full min-h-[44px] py-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors touch-manipulation"
             >
               Get started
             </button>

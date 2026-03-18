@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Trash2, FileText } from "lucide-react";
 import { getHistory, clearHistory, type HistoryEntry } from "@/lib/analysisHistory";
+import { DEFAULT_SCORE } from "@/lib/utils";
 
 const FAVICON = (domain: string) =>
   `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
@@ -60,7 +61,7 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
           <button
             type="button"
             onClick={onBack}
-            className="mr-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+            className="touch-target mr-2 sm:mr-4 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors flex items-center justify-center"
             aria-label="Back"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -72,17 +73,17 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
           >
             Landing Lens
           </button>
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-2">
             <button
               type="button"
               onClick={onBack}
-              className="px-4 py-2 text-sm rounded-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="touch-target px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
             >
               Overview
             </button>
             <button
               type="button"
-              className="px-4 py-2 text-sm rounded-sm bg-secondary text-foreground font-medium"
+              className="touch-target px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg bg-secondary text-foreground"
               aria-current="page"
             >
               History
@@ -91,7 +92,7 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
         </div>
       </header>
 
-      <main className="flex-1 px-4 md:px-8 py-8 max-w-6xl mx-auto w-full">
+      <main className="flex-1 px-4 md:px-8 py-6 sm:py-8 pb-10 sm:pb-8 max-w-6xl mx-auto w-full">
         {entries.length === 0 ? (
           <div
             className="rounded-lg border border-white/5 p-12 text-center"
@@ -130,9 +131,9 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
                       {entry.domain}
                     </span>
                     <span
-                      className={`shrink-0 px-2 py-0.5 rounded text-xs font-semibold ${scoreColor(entry.score)}`}
+                      className={`shrink-0 px-2 py-0.5 rounded text-xs font-semibold ${scoreColor(entry.score ?? DEFAULT_SCORE)}`}
                     >
-                      {entry.score != null ? `${entry.score}/10` : "—"}
+                      {(entry.score ?? DEFAULT_SCORE).toFixed(1)}/10
                     </span>
                     <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">
                       {formatTime(entry.analyzedAt)}
@@ -148,7 +149,7 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
                         e.stopPropagation();
                         onViewReport(entry);
                       }}
-                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
+                      className="touch-target shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
                     >
                       <FileText className="w-3.5 h-3.5" />
                       View report

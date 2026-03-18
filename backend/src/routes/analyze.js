@@ -7,7 +7,36 @@ import { analyzeLandingSections } from "../services/analysisService.js";
 import { synthesizeReport } from "../services/synthesisService.js";
 
 export const analyzeRouter = Router();
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours — reuse result for same URL
+/** Cache key = md5(url + date) so different sites never share cached result. Gaps live only inside synthesis report. */
+/** @type {Map<string, { result: object, cachedAt: number }>} */
 const resultCache = new Map();
+
+function getCacheKey(url) {
+  const dateStr = new Date().toISOString().slice(0, 10);
+  return crypto.createHash("md5").update(String(url || "").trim() + dateStr).digest("hex");
+}
+
+function getDomain(url) {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return url.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "").toLowerCase();
+  }
+}
+
+function normalizeCompetitorUrl(raw) {
+  const u = (raw && String(raw).trim()) || "";
+  if (!u) return "";
+  try {
+    const parsed = new URL(u.startsWith("http") ? u : `https://${u}`);
+    return parsed.origin + parsed.pathname.replace(/\/+$/, "") || parsed.origin;
+  } catch {
+    return u;
+  }
+}
 
 function pushProgress(jobId, entry) {
   const job = jobStore.getJob(jobId);
@@ -18,7 +47,7 @@ function pushProgress(jobId, entry) {
 
 /**
  * Run full analysis pipeline in background. Updates job via jobStore (progress, result, error).
- * Used so POST can return immediately and client polls GET /job/:id — avoids 60s stream timeout.
+ * If domain was analyzed in the last 24h, returns cached result (no tokens, no rerun).
  */
 async function runPipeline(jobId) {
   const job = jobStore.getJob(jobId);
@@ -27,27 +56,41 @@ async function runPipeline(jobId) {
     return;
   }
   const userUrl = job.url;
-  jobStore.updateJob(jobId, { status: "running" });
-  pushProgress(jobId, { step: "started", message: "Starting analysis" });
-
-  const dateStr = new Date().toISOString().slice(0, 10);
-  const cacheKey = crypto.createHash("md5").update(userUrl + dateStr).digest("hex");
-  if (resultCache.has(cacheKey)) {
+  const cacheKey = getCacheKey(userUrl);
+  const cached = resultCache.get(cacheKey);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    jobStore.updateJob(jobId, { status: "running" });
+    pushProgress(jobId, { step: "started", message: "Using cached result (analyzed in last 24h)" });
     pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
     pushProgress(jobId, { step: "competitors", competitors: [] });
     pushProgress(jobId, { step: "screenshot", message: "Screenshots captured" });
     pushProgress(jobId, { step: "analyzing", message: "Analyzing with Claude Vision..." });
     pushProgress(jobId, { step: "synthesis", message: "Writing report..." });
-    jobStore.updateJob(jobId, { status: "completed", result: resultCache.get(cacheKey) });
+    jobStore.updateJob(jobId, { status: "completed", result: cached.result });
     return;
   }
 
-  try {
-    pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
-    const competitors = await findCompetitors(userUrl);
-    pushProgress(jobId, { step: "competitors", competitors: competitors.map((c) => c.url) });
+  jobStore.updateJob(jobId, { status: "running" });
+  pushProgress(jobId, { step: "started", message: "Starting analysis" });
 
-    const toScrape = [{ url: userUrl, isUser: true }, ...competitors.slice(0, 3).map((c) => ({ url: c.url, isUser: false }))];
+  try {
+    const manualUrls = (job.competitors || [])
+      .map(normalizeCompetitorUrl)
+      .filter(Boolean)
+      .slice(0, 3);
+    pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
+    const autoDiscovered = await findCompetitors(userUrl);
+    const userDomain = getDomain(userUrl);
+    const combined = [...manualUrls];
+    for (const c of autoDiscovered) {
+      if (combined.length >= 3) break;
+      const u = c.url;
+      const d = getDomain(u);
+      if (d && d !== userDomain && !combined.some((x) => getDomain(x) === d)) combined.push(u);
+    }
+    pushProgress(jobId, { step: "competitors", competitors: combined });
+
+    const toScrape = [{ url: userUrl, isUser: true }, ...combined.map((url) => ({ url, isUser: false }))];
     pushProgress(jobId, { step: "screenshot", message: "Capturing screenshots..." });
     const scrapeResults = await Promise.all(
       toScrape.map(async (item) => {
@@ -99,24 +142,27 @@ async function runPipeline(jobId) {
     }));
 
     pushProgress(jobId, { step: "synthesis", message: "Writing report..." });
-    const report = await synthesizeReport({ userUrl, userAnalysis, competitors: competitorAnalyses });
+    const { report, overall_score: overallScore, gaps: synthesisGaps } = await synthesizeReport({
+      userUrl,
+      userAnalysis,
+      competitors: competitorAnalyses,
+    });
 
     const targetScreenshotUrl = userScrape?.screenshot || null;
     const competitorsWithScreenshots = competitorAnalyses.map((c) => {
       const scraped = scrapeResults.find((r) => r.url === c.url);
       return { ...c, screenshotUrl: scraped?.screenshot || null };
     });
-    let overallScore;
-    const scoreMatch = report.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
-    if (scoreMatch) overallScore = parseFloat(scoreMatch[1], 10);
+    // Gaps are part of the full result object — always from current synthesis, never stored/read separately
     const result = {
       report,
       userAnalysis,
       competitors: competitorsWithScreenshots,
       targetScreenshotUrl,
       synthesis: overallScore != null ? { overall_score: overallScore } : undefined,
+      gaps: Array.isArray(synthesisGaps) ? synthesisGaps : [],
     };
-    resultCache.set(cacheKey, result);
+    resultCache.set(cacheKey, { result, cachedAt: Date.now() });
     jobStore.updateJob(jobId, { status: "completed", result });
   } catch (err) {
     console.error("[analyze] Error:", err.message || err);
@@ -146,7 +192,12 @@ analyzeRouter.post("/analyze", (req, res) => {
   if (!isValidHttpUrl(url)) {
     return res.status(400).json({ error: "Invalid url: must be http or https" });
   }
-  const job = jobStore.createJob({ url });
+  const rawCompetitors = Array.isArray(req.body?.competitors) ? req.body.competitors : [];
+  const competitors = rawCompetitors
+    .map(normalizeCompetitorUrl)
+    .filter((u) => u && isValidHttpUrl(u))
+    .slice(0, 3);
+  const job = jobStore.createJob({ url, competitors });
   runPipeline(job.id).catch((e) => console.error("[analyze] runPipeline error:", e));
   res.json({ jobId: job.id });
 });
