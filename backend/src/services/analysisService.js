@@ -1,9 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 
-// Use same Sonnet as synthesisService (was working); 4-5-20251022 returned 404
+// Both use Sonnet until Haiku model ID is confirmed in your Anthropic account (Haiku had 404)
 const MODEL_SONNET = "claude-sonnet-4-20250514";
-const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+const MODEL_HAIKU = "claude-sonnet-4-20250514"; // was claude-haiku-4-5-20251001; use Sonnet for all to avoid 404
 const MAX_IMAGE_WIDTH = 1200;
 const JPEG_QUALITY = 82;
 const MARKDOWN_MAX_CHARS = 4000;
