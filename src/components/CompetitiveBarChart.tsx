@@ -8,7 +8,10 @@ import { getDomain } from "@/lib/utils";
 const SECTION_LABELS = ["Hero", "Value Prop", "Features", "Social Proof", "CTA"] as const;
 const RADAR_KEYS = ["hero", "value_prop", "features", "social_proof", "cta"] as const;
 
-const USER_COLOR = "#00FF88";
+function getPrimaryHex(): string {
+  if (typeof document === "undefined") return "#2ed67a";
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#2ed67a";
+}
 const COMPETITOR_COLORS = ["#4B9EFF", "#FF6B6B", "#FFB347"];
 
 interface CompetitiveBarChartProps {
@@ -24,7 +27,7 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites }: Competitive
         if (hidden.has(index)) return null;
         const isUser = site.isUserSite;
         const color = isUser
-          ? USER_COLOR
+          ? getPrimaryHex()
           : COMPETITOR_COLORS[(index - (sites[0]?.isUserSite ? 1 : 0)) % COMPETITOR_COLORS.length];
         return {
           label: getDomain(site.url) + (isUser ? " ← you" : ""),

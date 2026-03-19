@@ -232,15 +232,14 @@ const sectionData: Record<SectionTab, { sites: { name: string; score: number; is
 };
 
 const RATING_LOW_THRESHOLD = 7;
-const TEAL = "hsl(176 56% 45%)";
 
 function ratingTheme(score: number | null) {
   const value = score ?? 0;
   const isLow = value < RATING_LOW_THRESHOLD;
   return {
-    border: isLow ? "hsl(var(--primary))" : TEAL,
-    dot: isLow ? "bg-primary" : "bg-[hsl(176,56%,55%)]",
-    badge: isLow ? "text-primary" : "text-[hsl(176,56%,55%)]",
+    border: isLow ? "hsl(var(--primary))" : "hsl(var(--chart-competitor))",
+    dot: isLow ? "bg-primary" : "bg-[hsl(var(--chart-competitor))]",
+    badge: isLow ? "text-primary" : "text-[hsl(var(--chart-competitor))]",
   };
 }
 
@@ -301,7 +300,7 @@ function SectionCard({
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="block w-full rounded-sm overflow-hidden border border-white/5 mb-4 bg-black hover:opacity-90 transition-opacity"
+            className="block w-full rounded-sm overflow-hidden border border-border mb-4 bg-card hover:opacity-90 transition-opacity focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <img
               src={screenshotUrl}
@@ -310,7 +309,7 @@ function SectionCard({
             />
           </a>
         ) : (
-          <div className="w-full h-28 rounded-sm bg-black border border-white/5 mb-4 flex items-center justify-center">
+          <div className="w-full h-28 rounded-sm bg-card border border-border mb-4 flex items-center justify-center" role="img" aria-label="Screenshot not available">
             <span className="text-xs text-muted-foreground font-mono">[ screenshot ]</span>
           </div>
         )}
@@ -420,7 +419,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
       </div>
 
       {/* Content */}
-      <div className="flex-1 px-4 md:px-8 py-6 sm:py-8 pb-10 sm:pb-8 max-w-6xl mx-auto w-full">
+      <main id="main" className="flex-1 px-4 md:px-8 py-6 sm:py-8 pb-10 sm:pb-8 max-w-6xl mx-auto w-full">
         {activeTab === "Overview" && (
           <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-10">
             {/* 1. Competitive position — minimal info, expand → Pricing */}
@@ -453,9 +452,10 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                   <button
                     type="button"
                     onClick={handleSeeFullReport}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-3 text-left"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded"
+                    aria-label="See full report and insights"
                   >
-                    <ArrowUpRight className="w-4 h-4" />
+                    <ArrowUpRight className="w-4 h-4" aria-hidden />
                     See full report and insights
                   </button>
                 </div>
@@ -466,8 +466,8 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                     </span>
                     <span className="text-sm font-mono text-muted-foreground tabular-nums">/10 overall</span>
                   </div>
-                  <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-destructive/15 text-destructive text-xs font-medium mt-5">
-                    <AlertTriangle className="w-3.5 h-3.5" />
+                  <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-destructive/15 text-destructive text-xs font-medium mt-5" role="status" aria-label="Competitive position: moderate">
+                    <AlertTriangle className="w-3.5 h-3.5" aria-hidden />
                     Moderate position
                   </div>
                 </div>
@@ -528,13 +528,13 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                       <div className="p-4">
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${site.isTarget ? "bg-primary" : "bg-[hsl(176,56%,55%)]"}`} />
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${site.isTarget ? "bg-primary" : "bg-[hsl(var(--chart-competitor))]"}`} />
                             <span className="font-mono text-sm text-foreground">{site.name}</span>
                             {site.isTarget && <span className="text-[10px] text-muted-foreground">← you</span>}
                           </div>
                           <span className="font-mono text-sm font-bold tabular-nums px-2 py-0.5 rounded-sm bg-secondary" style={{ letterSpacing: 0 }}>{site.score.toFixed(1)}/10</span>
                         </div>
-                        <div className="w-full h-32 rounded-sm bg-black border border-white/5 mb-4 flex items-center justify-center">
+                        <div className="w-full h-32 rounded-sm bg-card border border-border mb-4 flex items-center justify-center">
                           <span className="text-xs text-muted-foreground font-mono">[ screenshot ]</span>
                         </div>
                         <div className="space-y-2">
@@ -653,7 +653,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                         </div>
                       </div>
                       {apiResult.targetScreenshotUrl ? (
-                        <div className="w-full h-40 rounded-sm overflow-hidden bg-black border border-white/5 mb-4">
+                        <div className="w-full h-40 rounded-sm overflow-hidden bg-card border border-border mb-4">
                           <img
                             src={apiResult.targetScreenshotUrl}
                             alt={`Screenshot of ${domain}`}
@@ -661,7 +661,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                           />
                         </div>
                       ) : (
-                        <div className="w-full h-40 rounded-sm bg-black border border-white/5 mb-4 flex items-center justify-center">
+                        <div className="w-full h-40 rounded-sm bg-card border border-border mb-4 flex items-center justify-center">
                           <span className="text-xs text-muted-foreground font-mono">Screenshot unavailable</span>
                         </div>
                       )}
@@ -684,7 +684,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                             <span className="font-mono text-sm text-foreground">{compDomain}</span>
                           </div>
                           {comp.screenshotUrl ? (
-                            <div className="w-full h-40 rounded-sm overflow-hidden bg-black border border-white/5 mb-4">
+                            <div className="w-full h-40 rounded-sm overflow-hidden bg-card border border-border mb-4">
                               <img
                                 src={comp.screenshotUrl}
                                 alt={`Screenshot of ${compDomain}`}
@@ -692,7 +692,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                               />
                             </div>
                           ) : (
-                            <div className="w-full h-40 rounded-sm bg-black border border-white/5 mb-4 flex items-center justify-center">
+                            <div className="w-full h-40 rounded-sm bg-card border border-border mb-4 flex items-center justify-center">
                               <span className="text-xs text-muted-foreground font-mono">Screenshot unavailable</span>
                             </div>
                           )}
@@ -711,7 +711,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                     variants={itemVariants}
                     className="glass-surface rounded-md overflow-hidden"
                     style={{
-                      borderTop: `2px solid ${site.isTarget ? "hsl(var(--primary))" : "hsl(176 56% 55%)"}`,
+                      borderTop: `2px solid ${site.isTarget ? "hsl(var(--primary))" : "hsl(var(--chart-competitor))"}`,
                     }}
                   >
                     <div className="p-4">
@@ -731,7 +731,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                           {site.score.toFixed(1)}
                         </span>
                       </div>
-                      <div className="w-full h-32 rounded-sm bg-black border-thin border-white/5 mb-4 flex items-center justify-center">
+                      <div className="w-full h-32 rounded-sm bg-card border-thin border-border mb-4 flex items-center justify-center">
                         <span className="text-xs text-muted-foreground font-mono">Screenshot: {site.name}</span>
                       </div>
                       <div className="space-y-2">
@@ -776,7 +776,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                       key={comp.url}
                       variants={itemVariants}
                       className="glass-surface rounded-md overflow-hidden"
-                      style={{ borderTop: "2px solid hsl(176 56% 55%)" }}
+                      style={{ borderTop: "2px solid hsl(var(--chart-competitor))" }}
                     >
                       <div className="p-4">
                         <div className="flex items-center justify-between mb-3">
@@ -791,7 +791,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                           </a>
                         </div>
                         {comp.screenshotUrl ? (
-                          <div className="w-full h-24 rounded-sm overflow-hidden bg-black mb-3 border border-white/5">
+                          <div className="w-full h-24 rounded-sm overflow-hidden bg-card mb-3 border border-border">
                             <img
                               src={comp.screenshotUrl}
                               alt={`Screenshot of ${compDomain}`}
@@ -799,7 +799,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                             />
                           </div>
                         ) : (
-                          <div className="w-full h-24 rounded-sm bg-black border border-white/5 mb-3 flex items-center justify-center">
+                          <div className="w-full h-24 rounded-sm bg-card border border-border mb-3 flex items-center justify-center">
                             <span className="text-[10px] text-muted-foreground font-mono">No screenshot</span>
                           </div>
                         )}
@@ -823,7 +823,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                     key={comp.name}
                     variants={itemVariants}
                     className="glass-surface rounded-md p-4"
-                    style={{ borderTop: "2px solid hsl(176 56% 55%)" }}
+                    style={{ borderTop: "2px solid hsl(var(--chart-competitor))" }}
                   >
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-xs text-accent font-semibold">{comp.position}</span>
@@ -857,7 +857,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
             </motion.div>
           </motion.div>
         )}
-      </div>
+      </main>
     </div>
   );
 };

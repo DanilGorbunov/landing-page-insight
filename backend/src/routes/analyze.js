@@ -1,5 +1,14 @@
 import crypto from "crypto";
 import { Router } from "express";
+import {
+  CACHE_TTL_MS,
+  DISCOVERY_TIMEOUT_MS,
+  SCRAPE_TIMEOUT_MS,
+  PREFETCH_TIMEOUT_MS,
+  ANALYSIS_CONCURRENCY,
+  MAX_COMPETITORS,
+} from "../config/constants.js";
+import { validateAnalyzeBody } from "../middleware/validateAnalyze.js";
 import { jobStore } from "../utils/jobStore.js";
 import { scrapeWithScreenshot } from "../services/screenshotService.js";
 import { findCompetitors } from "../services/competitorDiscovery.js";
@@ -8,7 +17,6 @@ import { synthesizeReport } from "../services/synthesisService.js";
 
 export const analyzeRouter = Router();
 
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours — reuse result for same URL
 /** Cache key = md5(url + date) so different sites never share cached result. Gaps live only inside synthesis report. */
 /** @type {Map<string, { result: object, cachedAt: number }>} */
 const resultCache = new Map();
@@ -24,17 +32,6 @@ function getDomain(url) {
     return u.hostname.replace(/^www\./, "").toLowerCase();
   } catch {
     return url.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "").toLowerCase();
-  }
-}
-
-function normalizeCompetitorUrl(raw) {
-  const u = (raw && String(raw).trim()) || "";
-  if (!u) return "";
-  try {
-    const parsed = new URL(u.startsWith("http") ? u : `https://${u}`);
-    return parsed.origin + parsed.pathname.replace(/\/+$/, "") || parsed.origin;
-  } catch {
-    return u;
   }
 }
 
@@ -75,52 +72,69 @@ async function runPipeline(jobId) {
 
   try {
     const t0 = Date.now();
-    const manualUrls = (job.competitors || [])
-      .map(normalizeCompetitorUrl)
-      .filter(Boolean)
-      .slice(0, 3);
+    const manualUrls = (job.competitors || []).filter(Boolean).slice(0, MAX_COMPETITORS);
     let combined;
-    if (manualUrls.length >= 3) {
-      combined = manualUrls.slice(0, 3);
+    if (manualUrls.length >= MAX_COMPETITORS) {
+      combined = manualUrls.slice(0, MAX_COMPETITORS);
       pushProgress(jobId, { step: "discovering", message: "Using provided competitors" });
       pushProgress(jobId, { step: "competitors", competitors: combined });
     } else {
       pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
-      const autoDiscovered = await findCompetitors(userUrl);
+      const autoDiscovered = await Promise.race([
+        findCompetitors(userUrl),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("discovery_timeout")), DISCOVERY_TIMEOUT_MS)),
+      ]).catch((e) => {
+        if (e?.message === "discovery_timeout") console.warn("[analyze] discovery timeout, using manual only");
+        return [];
+      });
       const userDomain = getDomain(userUrl);
       combined = [...manualUrls];
       for (const c of autoDiscovered) {
-        if (combined.length >= 3) break;
+        if (combined.length >= MAX_COMPETITORS) break;
         const u = c.url;
         const d = getDomain(u);
         if (d && d !== userDomain && !combined.some((x) => getDomain(x) === d)) combined.push(u);
       }
       pushProgress(jobId, { step: "competitors", competitors: combined });
     }
-    console.log("[analyze] discovery done", Date.now() - t0, "ms");
+    console.log(JSON.stringify({ step: "discovery_done", durationMs: Date.now() - t0 }));
 
     const toScrape = [{ url: userUrl, isUser: true }, ...combined.map((url) => ({ url, isUser: false }))];
     pushProgress(jobId, { step: "screenshot", message: "Capturing screenshots..." });
     const t1 = Date.now();
-    let scrapeResults = await Promise.all(
-      toScrape.map(async (item) => {
-        const data = await scrapeWithScreenshot(item.url);
-        return { url: item.url, isUser: item.isUser, ...data };
-      })
-    );
-    console.log("[analyze] scrape done", Date.now() - t1, "ms");
-    // Pre-fetch screenshot bytes so analysis workers don't wait on network
+    const scrapeWithTimeout = (item) =>
+      Promise.race([
+        scrapeWithScreenshot(item.url).then((data) => ({ url: item.url, isUser: item.isUser, ...data })),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`scrape_timeout:${item.url}`)), SCRAPE_TIMEOUT_MS)
+        ),
+      ]);
+    let scrapeResults = await Promise.allSettled(toScrape.map(scrapeWithTimeout));
+    const succeeded = scrapeResults
+      .filter((r) => r.status === "fulfilled")
+      .map((r) => r.value);
+    const userScrapeResult = succeeded.find((r) => r.isUser);
+    if (!userScrapeResult) {
+      const errMsg = scrapeResults.find((r) => r.status === "rejected")?.reason?.message || "Scrape failed";
+      throw new Error(errMsg);
+    }
+    scrapeResults = succeeded;
+    console.log(JSON.stringify({ step: "scrape_done", durationMs: Date.now() - t1, scraped: scrapeResults.length, total: toScrape.length }));
+
     scrapeResults = await Promise.all(
       scrapeResults.map(async (r) => {
         if (!r.screenshot) return { ...r, screenshotBase64: null };
         try {
-          const res = await fetch(r.screenshot);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), PREFETCH_TIMEOUT_MS);
+          const res = await fetch(r.screenshot, { signal: controller.signal });
+          clearTimeout(timeoutId);
           if (res.ok) {
             const buf = Buffer.from(await res.arrayBuffer());
             return { ...r, screenshotBase64: buf.toString("base64") };
           }
         } catch (e) {
-          console.warn("[analyze] pre-fetch screenshot failed", r.url, e.message);
+          if (e?.name !== "AbortError") console.warn("[analyze] pre-fetch screenshot failed", r.url, e?.message);
         }
         return r;
       })
@@ -135,7 +149,6 @@ async function runPipeline(jobId) {
       ...competitorScrapes.map((s) => ({ scrape: s, isUser: false })),
     ];
     const t2 = Date.now();
-    const CONCURRENCY = 4; // all 4 sites in parallel; use 2 or 1 if you get 429 from Anthropic
     const runPool = async () => {
       const results = [];
       let next = 0;
@@ -153,7 +166,7 @@ async function runPipeline(jobId) {
         );
         return { isUser, url: scrape.url, analysis };
       };
-      const workers = Array.from({ length: Math.min(CONCURRENCY, analysisTasks.length) }, () =>
+      const workers = Array.from({ length: Math.min(ANALYSIS_CONCURRENCY, analysisTasks.length) }, () =>
         (async () => {
           while (true) {
             const idx = next++;
@@ -167,7 +180,7 @@ async function runPipeline(jobId) {
       return results;
     };
     const analysisResults = await runPool();
-    console.log("[analyze] vision done", Date.now() - t2, "ms");
+    console.log(JSON.stringify({ step: "vision_done", durationMs: Date.now() - t2 }));
     const byUrl = new Map(analysisResults.map((r) => [r.url, r]));
     const userAnalysis = (userScrape && byUrl.get(userScrape.url))?.analysis ?? {};
     const competitorAnalyses = competitorScrapes.map((s) => ({
@@ -197,44 +210,25 @@ async function runPipeline(jobId) {
       synthesis: overallScore != null ? { overall_score: overallScore } : undefined,
       gaps: Array.isArray(synthesisGaps) ? synthesisGaps : [],
     };
-    console.log("[analyze] synthesis done", Date.now() - t3, "ms | total", Date.now() - t0, "ms");
+    console.log(JSON.stringify({ step: "synthesis_done", durationMs: Date.now() - t3, totalMs: Date.now() - t0 }));
     resultCache.set(cacheKey, { result, cachedAt: Date.now() });
     jobStore.updateJob(jobId, { status: "completed", result });
   } catch (err) {
-    console.error("[analyze] Error:", err.message || err);
-    jobStore.updateJob(jobId, { status: "failed", error: err.message });
+    const msg = err?.message || String(err);
+    console.error(JSON.stringify({ step: "pipeline_error", jobId, error: msg }));
+    jobStore.updateJob(jobId, { status: "failed", error: msg });
   }
 }
 
 /**
  * POST /api/analyze
- * Body: { url: string }
+ * Body: { url: string, competitors?: string[] } — validated by validateAnalyzeBody (url required, valid http(s), max length; competitors optional, max 3).
  * Returns: { jobId: string } immediately. Pipeline runs in background; poll GET /api/analyze/job/:jobId for progress.
  */
-function isValidHttpUrl(str) {
-  try {
-    const u = new URL(str);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-analyzeRouter.post("/analyze", (req, res) => {
-  const url = req.body?.url?.trim();
-  if (!url) {
-    return res.status(400).json({ error: "Missing url" });
-  }
-  if (!isValidHttpUrl(url)) {
-    return res.status(400).json({ error: "Invalid url: must be http or https" });
-  }
-  const rawCompetitors = Array.isArray(req.body?.competitors) ? req.body.competitors : [];
-  const competitors = rawCompetitors
-    .map(normalizeCompetitorUrl)
-    .filter((u) => u && isValidHttpUrl(u))
-    .slice(0, 3);
+analyzeRouter.post("/analyze", validateAnalyzeBody, (req, res) => {
+  const { url, competitors } = req.body;
   const job = jobStore.createJob({ url, competitors });
-  runPipeline(job.id).catch((e) => console.error("[analyze] runPipeline error:", e));
+  runPipeline(job.id).catch((e) => console.error(JSON.stringify({ step: "runPipeline_error", jobId: job.id, error: e?.message })));
   res.json({ jobId: job.id });
 });
 
@@ -244,7 +238,13 @@ analyzeRouter.post("/analyze", (req, res) => {
  */
 analyzeRouter.get("/analyze/job/:jobId", (req, res) => {
   const job = jobStore.getJob(req.params.jobId);
-  if (!job) return res.status(404).json({ error: "Job not found" });
+  if (!job) {
+    return res.status(404).json({
+      error: "Job not found",
+      code: "NOT_FOUND",
+      ...(req.id && { requestId: req.id }),
+    });
+  }
   res.json({
     id: job.id,
     status: job.status,

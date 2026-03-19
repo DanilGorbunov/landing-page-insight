@@ -61,9 +61,10 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
           <button
             type="button"
             onClick={onOpenHistory}
-            className="touch-target inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+            className="touch-target inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            aria-label={historyCount > 0 ? `History, ${historyCount} analyses` : "Open history"}
           >
-            <History className="w-4 h-4" />
+            <History className="w-4 h-4" aria-hidden />
             History
             {historyCount > 0 && (
               <span className="ml-1 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary/20 text-primary text-xs font-semibold flex items-center justify-center">
@@ -74,7 +75,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
         </header>
       )}
 
-      <div className="flex-1 flex flex-col items-center justify-center px-4 pt-14 pb-8 md:pb-10">
+      <main id="main" className="flex-1 flex flex-col items-center justify-center px-4 pt-14 pb-8 md:pb-10">
         <motion.div
           variants={staggerContainer}
           initial="hidden"
@@ -205,8 +206,8 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
             </motion.div>
           )}
         </motion.div>
-      </motion.div>
-      </div>
+        </motion.div>
+      </main>
     </div>
   );
 };

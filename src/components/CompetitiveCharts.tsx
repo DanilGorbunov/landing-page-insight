@@ -4,10 +4,13 @@ import { getDomain } from "@/lib/utils";
 import { buildRadarSites, CompetitiveRadarChart } from "./CompetitiveRadarChart";
 import { CompetitiveBarChart } from "./CompetitiveBarChart";
 
-const USER_COLOR = "#00FF88";
+function getPrimaryHex(): string {
+  if (typeof document === "undefined") return "#2ed67a";
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#2ed67a";
+}
 const COMPETITOR_COLOR_HEX = ["#4B9EFF", "#FF6B6B", "#FFB347"];
 
-const CHART_TITLE_CLASS = "text-[11px] text-white/40 uppercase mb-3";
+const CHART_TITLE_CLASS = "text-[11px] text-muted-foreground uppercase mb-3";
 const CHART_TITLE_STYLE = { letterSpacing: "0.08em" as const };
 
 interface CompetitiveChartsProps {
@@ -72,7 +75,7 @@ export function CompetitiveCharts({ userUrl, userAnalysis, competitors }: Compet
         {sites.map((site, index) => {
           const isUser = site.isUserSite;
           const colorHex = isUser
-            ? USER_COLOR
+            ? getPrimaryHex()
             : COMPETITOR_COLOR_HEX[(index - (sites[0]?.isUserSite ? 1 : 0)) % 3];
           const isHidden = hidden.has(index);
           return (

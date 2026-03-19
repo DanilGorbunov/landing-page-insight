@@ -1,7 +1,8 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Check } from "lucide-react";
-
-const TOUCH_TARGET = "min-h-[44px] min-w-[44px] inline-flex items-center justify-center";
+import { TouchTargetButton } from "@/components/ui/touch-target-button";
+import { CardContainer } from "@/components/ui/card-container";
+import { TOUCH_TARGET_CLASS } from "@/lib/constants";
 
 const PLANS = [
   {
@@ -50,15 +51,14 @@ const Pricing = () => {
   <div className="min-h-screen bg-background flex flex-col">
     <header className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background">
       <div className="max-w-5xl mx-auto w-full px-4 flex items-center justify-between">
-        <button
-          type="button"
+        <TouchTargetButton
           onClick={handleBack}
-          className={`${TOUCH_TARGET} gap-2 px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors`}
+          className="gap-2 px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
-        </button>
-        <Link to="/" className={`${TOUCH_TARGET} font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90`}>Landing Lens</Link>
+        </TouchTargetButton>
+        <Link to="/" className={`${TOUCH_TARGET_CLASS} font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90`}>Landing Lens</Link>
         <div className="w-16" />
       </div>
     </header>
@@ -73,12 +73,7 @@ const Pricing = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {PLANS.map((plan) => (
-          <div
-            key={plan.id}
-            className={`glass-surface rounded-lg p-6 flex flex-col border transition-colors ${
-              plan.default ? "border-primary ring-1 ring-primary/30 md:scale-[1.02]" : "border-white/5 hover:border-primary/30"
-            }`}
-          >
+          <CardContainer key={plan.id} highlighted={plan.default}>
             <div className="mb-4">
               {plan.default && (
                 <span className="inline-block text-[10px] font-semibold uppercase tracking-wider text-primary mb-2">Recommended</span>
@@ -98,13 +93,12 @@ const Pricing = () => {
                 </li>
               ))}
             </ul>
-            <button
-              type="button"
-              className="mt-6 w-full min-h-[44px] py-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors touch-manipulation"
+            <TouchTargetButton
+              className="mt-6 w-full py-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors touch-manipulation"
             >
               Get started
-            </button>
-          </div>
+            </TouchTargetButton>
+          </CardContainer>
         ))}
       </div>
     </main>

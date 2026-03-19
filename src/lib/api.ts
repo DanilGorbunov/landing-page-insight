@@ -1,31 +1,24 @@
-// In production (Vercel) set VITE_API_BASE_URL to your Railway backend URL, e.g. https://your-app.up.railway.app
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").trim() || "http://localhost:3000";
+import { VITE_API_BASE_URL } from "@/lib/env";
+import { API_TIMEOUT_MS, MAX_COMPETITORS } from "@/lib/constants";
+import type { AnalysisResult, CriticalGap, JobProgressEntry, JobStatus } from "@/types/api";
 
-export interface CriticalGap {
-  priority: "P1" | "P2";
-  area: string;
-  problem: string;
-  recommendation: string;
-  competitor: string;
-  confidence: "High" | "Medium" | "Low";
-}
+export type { AnalysisResult, CriticalGap, JobProgressEntry, JobStatus } from "@/types/api";
 
-export interface AnalysisResult {
-  report: string;
-  userAnalysis: Record<string, string>;
-  competitors: Array<{
-    url: string;
-    analysis: Record<string, string>;
-    screenshotUrl?: string | null;
-  }>;
-  targetScreenshotUrl?: string | null;
-  synthesis?: { overall_score?: number };
-  /** Critical gaps from current analysis only; part of cached result, never stored separately */
-  gaps?: CriticalGap[];
-}
+const API_BASE = VITE_API_BASE_URL;
 
 export function getApiBase(): string {
   return API_BASE;
+}
+
+const DEFAULT_FETCH_OPTIONS: RequestInit = {
+  headers: { "Content-Type": "application/json" },
+};
+
+function fetchWithTimeout(url: string, options: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {
+  const { timeoutMs = API_TIMEOUT_MS, ...init } = options;
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(id));
 }
 
 export async function startAnalysis(
@@ -34,11 +27,11 @@ export async function startAnalysis(
 ): Promise<{ jobId: string }> {
   const urlToCall = `${API_BASE}/api/analyze`;
   const body: { url: string; competitors?: string[] } = { url };
-  const valid = competitorUrls?.filter((u) => u?.trim()).slice(0, 3) ?? [];
+  const valid = competitorUrls?.filter((u) => u?.trim()).slice(0, MAX_COMPETITORS) ?? [];
   if (valid.length > 0) body.competitors = valid;
-  const res = await fetch(urlToCall, {
+  const res = await fetchWithTimeout(urlToCall, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    ...DEFAULT_FETCH_OPTIONS,
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -57,24 +50,8 @@ export function getStreamUrl(jobId: string): string {
   return `${API_BASE}/api/analyze/stream/${jobId}`;
 }
 
-export interface JobProgressEntry {
-  step?: string;
-  message?: string;
-  index?: number;
-  total?: number;
-  competitors?: string[];
-}
-
-export interface JobStatus {
-  id: string;
-  status: "pending" | "running" | "completed" | "failed";
-  progress: JobProgressEntry[];
-  result?: AnalysisResult | null;
-  error?: string | null;
-}
-
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetch(`${API_BASE}/api/analyze/job/${jobId}`);
+  const res = await fetchWithTimeout(`${API_BASE}/api/analyze/job/${jobId}`, DEFAULT_FETCH_OPTIONS);
   if (!res.ok) throw new Error("Job not found");
   return res.json();
 }

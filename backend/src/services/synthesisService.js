@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 const MODEL = "claude-sonnet-4-20250514";
-const SECTION_MAX_CHARS = 800;
+const SECTION_MAX_CHARS = 700;
 
 /** Section keys as in analysis output. Weights: Hero & CTA matter most for conversion; Features least. */
 const WEIGHTS = {
@@ -141,7 +141,7 @@ ${gapsPrompt}`;
 
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 3072,
+    max_tokens: 2560,
     messages: [{ role: "user", content: prompt }],
   });
 

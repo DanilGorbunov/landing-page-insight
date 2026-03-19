@@ -1,4 +1,4 @@
-const TTL_MS = 60 * 60 * 1000; // 1 hour
+import { JOB_TTL_MS } from "../config/constants.js";
 
 const jobs = new Map();
 
@@ -48,7 +48,7 @@ function updateJob(id, updates) {
 function scheduleExpiry(id) {
   setTimeout(() => {
     if (jobs.has(id)) jobs.delete(id);
-  }, TTL_MS);
+  }, JOB_TTL_MS);
 }
 
 export const jobStore = { createJob, getJob, updateJob };

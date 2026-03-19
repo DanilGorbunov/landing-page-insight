@@ -3,8 +3,10 @@ import sharp from "sharp";
 
 const MODEL_SONNET = "claude-sonnet-4-20250514";
 const MODEL_HAIKU = "claude-haiku-4-5-20251001";
-const MAX_IMAGE_WIDTH = 1000;
-const JPEG_QUALITY = 76;
+const MAX_IMAGE_WIDTH_USER = 1000;
+const JPEG_QUALITY_USER = 76;
+const MAX_IMAGE_WIDTH_COMPETITOR = 800;
+const JPEG_QUALITY_COMPETITOR = 72;
 const MARKDOWN_MAX_CHARS = 2800;
 const SECTIONS = [
   "hero",
@@ -36,9 +38,10 @@ const RANGES = {
  * Crop a vertical section from a full-page screenshot for Vision.
  * @param {Buffer} imageBuffer - Full screenshot (e.g. after resize).
  * @param {string} section - One of: hero, value_prop, features, social_proof, cta.
+ * @param {number} [jpegQuality] - JPEG quality for crop output (default USER).
  * @returns {Promise<{ buffer: Buffer, cropTop: number, cropEnd: number, totalHeight: number }>}
  */
-async function cropSectionFromScreenshot(imageBuffer, section) {
+async function cropSectionFromScreenshot(imageBuffer, section, jpegQuality = JPEG_QUALITY_USER) {
   const metadata = await sharp(imageBuffer).metadata();
   const totalHeight = metadata.height;
   const range = RANGES[section];
@@ -53,23 +56,26 @@ async function cropSectionFromScreenshot(imageBuffer, section) {
 
   const buffer = await sharp(imageBuffer)
     .extract({ left: 0, top: cropTop, width: metadata.width, height: cropHeight })
-    .jpeg({ quality: JPEG_QUALITY })
+    .jpeg({ quality: jpegQuality })
     .toBuffer();
   return { buffer, cropTop, cropEnd, totalHeight };
 }
 
 /**
- * Resize image to max width and return buffer (for cropping). Same pipeline as compressImageForVision.
+ * Resize image to max width and return buffer (for cropping).
  * @param {string} base64 - Base64 image (optional data: URL prefix).
+ * @param {{ maxWidth: number, jpegQuality: number }} opts - User: 1000/76, competitor: 800/72 for speed.
  * @returns {Promise<Buffer|null>} Resized JPEG buffer or null on failure.
  */
-async function getResizedBuffer(base64) {
+async function getResizedBuffer(base64, opts = {}) {
+  const maxWidth = opts.maxWidth ?? MAX_IMAGE_WIDTH_USER;
+  const jpegQuality = opts.jpegQuality ?? JPEG_QUALITY_USER;
   const raw = base64.replace(/^data:image\/\w+;base64,/, "");
   try {
     const buf = Buffer.from(raw, "base64");
     return await sharp(buf)
-      .resize(MAX_IMAGE_WIDTH, null, { withoutEnlargement: true })
-      .jpeg({ quality: JPEG_QUALITY })
+      .resize(maxWidth, null, { withoutEnlargement: true })
+      .jpeg({ quality: jpegQuality })
       .toBuffer();
   } catch {
     return null;
@@ -123,9 +129,12 @@ export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
     if (res.ok) base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
   }
 
+  const imageOpts = isUserSite
+    ? { maxWidth: MAX_IMAGE_WIDTH_USER, jpegQuality: JPEG_QUALITY_USER }
+    : { maxWidth: MAX_IMAGE_WIDTH_COMPETITOR, jpegQuality: JPEG_QUALITY_COMPETITOR };
   let resizedBuffer = null;
   if (base64) {
-    resizedBuffer = await getResizedBuffer(base64);
+    resizedBuffer = await getResizedBuffer(base64, imageOpts);
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY_LAND_LENS;
@@ -134,10 +143,15 @@ export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
   const client = new Anthropic({ apiKey });
   const content = [];
 
+  const cropQuality = isUserSite ? JPEG_QUALITY_USER : JPEG_QUALITY_COMPETITOR;
   if (resizedBuffer) {
     for (const sectionName of SECTIONS) {
       const rangeKey = SECTION_TO_RANGE[sectionName];
-      const { buffer, cropTop, cropEnd, totalHeight } = await cropSectionFromScreenshot(resizedBuffer, rangeKey);
+      const { buffer, cropTop, cropEnd, totalHeight } = await cropSectionFromScreenshot(
+        resizedBuffer,
+        rangeKey,
+        cropQuality
+      );
       console.log("[crop]", sectionName + ":", cropTop + "–" + cropEnd + "px of", totalHeight + "px", "(" + url + ")");
       content.push({
         type: "image",

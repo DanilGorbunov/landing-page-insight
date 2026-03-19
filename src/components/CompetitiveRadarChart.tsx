@@ -9,8 +9,17 @@ import { getDomain, parseSectionScores, hasFullSectionScores } from "@/lib/utils
 const RADAR_LABELS: readonly string[] = ["Hero", "Value Prop", "Features", "Social Proof", "CTA"];
 const RADAR_KEYS: SectionScoreKey[] = ["hero", "value_prop", "features", "social_proof", "cta"];
 
-const USER_COLOR = "#00FF88";
-const USER_FILL = "rgba(0, 255, 136, 0.08)";
+function getPrimaryHex(): string {
+  if (typeof document === "undefined") return "#2ed67a";
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#2ed67a";
+}
+function hexToRgba(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 const COMPETITOR_COLORS = [
   "rgba(75, 158, 255, 0.6)",
   "rgba(255, 107, 107, 0.6)",
@@ -106,12 +115,13 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
       .map((site, index) => {
         if (hidden.has(index)) return null;
         const isUser = site.isUserSite;
-        const color = isUser ? USER_COLOR : COMPETITOR_COLORS[(index - (sites[0]?.isUserSite ? 1 : 0)) % COMPETITOR_COLORS.length];
+        const userHex = getPrimaryHex();
+        const color = isUser ? userHex : COMPETITOR_COLORS[(index - (sites[0]?.isUserSite ? 1 : 0)) % COMPETITOR_COLORS.length];
         return {
           label: getDomain(site.url) + (isUser ? " ← you" : ""),
           data: RADAR_KEYS.map((k) => site.scores[k]),
           borderColor: color,
-          backgroundColor: isUser ? USER_FILL : "transparent",
+          backgroundColor: isUser ? hexToRgba(userHex, 0.08) : "transparent",
           borderWidth: isUser ? 2.5 : 1.5,
           pointRadius: isUser ? 4 : 3,
           pointBackgroundColor: color,
@@ -192,7 +202,7 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
         <div className="flex flex-wrap items-center justify-center gap-4 mt-4">
           {sites.map((site, index) => {
             const isUser = site.isUserSite;
-            const colorHex = isUser ? USER_COLOR : ["#4B9EFF", "#FF6B6B", "#FFB347"][(index - (sites[0]?.isUserSite ? 1 : 0)) % 3];
+            const colorHex = isUser ? getPrimaryHex() : ["#4B9EFF", "#FF6B6B", "#FFB347"][(index - (sites[0]?.isUserSite ? 1 : 0)) % 3];
             const isHidden = hidden.has(index);
             return (
               <button

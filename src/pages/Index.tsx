@@ -120,6 +120,9 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <a href="#main" className="absolute -left-full top-0 z-[100] p-4 bg-primary text-primary-foreground rounded-md focus:left-4 focus:top-4 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background">
+        Skip to main content
+      </a>
       {screen === "input" && (
         <InputScreen
           onAnalyze={handleAnalyze}

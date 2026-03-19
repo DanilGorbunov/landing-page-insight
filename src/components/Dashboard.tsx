@@ -9,7 +9,7 @@ const FAVICON = (domain: string) =>
 function scoreColor(score: number | undefined): string {
   if (score == null) return "bg-muted text-muted-foreground";
   if (score >= 7.5) return "bg-success/20 text-success";
-  if (score >= 5) return "bg-amber-500/20 text-amber-500";
+  if (score >= 5) return "bg-warning/20 text-warning";
   return "bg-destructive/20 text-destructive";
 }
 
@@ -81,12 +81,9 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
         </div>
       </header>
 
-      <main className="flex-1 px-4 md:px-8 py-6 sm:py-8 pb-10 sm:pb-8 max-w-6xl mx-auto w-full">
+      <main id="main" className="flex-1 px-4 md:px-8 py-6 sm:py-8 pb-10 sm:pb-8 max-w-6xl mx-auto w-full">
         {entries.length === 0 ? (
-          <div
-            className="rounded-lg border border-white/5 p-12 text-center"
-            style={{ background: "rgba(255,255,255,0.03)" }}
-          >
+          <div className="rounded-lg border border-border p-12 text-center bg-card">
             <FileText className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
             <p className="text-muted-foreground mb-2">No analyses yet.</p>
             <p className="text-sm text-muted-foreground/80">
@@ -107,8 +104,7 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
               return (
                 <li key={entry.id}>
                   <div
-                    className="flex items-center gap-4 rounded-lg p-4 transition-colors hover:bg-white/[0.06] cursor-pointer border border-white/5"
-                    style={{ background: "rgba(255,255,255,0.03)" }}
+                    className="flex items-center gap-4 rounded-lg p-4 transition-colors hover:bg-secondary/50 cursor-pointer border border-border bg-card"
                     onClick={() => onViewReport(entry)}
                   >
                     <img

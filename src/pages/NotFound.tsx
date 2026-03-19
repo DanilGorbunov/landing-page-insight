@@ -1,5 +1,6 @@
 import { useLocation, Link } from "react-router-dom";
 import { useEffect } from "react";
+import { TOUCH_TARGET_CLASS } from "@/lib/constants";
 
 const NotFound = () => {
   const location = useLocation();
@@ -15,7 +16,7 @@ const NotFound = () => {
         <p className="mb-6 text-base sm:text-lg text-muted-foreground">Page not found</p>
         <Link
           to="/"
-          className="min-h-[44px] inline-flex items-center justify-center px-6 py-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors touch-manipulation"
+          className={`${TOUCH_TARGET_CLASS} px-6 py-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors touch-manipulation`}
         >
           Back to Home
         </Link>
