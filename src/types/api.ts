@@ -33,12 +33,49 @@ export interface JobProgressEntry {
   index?: number;
   total?: number;
   competitors?: string[];
+  event?: string;
+  url?: string;
+  section?: string;
+  score?: number | null;
+  urls?: string[];
+}
+
+/** Backend keys for section scores (aligned with analysis output). */
+export type LiveSectionKey =
+  | "hero"
+  | "value proposition"
+  | "features"
+  | "social proof"
+  | "CTA";
+
+export interface LiveSiteState {
+  url: string;
+  isUser: boolean;
+  domain: string;
+  screenshotReady: boolean;
+  screenshotUrl: string | null;
+  sectionScores: Record<LiveSectionKey, number | null>;
+}
+
+export interface LiveSynthesisState {
+  started: boolean;
+  ready: boolean;
+  overallScore: number | null;
+  gaps: CriticalGap[];
+  partialReport: string | null;
+}
+
+export interface JobLiveState {
+  sites: LiveSiteState[];
+  synthesis: LiveSynthesisState;
 }
 
 export interface JobStatus {
   id: string;
   status: "pending" | "running" | "completed" | "failed";
   progress: JobProgressEntry[];
+  /** Progressive UI snapshot while job runs (and mirrors completed state). */
+  live?: JobLiveState | null;
   result?: AnalysisResult | null;
   error?: string | null;
 }

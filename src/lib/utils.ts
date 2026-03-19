@@ -46,6 +46,26 @@ export function stripMarkdownFormatting(text: string): string {
     .replace(/\s{2,}/g, " ");
 }
 
+/** Drop lines that look like JSON/array snippets (e.g. model leaked structured output). */
+export function filterInsightLines(text: string): string {
+  if (!text || typeof text !== "string") return "";
+  return text
+    .split(/\n+/)
+    .filter((line) => !line.includes("["))
+    .join("\n")
+    .trim();
+}
+
+/** Strip boilerplate prefixes from report text used in Overview summary preview. */
+export function cleanReportSummaryText(text: string): string {
+  if (!text || typeof text !== "string") return "";
+  return text
+    .replace(/^Competitive Analysis:.*?Executive Summary\s*/is, "")
+    .replace(/^Executive Summary\s*/i, "")
+    .replace(/Overall score:.*?\n/i, "")
+    .trim();
+}
+
 /** Default score when none can be parsed (always show a rating). */
 export const DEFAULT_SCORE = 5.5;
 
@@ -70,6 +90,18 @@ export const SECTION_KEYS = [
   "social proof",
   "CTA",
 ] as const;
+
+/** Turn live numeric section scores into text parseable by parseSectionScores (for radar during progressive UI). */
+export function liveSectionScoresToAnalysisText(
+  sectionScores: Record<string, number | null | undefined>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of SECTION_KEYS) {
+    const v = sectionScores[key];
+    out[key] = typeof v === "number" && !Number.isNaN(v) ? `Score: ${v}/10` : "";
+  }
+  return out;
+}
 
 export type SectionScoreKey = "hero" | "value_prop" | "features" | "social_proof" | "cta";
 
@@ -148,12 +180,16 @@ export function analysisToBullets(text: string | undefined, maxPoints = 4): { pa
   const segments = text
     .split(/\n+|\.\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 15);
-  return segments.slice(0, maxPoints).map((s) => {
-    const cleaned = stripMarkdownFormatting(s);
-    return {
-      pass: !NEGATIVE_WORDS.test(cleaned),
-      text: cleaned.length > 120 ? cleaned.slice(0, 117) + "…" : cleaned,
-    };
-  });
+    .filter((s) => s.length > 15)
+    .filter((s) => !s.includes("["));
+  return segments
+    .slice(0, maxPoints)
+    .map((s) => {
+      const cleaned = stripMarkdownFormatting(s);
+      return {
+        pass: !NEGATIVE_WORDS.test(cleaned),
+        text: cleaned.length > 120 ? cleaned.slice(0, 117) + "…" : cleaned,
+      };
+    })
+    .filter((b) => !b.text.includes("["));
 }

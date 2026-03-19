@@ -18,9 +18,14 @@ interface CompetitiveBarChartProps {
   sites: RadarSite[];
   hidden: Set<number>;
   visibleSites: RadarSite[];
+  /** If set (1–5), only first N section values are real; rest 0 (match radar progressive reveal). */
+  progressiveAxisCount?: number;
 }
 
-export function CompetitiveBarChart({ sites, hidden, visibleSites }: CompetitiveBarChartProps) {
+export function CompetitiveBarChart({ sites, hidden, visibleSites, progressiveAxisCount }: CompetitiveBarChartProps) {
+  const axisReveal =
+    progressiveAxisCount != null ? Math.min(5, Math.max(0, progressiveAxisCount)) : 5;
+
   const chartData = useMemo(() => {
     const datasets = sites
       .map((site, index) => {
@@ -31,7 +36,7 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites }: Competitive
           : COMPETITOR_COLORS[(index - (sites[0]?.isUserSite ? 1 : 0)) % COMPETITOR_COLORS.length];
         return {
           label: getDomain(site.url) + (isUser ? " ← you" : ""),
-          data: RADAR_KEYS.map((k) => site.scores[k]),
+          data: RADAR_KEYS.map((k, i) => (i < axisReveal ? site.scores[k] : 0)),
           backgroundColor: color,
           borderColor: color,
           borderWidth: 0,
@@ -44,7 +49,7 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites }: Competitive
       labels: [...SECTION_LABELS],
       datasets,
     };
-  }, [sites, hidden]);
+  }, [sites, hidden, axisReveal]);
 
   const options: ChartOptions<"bar"> = useMemo(
     () => ({

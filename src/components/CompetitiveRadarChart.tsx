@@ -77,6 +77,8 @@ interface CompetitiveRadarChartPropsControlled {
   sites: RadarSite[];
   hidden: Set<number>;
   onToggleVisibility?: (index: number) => void;
+  /** If set (1–5), only first N radar axes use real values; rest are 0 for progressive reveal. */
+  progressiveAxisCount?: number;
 }
 
 type CompetitiveRadarChartProps = CompetitiveRadarChartPropsStandalone | CompetitiveRadarChartPropsControlled;
@@ -110,6 +112,11 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
   const showLegend = !isControlled(props);
   const onToggle = isControlled(props) ? props.onToggleVisibility : toggleStandalone;
 
+  const axisReveal =
+    isControlled(props) && props.progressiveAxisCount != null
+      ? Math.min(5, Math.max(0, props.progressiveAxisCount))
+      : 5;
+
   const chartData = useMemo(() => {
     const datasets = sites
       .map((site, index) => {
@@ -119,7 +126,7 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
         const color = isUser ? userHex : COMPETITOR_COLORS[(index - (sites[0]?.isUserSite ? 1 : 0)) % COMPETITOR_COLORS.length];
         return {
           label: getDomain(site.url) + (isUser ? " ← you" : ""),
-          data: RADAR_KEYS.map((k) => site.scores[k]),
+          data: RADAR_KEYS.map((k, i) => (i < axisReveal ? site.scores[k] : 0)),
           borderColor: color,
           backgroundColor: isUser ? hexToRgba(userHex, 0.08) : "transparent",
           borderWidth: isUser ? 2.5 : 1.5,
@@ -134,7 +141,7 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
       labels: [...RADAR_LABELS],
       datasets,
     };
-  }, [sites, hidden]);
+  }, [sites, hidden, axisReveal]);
 
   const options: ChartOptions<"radar"> = useMemo(
     () => ({

@@ -13,9 +13,12 @@ import { jobStore } from "../utils/jobStore.js";
 import { scrapeWithScreenshot } from "../services/screenshotService.js";
 import { findCompetitors } from "../services/competitorDiscovery.js";
 import { analyzeLandingSections } from "../services/analysisService.js";
-import { synthesizeReport } from "../services/synthesisService.js";
+import { synthesizeReport, parseScoreFromSection } from "../services/synthesisService.js";
 
 export const analyzeRouter = Router();
+
+/** Section keys aligned with analysisService output (for live scores). */
+const SECTIONS_FOR_LIVE = ["hero", "value proposition", "features", "social proof", "CTA"];
 
 /** Cache key = md5(url + date) so different sites never share cached result. Gaps live only inside synthesis report. */
 /** @type {Map<string, { result: object, cachedAt: number }>} */
@@ -35,6 +38,90 @@ function getDomain(url) {
   }
 }
 
+function delay(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function emptySectionScores() {
+  return {
+    hero: null,
+    "value proposition": null,
+    features: null,
+    "social proof": null,
+    CTA: null,
+  };
+}
+
+function defaultLive() {
+  return {
+    sites: [],
+    synthesis: {
+      started: false,
+      ready: false,
+      overallScore: null,
+      gaps: [],
+      partialReport: null,
+    },
+  };
+}
+
+/** Serialize live patches so parallel scrapes/workers do not overwrite each other. */
+/** @type {Map<string, Promise<void>>} */
+const livePatchChains = new Map();
+
+function patchLive(jobId, mutator) {
+  const prev = livePatchChains.get(jobId) ?? Promise.resolve();
+  const next = prev.then(() => {
+    const job = jobStore.getJob(jobId);
+    if (!job) return;
+    const snapshot = job.live && typeof job.live === "object" ? structuredClone(job.live) : defaultLive();
+    mutator(snapshot);
+    jobStore.updateJob(jobId, { live: snapshot });
+  });
+  livePatchChains.set(jobId, next.catch(() => {}));
+  return next;
+}
+
+function liveFromCompletedResult(result, userUrl) {
+  const sites = [];
+  const userScores = emptySectionScores();
+  for (const s of SECTIONS_FOR_LIVE) {
+    userScores[s] = parseScoreFromSection(result.userAnalysis?.[s] ?? "") ?? null;
+  }
+  sites.push({
+    url: userUrl,
+    isUser: true,
+    domain: getDomain(userUrl),
+    screenshotReady: Boolean(result.targetScreenshotUrl),
+    screenshotUrl: result.targetScreenshotUrl ?? null,
+    sectionScores: userScores,
+  });
+  for (const c of result.competitors || []) {
+    const sec = emptySectionScores();
+    for (const s of SECTIONS_FOR_LIVE) {
+      sec[s] = parseScoreFromSection(c.analysis?.[s] ?? "") ?? null;
+    }
+    sites.push({
+      url: c.url,
+      isUser: false,
+      domain: getDomain(c.url),
+      screenshotReady: Boolean(c.screenshotUrl),
+      screenshotUrl: c.screenshotUrl ?? null,
+      sectionScores: sec,
+    });
+  }
+  return {
+    sites,
+    synthesis: {
+      started: true,
+      ready: true,
+      overallScore: result.synthesis?.overall_score ?? null,
+      gaps: Array.isArray(result.gaps) ? result.gaps : [],
+      partialReport: null,
+    },
+  };
+}
+
 function pushProgress(jobId, entry) {
   const job = jobStore.getJob(jobId);
   if (!job) return;
@@ -43,7 +130,7 @@ function pushProgress(jobId, entry) {
 }
 
 /**
- * Run full analysis pipeline in background. Updates job via jobStore (progress, result, error).
+ * Run full analysis pipeline in background. Updates job via jobStore (live, progress, result, error).
  * If domain was analyzed in the last 24h, returns cached result (no tokens, no rerun).
  */
 async function runPipeline(jobId) {
@@ -56,19 +143,15 @@ async function runPipeline(jobId) {
   const cacheKey = getCacheKey(userUrl);
   const cached = resultCache.get(cacheKey);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-    jobStore.updateJob(jobId, { status: "running" });
-    pushProgress(jobId, { step: "started", message: "Using cached result (analyzed in last 24h)" });
-    pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
-    pushProgress(jobId, { step: "competitors", competitors: [] });
-    pushProgress(jobId, { step: "screenshot", message: "Screenshots captured" });
-    pushProgress(jobId, { step: "analyzing", message: "Analyzing with Claude Vision..." });
-    pushProgress(jobId, { step: "synthesis", message: "Writing report..." });
-    jobStore.updateJob(jobId, { status: "completed", result: cached.result });
+    jobStore.updateJob(jobId, {
+      status: "completed",
+      result: cached.result,
+      live: liveFromCompletedResult(cached.result, userUrl),
+    });
     return;
   }
 
-  jobStore.updateJob(jobId, { status: "running" });
-  pushProgress(jobId, { step: "started", message: "Starting analysis" });
+  jobStore.updateJob(jobId, { status: "running", live: defaultLive() });
 
   try {
     const t0 = Date.now();
@@ -76,10 +159,7 @@ async function runPipeline(jobId) {
     let combined;
     if (manualUrls.length >= MAX_COMPETITORS) {
       combined = manualUrls.slice(0, MAX_COMPETITORS);
-      pushProgress(jobId, { step: "discovering", message: "Using provided competitors" });
-      pushProgress(jobId, { step: "competitors", competitors: combined });
     } else {
-      pushProgress(jobId, { step: "discovering", message: "Finding competitors..." });
       const autoDiscovered = await Promise.race([
         findCompetitors(userUrl),
         new Promise((_, reject) => setTimeout(() => reject(new Error("discovery_timeout")), DISCOVERY_TIMEOUT_MS)),
@@ -95,12 +175,23 @@ async function runPipeline(jobId) {
         const d = getDomain(u);
         if (d && d !== userDomain && !combined.some((x) => getDomain(x) === d)) combined.push(u);
       }
-      pushProgress(jobId, { step: "competitors", competitors: combined });
     }
     console.log(JSON.stringify({ step: "discovery_done", durationMs: Date.now() - t0 }));
 
     const toScrape = [{ url: userUrl, isUser: true }, ...combined.map((url) => ({ url, isUser: false }))];
-    pushProgress(jobId, { step: "screenshot", message: "Capturing screenshots..." });
+
+    await patchLive(jobId, (live) => {
+      live.sites = toScrape.map((item) => ({
+        url: item.url,
+        isUser: item.isUser,
+        domain: getDomain(item.url),
+        screenshotReady: false,
+        screenshotUrl: null,
+        sectionScores: emptySectionScores(),
+      }));
+    });
+    pushProgress(jobId, { event: "competitors_found", urls: toScrape.map((t) => t.url) });
+
     const t1 = Date.now();
     const scrapeWithTimeout = (item) =>
       Promise.race([
@@ -109,16 +200,34 @@ async function runPipeline(jobId) {
           setTimeout(() => reject(new Error(`scrape_timeout:${item.url}`)), SCRAPE_TIMEOUT_MS)
         ),
       ]);
-    let scrapeResults = await Promise.allSettled(toScrape.map(scrapeWithTimeout));
-    const succeeded = scrapeResults
-      .filter((r) => r.status === "fulfilled")
-      .map((r) => r.value);
+
+    const scrapeSettled = await Promise.all(
+      toScrape.map(async (item) => {
+        try {
+          const data = await scrapeWithTimeout(item);
+          await patchLive(jobId, (live) => {
+            const s = live.sites.find((x) => x.url === item.url);
+            if (s) {
+              s.screenshotReady = true;
+              s.screenshotUrl = data.screenshot || null;
+            }
+          });
+          pushProgress(jobId, { event: "screenshot_ready", url: item.url });
+          return { status: "fulfilled", value: data };
+        } catch (reason) {
+          return { status: "rejected", reason, item };
+        }
+      })
+    );
+
+    const succeeded = scrapeSettled.filter((r) => r.status === "fulfilled").map((r) => r.value);
     const userScrapeResult = succeeded.find((r) => r.isUser);
     if (!userScrapeResult) {
-      const errMsg = scrapeResults.find((r) => r.status === "rejected")?.reason?.message || "Scrape failed";
+      const errMsg =
+        scrapeSettled.find((r) => r.status === "rejected")?.reason?.message || "Scrape failed";
       throw new Error(errMsg);
     }
-    scrapeResults = succeeded;
+    let scrapeResults = succeeded;
     console.log(JSON.stringify({ step: "scrape_done", durationMs: Date.now() - t1, scraped: scrapeResults.length, total: toScrape.length }));
 
     scrapeResults = await Promise.all(
@@ -139,9 +248,7 @@ async function runPipeline(jobId) {
         return r;
       })
     );
-    pushProgress(jobId, { step: "screenshot", index: toScrape.length, total: toScrape.length, message: "Screenshots captured" });
 
-    pushProgress(jobId, { step: "analyzing", message: "Analyzing with Claude Vision..." });
     const userScrape = scrapeResults.find((r) => r.isUser);
     const competitorScrapes = scrapeResults.filter((r) => !r.isUser);
     const analysisTasks = [
@@ -149,6 +256,19 @@ async function runPipeline(jobId) {
       ...competitorScrapes.map((s) => ({ scrape: s, isUser: false })),
     ];
     const t2 = Date.now();
+
+    const emitSectionsForAnalysis = async (scrapeUrl, analysis) => {
+      for (const section of SECTIONS_FOR_LIVE) {
+        const score = parseScoreFromSection(analysis[section]);
+        await patchLive(jobId, (live) => {
+          const s = live.sites.find((x) => x.url === scrapeUrl);
+          if (s) s.sectionScores[section] = score;
+        });
+        pushProgress(jobId, { event: "section_analyzed", url: scrapeUrl, section, score });
+        await delay(110);
+      }
+    };
+
     const runPool = async () => {
       const results = [];
       let next = 0;
@@ -164,6 +284,7 @@ async function runPipeline(jobId) {
           },
           isUser
         );
+        await emitSectionsForAnalysis(scrape.url, analysis);
         return { isUser, url: scrape.url, analysis };
       };
       const workers = Array.from({ length: Math.min(ANALYSIS_CONCURRENCY, analysisTasks.length) }, () =>
@@ -188,7 +309,10 @@ async function runPipeline(jobId) {
       analysis: byUrl.get(s.url)?.analysis ?? {},
     }));
 
-    pushProgress(jobId, { step: "synthesis", message: "Writing report..." });
+    await patchLive(jobId, (live) => {
+      live.synthesis.started = true;
+    });
+
     const t3 = Date.now();
     const { report, overall_score: overallScore, gaps: synthesisGaps } = await synthesizeReport({
       userUrl,
@@ -201,7 +325,6 @@ async function runPipeline(jobId) {
       const scraped = scrapeResults.find((r) => r.url === c.url);
       return { ...c, screenshotUrl: scraped?.screenshot || null };
     });
-    // Gaps are part of the full result object — always from current synthesis, never stored/read separately
     const result = {
       report,
       userAnalysis,
@@ -211,6 +334,14 @@ async function runPipeline(jobId) {
       gaps: Array.isArray(synthesisGaps) ? synthesisGaps : [],
     };
     console.log(JSON.stringify({ step: "synthesis_done", durationMs: Date.now() - t3, totalMs: Date.now() - t0 }));
+
+    await patchLive(jobId, (live) => {
+      live.synthesis.ready = true;
+      live.synthesis.overallScore = overallScore ?? null;
+      live.synthesis.gaps = Array.isArray(synthesisGaps) ? synthesisGaps : [];
+    });
+    pushProgress(jobId, { event: "synthesis_ready" });
+
     resultCache.set(cacheKey, { result, cachedAt: Date.now() });
     jobStore.updateJob(jobId, { status: "completed", result });
   } catch (err) {
@@ -234,7 +365,7 @@ analyzeRouter.post("/analyze", validateAnalyzeBody, (req, res) => {
 
 /**
  * GET /api/analyze/job/:jobId
- * Returns current job status, progress, and result when completed. Use polling (e.g. every 2s) instead of SSE to avoid timeouts.
+ * Returns current job status, progress, live UI snapshot, and result when completed.
  */
 analyzeRouter.get("/analyze/job/:jobId", (req, res) => {
   const job = jobStore.getJob(req.params.jobId);
@@ -249,6 +380,7 @@ analyzeRouter.get("/analyze/job/:jobId", (req, res) => {
     id: job.id,
     status: job.status,
     progress: job.progress || [],
+    live: job.live ?? null,
     result: job.result,
     error: job.error,
   });

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import InputScreen from "@/components/InputScreen";
-import ProgressScreen from "@/components/ProgressScreen";
+import ProgressiveReportView from "@/components/ProgressiveReportView";
 import ReportScreen from "@/components/ReportScreen";
 import Dashboard from "@/components/Dashboard";
 import { startAnalysis } from "@/lib/api";
@@ -140,7 +140,7 @@ const Index = () => {
         />
       )}
       {screen === "progress" && jobId && (
-        <ProgressScreen
+        <ProgressiveReportView
           jobId={jobId}
           url={url}
           onComplete={handleComplete}

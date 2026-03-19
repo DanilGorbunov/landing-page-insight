@@ -13,7 +13,7 @@ const WEIGHTS = {
 };
 const DEFAULT_WEIGHT = 0.2;
 
-function parseScoreFromSection(text) {
+export function parseScoreFromSection(text) {
   if (!text || typeof text !== "string") return null;
   const m = text.match(/(\d+(?:\.\d+)?)\s*\/\s*10/);
   return m ? parseFloat(m[1], 10) : null;

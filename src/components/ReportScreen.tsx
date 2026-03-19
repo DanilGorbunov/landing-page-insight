@@ -4,7 +4,17 @@ import { AlertTriangle, ArrowUpRight, Check, X, ExternalLink, ArrowLeft } from "
 import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult } from "@/lib/api";
 import { Link, useNavigate } from "react-router-dom";
-import { getDomain, parseScoreFromReport, getCompetitorOverallScore, analysisToBullets, stripMarkdownFormatting, ensureScore, inferScoreFromAnalysis } from "@/lib/utils";
+import {
+  getDomain,
+  parseScoreFromReport,
+  getCompetitorOverallScore,
+  analysisToBullets,
+  stripMarkdownFormatting,
+  cleanReportSummaryText,
+  filterInsightLines,
+  ensureScore,
+  inferScoreFromAnalysis,
+} from "@/lib/utils";
 import { containerVariants, itemVariants } from "@/lib/motion";
 import { CompetitiveCharts } from "@/components/CompetitiveCharts";
 
@@ -323,7 +333,7 @@ function SectionCard({
             ))
           ) : (
             <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-              {analysisText ? stripMarkdownFormatting(analysisText).slice(0, 200) : "—"}
+              {analysisText ? stripMarkdownFormatting(filterInsightLines(analysisText)).slice(0, 200) : "—"}
               {analysisText && analysisText.length > 200 ? "…" : ""}
             </p>
           )}
@@ -538,7 +548,9 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                           <span className="text-xs text-muted-foreground font-mono">[ screenshot ]</span>
                         </div>
                         <div className="space-y-2">
-                          {site.insights.map((insight, j) => (
+                          {site.insights
+                            .filter((insight) => !insight.text.includes("["))
+                            .map((insight, j) => (
                             <div key={j} className="flex items-start gap-2">
                               {insight.pass ? <Check className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" /> : <X className="w-3.5 h-3.5 text-destructive mt-0.5 shrink-0" />}
                               <span className="text-xs text-muted-foreground leading-relaxed">{insight.text}</span>
@@ -666,7 +678,9 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                         </div>
                       )}
                       <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                        {stripMarkdownFormatting(apiResult.userAnalysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—")}
+                        {stripMarkdownFormatting(
+                          filterInsightLines(apiResult.userAnalysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—")
+                        )}
                       </p>
                     </div>
                   </motion.div>
@@ -697,7 +711,9 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                             </div>
                           )}
                           <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                            {stripMarkdownFormatting(comp.analysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—")}
+                            {stripMarkdownFormatting(
+                              filterInsightLines(comp.analysis?.[SECTION_TO_BACKEND[activeSection]] ?? "—")
+                            )}
                           </p>
                         </div>
                       </motion.div>
@@ -735,7 +751,9 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                         <span className="text-xs text-muted-foreground font-mono">Screenshot: {site.name}</span>
                       </div>
                       <div className="space-y-2">
-                        {site.insights.map((insight, j) => (
+                        {site.insights
+                          .filter((insight) => !insight.text.includes("["))
+                          .map((insight, j) => (
                           <div key={j} className="flex items-start gap-2">
                             {insight.pass ? (
                               <Check className="w-3.5 h-3.5 text-success mt-0.5 shrink-0" />
