@@ -159,15 +159,15 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
             callback(value) {
               return value === 10 ? "10" : value;
             },
-            color: "rgba(255,255,255,0.4)",
+            color: "rgba(255,255,255,0.58)",
             font: { size: 11 },
             backdropColor: "transparent",
           },
           grid: {
-            color: "rgba(255,255,255,0.08)",
+            color: "rgba(255,255,255,0.1)",
           },
           pointLabels: {
-            color: "rgba(255,255,255,0.4)",
+            color: "rgba(255,255,255,0.58)",
             font: { size: 11 },
           },
         },

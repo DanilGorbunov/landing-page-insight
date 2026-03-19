@@ -80,7 +80,7 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites, progressiveAx
             display: false,
           },
           ticks: {
-            color: "rgba(255,255,255,0.5)",
+            color: "rgba(255,255,255,0.62)",
             font: { size: 11 },
             crossAlign: "far",
             padding: 8,
