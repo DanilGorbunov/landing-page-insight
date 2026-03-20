@@ -1,20 +1,69 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Globe, Plus, ChevronDown, X, History } from "lucide-react";
+import { Globe, Plus, ChevronDown, X, History, ArrowUpRight, Users } from "lucide-react";
 import { staggerContainer, staggerItem } from "@/lib/motion";
-import { cn, isValidHttpUrl, normalizeInputUrl } from "@/lib/utils";
+import { cn, isValidHttpUrl, normalizeInputUrl, DEFAULT_SCORE } from "@/lib/utils";
+import type { HistoryEntry } from "@/lib/analysisHistory";
 
 const SAMPLE_SITES = ["apollo.io", "linear.app", "hubspot.com", "notion.so"];
+
+const FAVICON = (domain: string) =>
+  `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+
+/** Decorative strip — mix of household names & smaller teams (demo / social proof). */
+const TRUSTED_BY_COMPANIES: { name: string; domain: string }[] = [
+  { name: "Ollama", domain: "ollama.com" },
+  { name: "Wallmart", domain: "walmart.com" },
+  { name: "Otto", domain: "otto.de" },
+  { name: "Linear", domain: "linear.app" },
+  { name: "Vercel", domain: "vercel.com" },
+  { name: "Stripe", domain: "stripe.com" },
+  { name: "Notion", domain: "notion.so" },
+  { name: "Supabase", domain: "supabase.com" },
+  { name: "Raycast", domain: "raycast.com" },
+  { name: "Lovable", domain: "lovable.dev" },
+  { name: "Polar", domain: "polar.sh" },
+  { name: "Resend", domain: "resend.com" },
+  { name: "Plausible", domain: "plausible.io" },
+  { name: "Cal", domain: "cal.com" },
+  { name: "Airtable", domain: "airtable.com" },
+  { name: "Miro", domain: "miro.com" },
+  { name: "Zapier", domain: "zapier.com" },
+  { name: "Webflow", domain: "webflow.com" },
+  { name: "HubSpot", domain: "hubspot.com" },
+];
+
+function formatRecentTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const diff = Date.now() - d.getTime();
+    if (diff < 60000) return "Just now";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  } catch {
+    return "";
+  }
+}
 
 interface InputScreenProps {
   onAnalyze: (url: string, competitors: string[]) => void | Promise<void>;
   onOpenHistory?: () => void;
   historyCount?: number;
   analyzeError?: string | null;
+  recentAnalyses?: HistoryEntry[];
+  onSelectRecent?: (entry: HistoryEntry) => void;
 }
 
-const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError }: InputScreenProps) => {
+const InputScreen = ({
+  onAnalyze,
+  onOpenHistory,
+  historyCount = 0,
+  analyzeError,
+  recentAnalyses = [],
+  onSelectRecent,
+}: InputScreenProps) => {
   const [url, setUrl] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
   const [showCompetitors, setShowCompetitors] = useState(false);
@@ -75,7 +124,10 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
         </header>
       )}
 
-      <main id="main" className="flex-1 flex flex-col items-center justify-center px-4 pt-14 pb-8 md:pb-10">
+      <main
+        id="main"
+        className="flex-1 flex flex-col items-center justify-center px-4 pt-20 pb-8 sm:pt-28 md:pt-36 lg:pt-44 md:pb-10"
+      >
         <motion.div
           variants={staggerContainer}
           initial="hidden"
@@ -217,6 +269,135 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
           )}
         </motion.div>
         </motion.div>
+
+        {recentAnalyses.length > 0 && onSelectRecent && (
+          <section
+            className="mt-24 w-full max-w-5xl px-2 sm:px-4 md:mt-32 lg:mt-40"
+            aria-labelledby="recent-comparisons-heading"
+          >
+            <div className="mb-6 text-center">
+              <p id="recent-comparisons-heading" className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Recent comparisons
+              </p>
+              <p className="mt-1.5 text-sm text-muted-foreground/90">
+                {recentAnalyses.slice(0, 3).every((e) => e.source === "demo")
+                  ? "Example reports — tap a card to preview. Run Analyze to see your own."
+                  : recentAnalyses.slice(0, 3).every((e) => e.source === "server")
+                    ? "Latest analyses from our workspace — tap a card to open the report."
+                    : "Your last runs vs competitor landings — tap a card to open the report."}
+              </p>
+            </div>
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+              {recentAnalyses.slice(0, 3).map((entry) => {
+                const nComp = Math.min(3, entry.result?.competitors?.length ?? 0);
+                const score = entry.score ?? DEFAULT_SCORE;
+                return (
+                  <li key={entry.id}>
+                    <button
+                      type="button"
+                      onClick={() => onSelectRecent(entry)}
+                      className="group flex h-full w-full flex-col rounded-2xl border border-white/[0.08] bg-card/35 p-4 text-left shadow-sm shadow-black/20 transition-all hover:border-primary/35 hover:bg-card/55 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    >
+                      <div className="flex items-start gap-3">
+                        <img
+                          src={FAVICON(entry.domain)}
+                          alt=""
+                          className="mt-0.5 h-10 w-10 shrink-0 rounded-lg border border-white/10 bg-background/80 object-contain p-1"
+                          width={40}
+                          height={40}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <p className="truncate font-mono text-sm font-medium text-foreground group-hover:text-primary">
+                              {entry.domain}
+                            </p>
+                            {entry.source === "demo" && (
+                              <span className="shrink-0 rounded border border-white/15 bg-muted/50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Sample
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <Users className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                            {nComp === 0
+                              ? "Analysis run"
+                              : nComp === 1
+                                ? "vs 1 competitor"
+                                : `vs ${nComp} competitors`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 border-t border-white/[0.06] pt-4">
+                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Overall score
+                        </p>
+                        <p className="mt-0.5 flex items-baseline gap-1">
+                          <span className="font-mono text-2xl font-bold tabular-nums text-foreground">
+                            {score.toFixed(1)}
+                          </span>
+                          <span className="text-xs font-mono text-muted-foreground">/10</span>
+                        </p>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>{formatRecentTime(entry.analyzedAt)}</span>
+                        <span className="inline-flex items-center gap-0.5 font-medium text-primary opacity-90 group-hover:opacity-100">
+                          Open
+                          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+                        </span>
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <section
+          className={cn(
+            "w-full max-w-5xl px-2 sm:px-4 grayscale",
+            recentAnalyses.length > 0 && onSelectRecent
+              ? "mt-10 md:mt-14"
+              : "mt-24 md:mt-32 lg:mt-40"
+          )}
+          aria-label="Companies that use Landing Lens"
+        >
+          <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Trusted by teams at
+          </p>
+          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-muted/20 py-4 shadow-inner shadow-black/30">
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-background to-transparent sm:w-16"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-background to-transparent sm:w-16"
+              aria-hidden
+            />
+            <div className="overflow-hidden">
+              <div className="flex w-max items-center gap-x-10 gap-y-3 px-4 animate-marquee motion-reduce:animate-none motion-reduce:flex-wrap motion-reduce:justify-center motion-reduce:gap-4 sm:gap-x-14 sm:px-6">
+                {[...TRUSTED_BY_COMPANIES, ...TRUSTED_BY_COMPANIES].map((c, i) => (
+                  <div
+                    key={`${c.domain}-${i}`}
+                    className="flex shrink-0 items-center gap-2.5 opacity-95"
+                  >
+                    <img
+                      src={FAVICON(c.domain)}
+                      alt=""
+                      className="h-5 w-5 shrink-0 rounded object-contain grayscale"
+                      width={20}
+                      height={20}
+                      loading="lazy"
+                    />
+                    <span className="whitespace-nowrap text-sm font-medium text-foreground/80">
+                      {c.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   );

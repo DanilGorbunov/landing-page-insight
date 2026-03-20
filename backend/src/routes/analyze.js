@@ -15,6 +15,7 @@ import { scrapeWithScreenshot } from "../services/screenshotService.js";
 import { findCompetitors } from "../services/competitorDiscovery.js";
 import { analyzeLandingSections } from "../services/analysisService.js";
 import { synthesizeReport, parseScoreFromSection } from "../services/synthesisService.js";
+import { recordRecentComparison, getRecentComparisons } from "../services/recentComparisonsStore.js";
 
 export const analyzeRouter = Router();
 
@@ -177,10 +178,18 @@ async function runPipeline(jobId) {
   const cacheKey = getCacheKey(userUrl);
   const cached = resultCache.get(cacheKey);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    const result = cached.result;
     jobStore.updateJob(jobId, {
       status: "completed",
-      result: cached.result,
-      live: liveFromCompletedResult(cached.result, userUrl),
+      result,
+      live: liveFromCompletedResult(result, userUrl),
+    });
+    recordRecentComparison({
+      jobId,
+      domain: getDomain(userUrl),
+      score: result.synthesis?.overall_score,
+      competitorCount: result.competitors?.length ?? 0,
+      result,
     });
     return;
   }
@@ -481,6 +490,14 @@ async function runPipeline(jobId) {
       result,
       live: liveFromCompletedResult(result, userUrl),
     });
+
+    recordRecentComparison({
+      jobId,
+      domain: getDomain(userUrl),
+      score: synthesis.overall_score,
+      competitorCount: synthesisInputCompetitors.length,
+      result,
+    });
   } catch (err) {
     console.error("[analyze] pipeline failed", jobId, err?.message || err);
     jobStore.updateJob(jobId, {
@@ -489,6 +506,13 @@ async function runPipeline(jobId) {
     });
   }
 }
+
+analyzeRouter.get("/recent-comparisons", (req, res) => {
+  const raw = req.query.limit;
+  const parsed = raw == null || raw === "" ? 3 : parseInt(String(raw), 10);
+  const limit = Number.isFinite(parsed) ? parsed : 3;
+  res.json(getRecentComparisons(limit));
+});
 
 analyzeRouter.post("/analyze", validateAnalyzeBody, (req, res) => {
   const url = req.body.url;

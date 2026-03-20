@@ -8,6 +8,7 @@ import { requestIdMiddleware } from "./middleware/requestId.js";
 import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { analyzeRouter } from "./routes/analyze.js";
+import { initRecentDb } from "./services/recentComparisonsStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
@@ -37,5 +38,10 @@ app.use("/api", analyzeRouter);
 app.use(errorHandler);
 
 app.listen(config.port, () => {
+  try {
+    initRecentDb();
+  } catch (e) {
+    console.warn("[recentComparisons] init failed:", e?.message || e);
+  }
   console.log(`LandingLens API running on http://localhost:${config.port}`);
 });

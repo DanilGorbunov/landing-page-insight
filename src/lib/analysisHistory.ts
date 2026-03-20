@@ -1,4 +1,4 @@
-import type { AnalysisResult } from "@/lib/api";
+import type { AnalysisResult } from "@/types/api";
 import { getDomain, parseScoreFromReport, getCompetitorOverallScore, DEFAULT_SCORE } from "@/lib/utils";
 
 const STORAGE_KEY = "ll_history";
@@ -18,6 +18,8 @@ export interface HistoryEntry {
   analyzedAt: string;
   expiresAt: number;
   result: AnalysisResult;
+  /** Where the row came from (home cards / history). */
+  source?: "local" | "server" | "demo";
 }
 
 export function hasFullInsightsHistoryUnlock(): boolean {
@@ -61,6 +63,7 @@ export function saveToHistory(url: string, result: AnalysisResult): void {
     analyzedAt: new Date().toISOString(),
     expiresAt: persistent ? PERMANENT_EXPIRES_AT : Date.now() + TTL_MS,
     result,
+    source: "local",
   };
   const updated = [entry, ...history].slice(0, MAX_ENTRIES);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));

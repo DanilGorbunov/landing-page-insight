@@ -1,5 +1,6 @@
 import { VITE_API_BASE_URL } from "@/lib/env";
 import { API_TIMEOUT_MS, MAX_COMPETITORS } from "@/lib/constants";
+import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult, CriticalGap, JobProgressEntry, JobLiveState, JobStatus } from "@/types/api";
 
 export type { AnalysisResult, CriticalGap, JobProgressEntry, JobLiveState, JobStatus } from "@/types/api";
@@ -54,4 +55,37 @@ export async function getJobStatus(jobId: string): Promise<JobStatus> {
   const res = await fetchWithTimeout(`${API_BASE}/api/analyze/job/${jobId}`, DEFAULT_FETCH_OPTIONS);
   if (!res.ok) throw new Error("Job not found");
   return res.json();
+}
+
+const PERMANENT_EXPIRES_AT = 8640000000000000;
+
+/** Latest completed comparisons from the API (global feed). Empty if backend missing or error. */
+export async function fetchRecentComparisonsFromApi(limit = 3): Promise<HistoryEntry[]> {
+  if (!API_BASE) return [];
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/api/recent-comparisons?limit=${limit}`, {
+      ...DEFAULT_FETCH_OPTIONS,
+      method: "GET",
+    });
+    if (!res.ok) return [];
+    const rows = (await res.json()) as {
+      id: string;
+      domain: string;
+      score: number | null;
+      analyzedAt: string;
+      result: AnalysisResult;
+    }[];
+    if (!Array.isArray(rows)) return [];
+    return rows.map((r) => ({
+      id: r.id,
+      domain: r.domain,
+      score: r.score == null ? undefined : Number(r.score),
+      analyzedAt: r.analyzedAt,
+      expiresAt: PERMANENT_EXPIRES_AT,
+      result: r.result,
+      source: "server" as const,
+    }));
+  } catch {
+    return [];
+  }
 }

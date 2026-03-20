@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import InputScreen from "@/components/InputScreen";
 import ProgressiveReportView from "@/components/ProgressiveReportView";
 import ReportScreen from "@/components/ReportScreen";
 import Dashboard from "@/components/Dashboard";
-import { startAnalysis, type JobLiveState } from "@/lib/api";
-import { saveToHistory, getHistoryCount, hasFullInsightsHistoryUnlock, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
+import { startAnalysis, fetchRecentComparisonsFromApi, type JobLiveState } from "@/lib/api";
+import { saveToHistory, getHistory, getHistoryCount, hasFullInsightsHistoryUnlock, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
+import { getDefaultRecentComparisons } from "@/lib/demoRecentComparisons";
 import { REPORT_RETURN_KEY, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
 
 type Screen = "input" | "progress" | "report" | "dashboard";
@@ -21,6 +22,7 @@ const Index = () => {
   const [savedEntryForReport, setSavedEntryForReport] = useState<HistoryEntry | null>(null);
   const [historyCount, setHistoryCount] = useState(getHistoryCount);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [remoteRecentComparisons, setRemoteRecentComparisons] = useState<HistoryEntry[]>([]);
   /** When user opened History from Report, back should return to Report; otherwise to Input */
   const [screenBeforeDashboard, setScreenBeforeDashboard] = useState<"input" | "report">("input");
 
@@ -47,6 +49,17 @@ const Index = () => {
     setScreen("dashboard");
     navigate(".", { state: {}, replace: true });
   }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    if (screen !== "input") return;
+    let cancelled = false;
+    fetchRecentComparisonsFromApi(3).then((rows) => {
+      if (!cancelled) setRemoteRecentComparisons(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [screen, historyCount]);
 
   const normalizeUrl = useCallback((raw: string) => {
     const u = raw.trim();
@@ -158,6 +171,13 @@ const Index = () => {
 
   const reportResult = lastResult ?? savedEntryForReport?.result ?? null;
 
+  const recentAnalysesForHome = useMemo(() => {
+    const local = getHistory().slice(0, 3);
+    if (local.length > 0) return local;
+    if (remoteRecentComparisons.length > 0) return remoteRecentComparisons;
+    return getDefaultRecentComparisons();
+  }, [historyCount, remoteRecentComparisons]);
+
   return (
     <div className="min-h-screen bg-background">
       <a href="#main" className="absolute -left-full top-0 z-[100] p-4 bg-primary text-primary-foreground rounded-md focus:left-4 focus:top-4 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background">
@@ -169,6 +189,8 @@ const Index = () => {
           onOpenHistory={handleOpenHistory}
           historyCount={historyCount}
           analyzeError={analyzeError}
+          recentAnalyses={recentAnalysesForHome}
+          onSelectRecent={handleViewReport}
         />
       )}
       {screen === "dashboard" && (
