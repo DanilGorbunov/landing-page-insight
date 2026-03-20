@@ -2,8 +2,12 @@ import type { AnalysisResult } from "@/lib/api";
 import { getDomain, parseScoreFromReport, getCompetitorOverallScore, DEFAULT_SCORE } from "@/lib/utils";
 
 const STORAGE_KEY = "ll_history";
+/** After full / extended report unlock — history entries do not expire (local demo). */
+export const HISTORY_FULL_UNLOCK_KEY = "ll_history_full_unlock";
 const MAX_ENTRIES = 10;
-const TTL_MS = 60 * 60 * 1000; // 1 hour
+const TTL_MS = 60 * 60 * 1000; // 1 hour (free users)
+/** Far-future expiry for “permanent” rows (JSON-safe). */
+const PERMANENT_EXPIRES_AT = 8640000000000000;
 
 export type { AnalysisResult };
 
@@ -16,10 +20,35 @@ export interface HistoryEntry {
   result: AnalysisResult;
 }
 
+export function hasFullInsightsHistoryUnlock(): boolean {
+  try {
+    return localStorage.getItem(HISTORY_FULL_UNLOCK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Call after demo checkout or when opening the extended report — domains in History no longer expire.
+ * Migrates existing rows to non-expiring.
+ */
+export function enableFullInsightsHistoryPersistence(): void {
+  try {
+    localStorage.setItem(HISTORY_FULL_UNLOCK_KEY, "1");
+    const history = getHistoryRaw();
+    if (history.length === 0) return;
+    const migrated = history.map((e) => ({ ...e, expiresAt: PERMANENT_EXPIRES_AT }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 export function saveToHistory(url: string, result: AnalysisResult): void {
   cleanExpired();
   const domain = getDomain(url);
   const history = getHistory();
+  const persistent = hasFullInsightsHistoryUnlock();
   const score =
     result.synthesis?.overall_score ??
     parseScoreFromReport(result.report) ??
@@ -30,7 +59,7 @@ export function saveToHistory(url: string, result: AnalysisResult): void {
     domain,
     score,
     analyzedAt: new Date().toISOString(),
-    expiresAt: Date.now() + TTL_MS,
+    expiresAt: persistent ? PERMANENT_EXPIRES_AT : Date.now() + TTL_MS,
     result,
   };
   const updated = [entry, ...history].slice(0, MAX_ENTRIES);
@@ -48,6 +77,7 @@ export function getHistory(): HistoryEntry[] {
 }
 
 export function cleanExpired(): void {
+  if (hasFullInsightsHistoryUnlock()) return;
   const history = getHistoryRaw();
   const now = Date.now();
   const fresh = history.filter((e) => e.expiresAt > now);

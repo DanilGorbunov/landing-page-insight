@@ -8,6 +8,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index.tsx";
 
 const Pricing = lazy(() => import("./pages/Pricing.tsx"));
+const CheckoutDemo = lazy(() => import("./pages/CheckoutDemo.tsx"));
+const FullInsightsReport = lazy(() => import("./pages/FullInsightsReport.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient();
@@ -36,6 +38,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/checkout" element={<CheckoutDemo />} />
+              <Route path="/full-insights" element={<FullInsightsReport />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

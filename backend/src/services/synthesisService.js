@@ -128,7 +128,7 @@ export async function synthesizeReport(input) {
   const prompt = `${parts.join("")}
 
 Markdown report — first line exactly: "${scoreLine}"
-Sections: (1) Executive summary 2–4 tight sentences (2) Strengths vs competitors (bullets OK) (3) Gaps/recommendations — cite evidence from above only (4) Top 3 next steps. Prefer brevity; avoid repetition.
+Then use these H2 headings in order (## exactly): ## Executive summary — 2–4 tight sentences · ## Strengths vs competitors — bullets OK · ## Gaps and recommendations — cite evidence from above only · ## Top 3 next steps — numbered list. Use ### only for short subheads inside a section if needed. Prefer brevity; avoid repetition.
 
 ---
 CRITICAL GAPS

@@ -5,11 +5,10 @@ import ProgressiveReportView from "@/components/ProgressiveReportView";
 import ReportScreen from "@/components/ReportScreen";
 import Dashboard from "@/components/Dashboard";
 import { startAnalysis, type JobLiveState } from "@/lib/api";
-import { saveToHistory, getHistoryCount, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
+import { saveToHistory, getHistoryCount, hasFullInsightsHistoryUnlock, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
+import { REPORT_RETURN_KEY, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
 
 type Screen = "input" | "progress" | "report" | "dashboard";
-
-const REPORT_RETURN_KEY = "landinglens_report_return";
 
 const Index = () => {
   const location = useLocation();
@@ -41,6 +40,14 @@ const Index = () => {
     navigate(".", { state: {}, replace: true });
   }, [location.pathname, location.state?.restoreReport, navigate]);
 
+  useEffect(() => {
+    if (location.pathname !== "/" || (location.state as { openHistory?: boolean })?.openHistory !== true) return;
+    setHistoryCount(getHistoryCount());
+    setScreenBeforeDashboard("input");
+    setScreen("dashboard");
+    navigate(".", { state: {}, replace: true });
+  }, [location.pathname, location.state, navigate]);
+
   const normalizeUrl = useCallback((raw: string) => {
     const u = raw.trim();
     if (!u) return u;
@@ -65,16 +72,31 @@ const Index = () => {
     }
   }, [normalizeUrl]);
 
-  const handleComplete = useCallback((result: AnalysisResult | null) => {
-    const urlToSave = url || "";
-    if (result) {
-      setLastResult(result);
-      saveToHistory(urlToSave, result);
-      setHistoryCount(getHistoryCount());
-    }
-    setJobId(null);
-    setScreen("report");
-  }, [url]);
+  const handleComplete = useCallback(
+    (result: AnalysisResult | null) => {
+      const urlToSave = url || "";
+      if (result) {
+        setLastResult(result);
+        saveToHistory(urlToSave, result);
+        setHistoryCount(getHistoryCount());
+      }
+      setJobId(null);
+      if (result && hasFullInsightsHistoryUnlock()) {
+        const meta = readFullInsightsUnlockMeta();
+        writeFullInsightsPayload({
+          url: urlToSave.startsWith("http") ? urlToSave : `https://${urlToSave.replace(/^\/\//, "")}`,
+          result,
+          planId: meta?.planId ?? "one-time",
+          planName: meta?.planName ?? "Full insights",
+          paidAt: new Date().toISOString(),
+        });
+        navigate("/full-insights");
+        return;
+      }
+      setScreen("report");
+    },
+    [url, navigate]
+  );
 
   const handleOpenHistory = useCallback(() => {
     setHistoryCount(getHistoryCount());
@@ -82,12 +104,27 @@ const Index = () => {
     setScreen("dashboard");
   }, [screen]);
 
-  const handleViewReport = useCallback((entry: HistoryEntry) => {
-    setUrl(`https://${entry.domain}`);
-    setSavedEntryForReport(entry);
-    setLastResult(entry.result);
-    setScreen("report");
-  }, []);
+  const handleViewReport = useCallback(
+    (entry: HistoryEntry) => {
+      if (hasFullInsightsHistoryUnlock()) {
+        const meta = readFullInsightsUnlockMeta();
+        writeFullInsightsPayload({
+          url: `https://${entry.domain}`,
+          result: entry.result,
+          planId: meta?.planId ?? "one-time",
+          planName: meta?.planName ?? "Full insights",
+          paidAt: meta?.paidAt ?? entry.analyzedAt,
+        });
+        navigate("/full-insights");
+        return;
+      }
+      setUrl(`https://${entry.domain}`);
+      setSavedEntryForReport(entry);
+      setLastResult(entry.result);
+      setScreen("report");
+    },
+    [navigate]
+  );
 
   const handleBackFromReport = useCallback(() => {
     if (savedEntryForReport) {
@@ -160,6 +197,7 @@ const Index = () => {
           onBack={handleBackFromReport}
           onOpenHistory={handleOpenHistory}
           onGoHome={handleGoHome}
+          historyCount={historyCount}
         />
       )}
     </div>

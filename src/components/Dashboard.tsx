@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Trash2, FileText } from "lucide-react";
-import { getHistory, clearHistory, type HistoryEntry } from "@/lib/analysisHistory";
+import { getHistory, clearHistory, hasFullInsightsHistoryUnlock, type HistoryEntry } from "@/lib/analysisHistory";
 import { DEFAULT_SCORE } from "@/lib/utils";
 
 const FAVICON = (domain: string) =>
@@ -14,6 +14,9 @@ function scoreColor(score: number | undefined): string {
 }
 
 function expiresIn(expiresAt: number): { text: string; urgent: boolean } {
+  if (hasFullInsightsHistoryUnlock() || expiresAt > Date.now() + 365 * 24 * 60 * 60 * 1000 * 50) {
+    return { text: "Saved", urgent: false };
+  }
   const min = Math.max(0, Math.floor((expiresAt - Date.now()) / 60000));
   return {
     text: min <= 0 ? "Expired" : `Expires in ${min} min`,

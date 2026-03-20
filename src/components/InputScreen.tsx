@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Globe, Plus, ChevronDown, X, History } from "lucide-react";
 import { staggerContainer, staggerItem } from "@/lib/motion";
-import { isValidHttpUrl, normalizeInputUrl } from "@/lib/utils";
+import { cn, isValidHttpUrl, normalizeInputUrl } from "@/lib/utils";
 
 const SAMPLE_SITES = ["apollo.io", "linear.app", "hubspot.com", "notion.so"];
 
@@ -57,7 +57,7 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Topbar: History (right) */}
       {onOpenHistory && (
-        <header className="sticky top-0 z-20 left-0 right-0 h-14 flex items-center justify-end px-4 md:px-8 border-b border-transparent bg-background/80 backdrop-blur-sm">
+        <header className="sticky top-0 z-20 left-0 right-0 h-14 flex items-center justify-end px-4 md:px-8 border-b border-white/[0.06] bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
           <button
             type="button"
             onClick={onOpenHistory}
@@ -141,14 +141,24 @@ const InputScreen = ({ onAnalyze, onOpenHistory, historyCount = 0, analyzeError 
           <p className="mt-3 text-sm text-destructive">{urlError || analyzeError}</p>
         )}
 
-        {/* Try chips — 2 on mobile, all 4 from sm */}
-        <motion.div variants={staggerItem} className="mt-5 flex flex-wrap items-center justify-center gap-2">
-          <span className="text-xs text-muted-foreground">Try:</span>
+        {/* Try chips — 2 on mobile, all 4 from sm; single row rhythm: same height, even gaps */}
+        <motion.div
+          variants={staggerItem}
+          className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-2"
+        >
+          <span className="flex h-10 shrink-0 items-center text-xs font-medium leading-none text-muted-foreground">
+            Try:
+          </span>
           {SAMPLE_SITES.map((site, i) => (
             <button
               key={site}
+              type="button"
               onClick={() => setUrl(`https://${site}`)}
-              className={`min-h-[40px] px-3 py-2 rounded-sm text-xs font-mono text-secondary-foreground glass-surface hover:border-primary/30 transition-colors ${i >= 2 ? "hidden sm:inline-flex" : ""}`}
+              className={cn(
+                "inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-card/40 px-3 text-xs font-mono tabular-nums leading-none text-secondary-foreground transition-colors",
+                "hover:border-primary/40 hover:bg-card/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                i >= 2 && "hidden sm:inline-flex"
+              )}
             >
               {site}
             </button>

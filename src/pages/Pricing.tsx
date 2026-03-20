@@ -39,6 +39,10 @@ const Pricing = () => {
   const location = useLocation();
   const fromReport = location.state?.fromReport === true;
 
+  const goCheckout = (planId: string) => {
+    navigate(`/checkout?plan=${encodeURIComponent(planId)}`, { state: { fromReport, planId } });
+  };
+
   const handleBack = () => {
     if (fromReport) {
       navigate("/", { state: { restoreReport: true } });
@@ -49,24 +53,24 @@ const Pricing = () => {
 
   return (
   <div className="min-h-screen bg-background flex flex-col">
-    <header className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background">
+    <header className="sticky top-0 z-20 h-14 flex items-center border-b border-white/[0.06] bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
       <div className="max-w-5xl mx-auto w-full px-4 flex items-center justify-between">
         <TouchTargetButton
           onClick={handleBack}
-          className="gap-2 px-2 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+          className="gap-2 px-2 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back
         </TouchTargetButton>
-        <Link to="/" className={`${TOUCH_TARGET_CLASS} font-sans text-lg font-medium tracking-tight text-primary hover:opacity-90`}>Landing Lens</Link>
+        <Link to="/" className={`${TOUCH_TARGET_CLASS} font-sans text-base font-semibold tracking-tight text-foreground hover:text-primary transition-colors`}>Landing Lens</Link>
         <div className="w-16" />
       </div>
     </header>
 
     <main className="flex-1 px-4 py-8 sm:py-12 pb-12 max-w-5xl mx-auto w-full">
       <div className="text-center mb-12">
-        <h1 className="text-2xl md:text-3xl font-semibold text-foreground mb-2">Plans & pricing</h1>
-        <p className="text-muted-foreground text-sm max-w-md mx-auto">
+        <h1 className="font-display text-3xl md:text-[2rem] font-medium tracking-tight text-foreground mb-3">Plans & pricing</h1>
+        <p className="text-muted-foreground text-sm max-w-md mx-auto leading-relaxed">
           One-time report or unlimited analyses. Choose what fits your workflow.
         </p>
       </div>
@@ -94,6 +98,8 @@ const Pricing = () => {
               ))}
             </ul>
             <TouchTargetButton
+              type="button"
+              onClick={() => goCheckout(plan.id)}
               className="mt-6 w-full py-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors touch-manipulation"
             >
               Get started

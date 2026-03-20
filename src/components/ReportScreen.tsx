@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, ArrowUpRight, Check, X, ExternalLink, ArrowLeft } from "lucide-react";
 import type { HistoryEntry } from "@/lib/analysisHistory";
+import { REPORT_RETURN_KEY } from "@/lib/reportSession";
 import type { AnalysisResult } from "@/lib/api";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -21,7 +22,7 @@ import {
 import { containerVariants, itemVariants } from "@/lib/motion";
 import { CompetitiveCharts } from "@/components/CompetitiveCharts";
 
-const SECTION_TO_BACKEND: Record<string, string> = {
+export const SECTION_TO_BACKEND: Record<string, string> = {
   Hero: "hero",
   "Value Prop": "value proposition",
   Features: "features",
@@ -30,10 +31,10 @@ const SECTION_TO_BACKEND: Record<string, string> = {
 };
 
 const TABS = ["Overview"] as const;
-const SECTION_TABS = ["Hero", "Value Prop", "Features", "Social Proof", "CTA"] as const;
+export const SECTION_TABS = ["Hero", "Value Prop", "Features", "Social Proof", "CTA"] as const;
 
 type Tab = (typeof TABS)[number];
-type SectionTab = (typeof SECTION_TABS)[number];
+export type SectionTab = (typeof SECTION_TABS)[number];
 
 interface ReportScreenProps {
   url: string;
@@ -42,6 +43,8 @@ interface ReportScreenProps {
   onBack?: () => void;
   onOpenHistory?: () => void;
   onGoHome?: () => void;
+  /** Shown next to History when &gt; 0 */
+  historyCount?: number;
 }
 
 const AnimatedScore = ({ target }: { target: number }) => {
@@ -262,7 +265,7 @@ function metricValueColor(score: number): string {
 }
 
 /** Per-site numeric breakdown; scores parsed from analysis text (X/10). */
-function SiteSectionMetricsCard({
+export function SiteSectionMetricsCard({
   domain,
   siteUrl,
   isUser,
@@ -340,7 +343,7 @@ function ratingTheme(score: number | null) {
 
 const RATING_TOOLTIP = "Average of section scores (Hero, Value prop, Features, Social proof, CTA). We look for “X/10” or “X.Y/10” in each section’s analysis text and average them.";
 
-function SectionCard({
+export function SectionCard({
   domain,
   siteUrl,
   isUser,
@@ -428,9 +431,15 @@ function SectionCard({
   );
 }
 
-const REPORT_RETURN_KEY = "landinglens_report_return";
-
-const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome }: ReportScreenProps) => {
+const ReportScreen = ({
+  url,
+  result,
+  savedEntry,
+  onBack,
+  onOpenHistory,
+  onGoHome,
+  historyCount = 0,
+}: ReportScreenProps) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [activeSection, setActiveSection] = useState<SectionTab>("Hero");
@@ -461,7 +470,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
   return (
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Top bar — aligned to content container start */}
-      <div className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background">
+      <div className="sticky top-0 z-20 h-14 flex items-center border-b border-white/[0.06] bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
         <div className="max-w-6xl mx-auto w-full px-4 md:px-8 flex items-center min-w-0">
           {onBack && (
             <button
@@ -491,10 +500,10 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`touch-target shrink-0 px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+                className={`touch-target shrink-0 px-3 sm:px-4 py-2.5 text-sm font-semibold rounded-full transition-colors ${
                   activeTab === tab
                     ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
                 }`}
               >
                 {tab}
@@ -504,9 +513,15 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
               <button
                 type="button"
                 onClick={onOpenHistory}
-                className="touch-target shrink-0 px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+                className="touch-target inline-flex shrink-0 items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-sm font-semibold rounded-full text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
+                aria-label={historyCount > 0 ? `History, ${historyCount} analyses` : "Open history"}
               >
                 History
+                {historyCount > 0 && (
+                  <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary/20 text-primary text-xs font-semibold flex items-center justify-center">
+                    {historyCount}
+                  </span>
+                )}
               </button>
             )}
           </nav>
@@ -524,7 +539,7 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
             >
               <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:gap-8">
                 <div className="flex-1 min-w-0 flex flex-col order-2 sm:order-1">
-                  <h2 className="text-sm font-semibold text-foreground mb-2">{domain}</h2>
+                  <h2 className="font-display text-xl font-medium tracking-tight text-foreground mb-2">{domain}</h2>
                   <div className="relative overflow-hidden max-h-[8rem] space-y-2 pr-1">
                     {(() => {
                       let raw = stripMarkdownFormatting(synthesisText || "");
@@ -576,10 +591,10 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                   <button
                     key={tab}
                     onClick={() => setActiveSection(tab)}
-                    className={`px-4 py-2.5 text-xs font-medium rounded-lg transition-colors ${
+                    className={`px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
                       activeSection === tab
-                        ? "bg-secondary text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                        : "border border-white/[0.08] bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                     }`}
                   >
                     {tab}
@@ -752,10 +767,10 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                 <button
                   key={tab}
                   onClick={() => setActiveSection(tab)}
-                  className={`px-4 py-2.5 text-xs font-medium rounded-lg transition-colors ${
+                  className={`px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
                     activeSection === tab
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                      : "border border-white/[0.08] bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                   }`}
                 >
                   {tab}
