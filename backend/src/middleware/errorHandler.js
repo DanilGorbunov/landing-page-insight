@@ -4,6 +4,8 @@
  * Never leaks stack or internal details in production.
  */
 
+import { setCorsHeaders } from "./cors.js";
+
 const isDev = process.env.NODE_ENV !== "production";
 
 /**
@@ -23,6 +25,10 @@ function errorResponse(message, opts = {}) {
  * Expects errors to have .statusCode or .status (4xx/5xx); defaults to 500.
  */
 export function errorHandler(err, req, res, _next) {
+  if (!res.headersSent) {
+    setCorsHeaders(req, res);
+  }
+
   const requestId = req.id || req.headers["x-request-id"];
   const statusCode = err.statusCode ?? err.status ?? 500;
   const code = err.code || (statusCode === 400 ? "BAD_REQUEST" : statusCode === 404 ? "NOT_FOUND" : "INTERNAL_ERROR");

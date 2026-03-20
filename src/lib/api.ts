@@ -1,8 +1,8 @@
 import { VITE_API_BASE_URL } from "@/lib/env";
 import { API_TIMEOUT_MS, MAX_COMPETITORS } from "@/lib/constants";
-import type { AnalysisResult, CriticalGap, JobProgressEntry, JobStatus } from "@/types/api";
+import type { AnalysisResult, CriticalGap, JobProgressEntry, JobLiveState, JobStatus } from "@/types/api";
 
-export type { AnalysisResult, CriticalGap, JobProgressEntry, JobStatus } from "@/types/api";
+export type { AnalysisResult, CriticalGap, JobProgressEntry, JobLiveState, JobStatus } from "@/types/api";
 
 const API_BASE = VITE_API_BASE_URL;
 
@@ -24,7 +24,7 @@ function fetchWithTimeout(url: string, options: RequestInit & { timeoutMs?: numb
 export async function startAnalysis(
   url: string,
   competitorUrls?: string[]
-): Promise<{ jobId: string }> {
+): Promise<{ jobId: string; live?: JobLiveState }> {
   const urlToCall = `${API_BASE}/api/analyze`;
   const body: { url: string; competitors?: string[] } = { url };
   const valid = competitorUrls?.filter((u) => u?.trim()).slice(0, MAX_COMPETITORS) ?? [];

@@ -3,6 +3,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import express from "express";
 import { validateEnv, getConfig } from "./config/env.js";
+import { corsMiddleware } from "./middleware/cors.js";
 import { requestIdMiddleware } from "./middleware/requestId.js";
 import { requestLogger } from "./middleware/logger.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -16,19 +17,19 @@ const config = getConfig();
 
 const app = express();
 
+// CORS first so preflight and error responses always get Allow-* headers
+app.use(corsMiddleware);
+
 // Request id and structured logging (no body/headers logged to avoid leaking secrets)
 app.use(requestIdMiddleware);
 app.use(requestLogger);
-
-// CORS
-app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
 app.use(express.json());
+
+app.get("/", (_req, res) => {
+  res.type("text/plain").send(
+    "LandingLens API is running. Use POST /api/analyze or GET /api/analyze/job/:jobId. Frontend is usually on port 3003."
+  );
+});
 
 // TODO: rate limiting — consider express-rate-limit or similar for /api/analyze
 app.use("/api", analyzeRouter);

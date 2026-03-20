@@ -6,6 +6,9 @@
 /** Cache analysis result per URL for this long (ms). */
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/** Cache competitor discovery per user domain (Sonnet); skip repeat LLM calls. */
+export const DISCOVERY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 /** Max competitors (user + auto-discovered) per analysis. */
 export const MAX_COMPETITORS = 3;
 
@@ -18,8 +21,8 @@ export const SCRAPE_TIMEOUT_MS = 28000;
 /** Timeout for pre-fetching screenshot URL to base64 in ms. */
 export const PREFETCH_TIMEOUT_MS = 10000;
 
-/** Max concurrent Vision analysis tasks. */
-export const ANALYSIS_CONCURRENCY = 4;
+/** Max concurrent Vision analysis tasks (user + up to MAX_COMPETITORS). */
+export const ANALYSIS_CONCURRENCY = 6;
 
 /** Job store TTL: job data expires after this (ms). */
 export const JOB_TTL_MS = 60 * 60 * 1000; // 1 hour

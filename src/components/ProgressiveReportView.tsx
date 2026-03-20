@@ -17,7 +17,9 @@ import type { RadarSite } from "@/components/CompetitiveRadarChart";
 import { CompetitiveRadarChart } from "@/components/CompetitiveRadarChart";
 import { CompetitiveBarChart } from "@/components/CompetitiveBarChart";
 
-const POLL_MS = 1500;
+/** Faster ticks until synthesis is ready; slower afterward to reduce load. */
+const POLL_MS_FAST = 750;
+const POLL_MS_SLOW = 2200;
 const MAX_POLL_FAILURES = 8;
 
 const FAVICON = (domain: string) =>
@@ -139,6 +141,8 @@ function PriorityBadge({ level }: { level: "P1" | "P2" }) {
 interface ProgressiveReportViewProps {
   jobId: string;
   url: string;
+  /** Snapshot from POST /api/analyze so the first user card renders before the first poll. */
+  initialLive?: JobLiveState | null;
   onComplete: (result: AnalysisResult | null) => void;
   onBack?: () => void;
   onGoHome?: () => void;
@@ -147,15 +151,20 @@ interface ProgressiveReportViewProps {
 export default function ProgressiveReportView({
   jobId,
   url,
+  initialLive,
   onComplete,
   onBack,
   onGoHome,
 }: ProgressiveReportViewProps) {
-  const [live, setLive] = useState<JobLiveState | null>(null);
+  const [live, setLive] = useState<JobLiveState | null>(initialLive ?? null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const doneRef = useRef(false);
   const domain = getDomain(url);
+
+  useEffect(() => {
+    setLive(initialLive ?? null);
+  }, [jobId, initialLive]);
 
   const radarSites = useMemo(() => {
     if (!live?.sites?.length) return [];
@@ -205,6 +214,9 @@ export default function ProgressiveReportView({
             setStreamError(err);
             return;
           }
+
+          const nextDelay = job.live?.synthesis?.ready ? POLL_MS_SLOW : POLL_MS_FAST;
+          await new Promise((r) => setTimeout(r, nextDelay));
         } catch {
           if (cancelled || doneRef.current) return;
           failCount += 1;
@@ -212,8 +224,8 @@ export default function ProgressiveReportView({
             setStreamError("Connection failed. Back to try again.");
             return;
           }
+          await new Promise((r) => setTimeout(r, POLL_MS_FAST));
         }
-        await new Promise((r) => setTimeout(r, POLL_MS));
       }
     };
 

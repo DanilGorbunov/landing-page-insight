@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
 /** Same Sonnet as vision/synthesis for consistent quality on competitor discovery. */
 const DISCOVERY_MODEL = "claude-sonnet-4-20250514";
@@ -101,6 +102,8 @@ Rules:
       },
     ],
   });
+
+  logClaudeUsage("discovery", DISCOVERY_MODEL, response);
 
   const textBlock = response.content.find((b) => b.type === "text");
   const rawText = textBlock ? textBlock.text : "";

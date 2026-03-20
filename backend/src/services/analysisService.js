@@ -1,13 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
+import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
+/** Sonnet for all landings (user + competitors) — consistent comparison quality. */
 const MODEL_SONNET = "claude-sonnet-4-20250514";
-const MODEL_HAIKU = "claude-haiku-4-5-20251001";
-const MAX_IMAGE_WIDTH_USER = 1000;
-const JPEG_QUALITY_USER = 76;
-const MAX_IMAGE_WIDTH_COMPETITOR = 800;
-const JPEG_QUALITY_COMPETITOR = 72;
+const MAX_IMAGE_WIDTH = 1000;
+const JPEG_QUALITY = 76;
 const MARKDOWN_MAX_CHARS = 2800;
+const MAX_TOKENS = 3072;
 const SECTIONS = [
   "hero",
   "value proposition",
@@ -35,41 +35,52 @@ const RANGES = {
 };
 
 /**
- * Crop a vertical section from a full-page screenshot for Vision.
- * @param {Buffer} imageBuffer - Full screenshot (e.g. after resize).
- * @param {string} section - One of: hero, value_prop, features, social_proof, cta.
- * @param {number} [jpegQuality] - JPEG quality for crop output (default USER).
- * @returns {Promise<{ buffer: Buffer, cropTop: number, cropEnd: number, totalHeight: number }>}
+ * Build 5 section JPEG crops in parallel (single metadata read, parallel extract).
+ * @param {Buffer} imageBuffer
+ * @param {number} jpegQuality
+ * @param {string} url - for logs
+ * @returns {Promise<Buffer[]>} Buffers in SECTIONS order
  */
-async function cropSectionFromScreenshot(imageBuffer, section, jpegQuality = JPEG_QUALITY_USER) {
-  const metadata = await sharp(imageBuffer).metadata();
-  const totalHeight = metadata.height;
-  const range = RANGES[section];
-  const top = Math.max(0, range.top - OVERLAP);
-  const bottom = Math.min(1, range.bottom + OVERLAP);
-  let cropTop = Math.floor(top * totalHeight);
-  let cropHeight = Math.floor((bottom - top) * totalHeight);
-  cropHeight = Math.min(cropHeight, totalHeight - cropTop);
-  cropHeight = Math.max(1, cropHeight);
-  cropTop = Math.min(cropTop, totalHeight - 1);
-  const cropEnd = cropTop + cropHeight;
+async function buildSectionCropBuffers(imageBuffer, jpegQuality, url) {
+  const meta = await sharp(imageBuffer).metadata();
+  const totalHeight = meta.height;
+  const imgWidth = meta.width;
 
-  const buffer = await sharp(imageBuffer)
-    .extract({ left: 0, top: cropTop, width: metadata.width, height: cropHeight })
-    .jpeg({ quality: jpegQuality })
-    .toBuffer();
-  return { buffer, cropTop, cropEnd, totalHeight };
+  const crops = await Promise.all(
+    SECTIONS.map(async (sectionName) => {
+      const rangeKey = SECTION_TO_RANGE[sectionName];
+      const range = RANGES[rangeKey];
+      const top = Math.max(0, range.top - OVERLAP);
+      const bottom = Math.min(1, range.bottom + OVERLAP);
+      let cropTop = Math.floor(top * totalHeight);
+      let cropHeight = Math.floor((bottom - top) * totalHeight);
+      cropHeight = Math.min(cropHeight, totalHeight - cropTop);
+      cropHeight = Math.max(1, cropHeight);
+      cropTop = Math.min(cropTop, totalHeight - 1);
+      const cropEnd = cropTop + cropHeight;
+
+      const buffer = await sharp(imageBuffer)
+        .extract({ left: 0, top: cropTop, width: imgWidth, height: cropHeight })
+        .jpeg({ quality: jpegQuality })
+        .toBuffer();
+
+      console.log("[crop]", sectionName + ":", cropTop + "–" + cropEnd + "px of", totalHeight + "px", "(" + url + ")");
+      return buffer;
+    })
+  );
+
+  return crops;
 }
 
 /**
  * Resize image to max width and return buffer (for cropping).
  * @param {string} base64 - Base64 image (optional data: URL prefix).
- * @param {{ maxWidth: number, jpegQuality: number }} opts - User: 1000/76, competitor: 800/72 for speed.
+ * @param {{ maxWidth?: number, jpegQuality?: number }} [opts]
  * @returns {Promise<Buffer|null>} Resized JPEG buffer or null on failure.
  */
 async function getResizedBuffer(base64, opts = {}) {
-  const maxWidth = opts.maxWidth ?? MAX_IMAGE_WIDTH_USER;
-  const jpegQuality = opts.jpegQuality ?? JPEG_QUALITY_USER;
+  const maxWidth = opts.maxWidth ?? MAX_IMAGE_WIDTH;
+  const jpegQuality = opts.jpegQuality ?? JPEG_QUALITY;
   const raw = base64.replace(/^data:image\/\w+;base64,/, "");
   try {
     const buf = Buffer.from(raw, "base64");
@@ -111,17 +122,14 @@ function parseSectionsResponse(text) {
 
 /**
  * Analyze entire landing in one Vision call: all 5 sections from one screenshot + markdown.
- * Uses compressed image and shorter text to reduce tokens (faster + cheaper).
- * @param {{ markdown?: string, screenshotUrl?: string, screenshotBase64?: string, url?: string }} scrapeResult - Scrape output.
- * @param {boolean} [isUserSite=false] - If true use Sonnet, else Haiku.
- * @returns {Promise<Record<string, string>>} Map of section name to analysis text.
+ * @param {{ markdown?: string, screenshotUrl?: string, screenshotBase64?: string, url?: string }} scrapeResult
+ * @param {boolean} [isUserSite=false] - If false, adds stricter "not visible" instruction (competitors).
+ * @returns {Promise<Record<string, string>>}
  */
 export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
   const { markdown, screenshotUrl, screenshotBase64 } = scrapeResult;
-  const model = isUserSite ? MODEL_SONNET : MODEL_HAIKU;
-  const modelLabel = isUserSite ? "sonnet" : "haiku";
   const url = scrapeResult.url || "(no url)";
-  console.log("[model]", modelLabel, "→", url);
+  console.log("[model] sonnet →", url);
 
   let base64 = screenshotBase64;
   if (!base64 && screenshotUrl) {
@@ -129,9 +137,7 @@ export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
     if (res.ok) base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
   }
 
-  const imageOpts = isUserSite
-    ? { maxWidth: MAX_IMAGE_WIDTH_USER, jpegQuality: JPEG_QUALITY_USER }
-    : { maxWidth: MAX_IMAGE_WIDTH_COMPETITOR, jpegQuality: JPEG_QUALITY_COMPETITOR };
+  const imageOpts = { maxWidth: MAX_IMAGE_WIDTH, jpegQuality: JPEG_QUALITY };
   let resizedBuffer = null;
   if (base64) {
     resizedBuffer = await getResizedBuffer(base64, imageOpts);
@@ -143,16 +149,9 @@ export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
   const client = new Anthropic({ apiKey });
   const content = [];
 
-  const cropQuality = isUserSite ? JPEG_QUALITY_USER : JPEG_QUALITY_COMPETITOR;
   if (resizedBuffer) {
-    for (const sectionName of SECTIONS) {
-      const rangeKey = SECTION_TO_RANGE[sectionName];
-      const { buffer, cropTop, cropEnd, totalHeight } = await cropSectionFromScreenshot(
-        resizedBuffer,
-        rangeKey,
-        cropQuality
-      );
-      console.log("[crop]", sectionName + ":", cropTop + "–" + cropEnd + "px of", totalHeight + "px", "(" + url + ")");
+    const buffers = await buildSectionCropBuffers(resizedBuffer, JPEG_QUALITY, url);
+    for (const buffer of buffers) {
       content.push({
         type: "image",
         source: {
@@ -189,10 +188,12 @@ Rubric: 1-2 broken/missing, 3-4 underperforms, 5-6 average, 7-8 good, 9-10 excep
   content.push({ type: "text", text: textParts.join("\n") });
 
   const msg = await client.messages.create({
-    model,
-    max_tokens: isUserSite ? 3072 : 2048,
+    model: MODEL_SONNET,
+    max_tokens: MAX_TOKENS,
     messages: [{ role: "user", content }],
   });
+
+  logClaudeUsage("vision", MODEL_SONNET, msg);
 
   const textBlock = msg.content.find((b) => b.type === "text");
   const raw = textBlock ? textBlock.text : "";

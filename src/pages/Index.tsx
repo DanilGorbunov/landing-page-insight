@@ -4,7 +4,7 @@ import InputScreen from "@/components/InputScreen";
 import ProgressiveReportView from "@/components/ProgressiveReportView";
 import ReportScreen from "@/components/ReportScreen";
 import Dashboard from "@/components/Dashboard";
-import { startAnalysis } from "@/lib/api";
+import { startAnalysis, type JobLiveState } from "@/lib/api";
 import { saveToHistory, getHistoryCount, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
 
 type Screen = "input" | "progress" | "report" | "dashboard";
@@ -17,6 +17,7 @@ const Index = () => {
   const [screen, setScreen] = useState<Screen>("input");
   const [url, setUrl] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
+  const [progressInitialLive, setProgressInitialLive] = useState<JobLiveState | null>(null);
   const [lastResult, setLastResult] = useState<AnalysisResult | null>(null);
   const [savedEntryForReport, setSavedEntryForReport] = useState<HistoryEntry | null>(null);
   const [historyCount, setHistoryCount] = useState(getHistoryCount);
@@ -54,8 +55,9 @@ const Index = () => {
     const urlToUse = normalizeUrl(inputUrl);
     if (!urlToUse) return;
     try {
-      const { jobId: id } = await startAnalysis(urlToUse, competitorUrls);
+      const { jobId: id, live } = await startAnalysis(urlToUse, competitorUrls);
       setJobId(id);
+      setProgressInitialLive(live ?? null);
       setUrl(urlToUse);
       setScreen("progress");
     } catch (e) {
@@ -109,6 +111,7 @@ const Index = () => {
 
   const handleBackFromProgress = useCallback(() => {
     setJobId(null);
+    setProgressInitialLive(null);
     setScreen("input");
   }, []);
 
@@ -143,6 +146,7 @@ const Index = () => {
         <ProgressiveReportView
           jobId={jobId}
           url={url}
+          initialLive={progressInitialLive ?? undefined}
           onComplete={handleComplete}
           onBack={handleBackFromProgress}
           onGoHome={handleGoHome}

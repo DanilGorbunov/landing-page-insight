@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { Router } from "express";
 import {
   CACHE_TTL_MS,
+  DISCOVERY_CACHE_TTL_MS,
   DISCOVERY_TIMEOUT_MS,
   SCRAPE_TIMEOUT_MS,
   PREFETCH_TIMEOUT_MS,
@@ -24,6 +25,10 @@ const SECTIONS_FOR_LIVE = ["hero", "value proposition", "features", "social proo
 /** @type {Map<string, { result: object, cachedAt: number }>} */
 const resultCache = new Map();
 
+/** Discovery cache: user domain -> { urls: string[], cachedAt }. Sonnet quality preserved on miss. */
+/** @type {Map<string, { urls: string[], cachedAt: number }>} */
+const discoveryCache = new Map();
+
 function getCacheKey(url) {
   const dateStr = new Date().toISOString().slice(0, 10);
   return crypto.createHash("md5").update(String(url || "").trim() + dateStr).digest("hex");
@@ -36,10 +41,6 @@ function getDomain(url) {
   } catch {
     return url.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "").toLowerCase();
   }
-}
-
-function delay(ms) {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 function emptySectionScores() {
@@ -63,6 +64,22 @@ function defaultLive() {
       partialReport: null,
     },
   };
+}
+
+/** Initial live snapshot for POST response (user card only). */
+export function initialLiveForJob(userUrl) {
+  const live = defaultLive();
+  live.sites = [
+    {
+      url: userUrl,
+      isUser: true,
+      domain: getDomain(userUrl),
+      screenshotReady: false,
+      screenshotUrl: null,
+      sectionScores: emptySectionScores(),
+    },
+  ];
+  return live;
 }
 
 /** Serialize live patches so parallel scrapes/workers do not overwrite each other. */
@@ -129,6 +146,23 @@ function pushProgress(jobId, entry) {
   jobStore.updateJob(jobId, { progress });
 }
 
+async function prefetchScreenshotBase64(r) {
+  if (!r.screenshot) return { ...r, screenshotBase64: null };
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), PREFETCH_TIMEOUT_MS);
+    const res = await fetch(r.screenshot, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const buf = Buffer.from(await res.arrayBuffer());
+      return { ...r, screenshotBase64: buf.toString("base64") };
+    }
+  } catch (e) {
+    if (e?.name !== "AbortError") console.warn("[analyze] pre-fetch screenshot failed", r.url, e?.message);
+  }
+  return { ...r, screenshotBase64: null };
+}
+
 /**
  * Run full analysis pipeline in background. Updates job via jobStore (live, progress, result, error).
  * If domain was analyzed in the last 24h, returns cached result (no tokens, no rerun).
@@ -151,23 +185,62 @@ async function runPipeline(jobId) {
     return;
   }
 
-  jobStore.updateJob(jobId, { status: "running", live: defaultLive() });
+  if (job.status !== "running") {
+    jobStore.updateJob(jobId, { status: "running" });
+  }
+  if (!job.live?.sites?.length) {
+    jobStore.updateJob(jobId, { live: initialLiveForJob(userUrl) });
+  }
 
   try {
     const t0 = Date.now();
     const manualUrls = (job.competitors || []).filter(Boolean).slice(0, MAX_COMPETITORS);
     let combined;
+    /** @type {{ url: string, isUser: boolean, markdown?: string, screenshot?: string, screenshotBase64?: string } | null} */
+    let userEarlyScrape = null;
+
+    const scrapeWithTimeout = (item) =>
+      Promise.race([
+        scrapeWithScreenshot(item.url).then((data) => ({ url: item.url, isUser: item.isUser, ...data })),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`scrape_timeout:${item.url}`)), SCRAPE_TIMEOUT_MS)
+        ),
+      ]);
+
     if (manualUrls.length >= MAX_COMPETITORS) {
       combined = manualUrls.slice(0, MAX_COMPETITORS);
     } else {
-      const autoDiscovered = await Promise.race([
-        findCompetitors(userUrl),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("discovery_timeout")), DISCOVERY_TIMEOUT_MS)),
-      ]).catch((e) => {
-        if (e?.message === "discovery_timeout") console.warn("[analyze] discovery timeout, using manual only");
-        return [];
-      });
       const userDomain = getDomain(userUrl);
+
+      const discoveryTask = (async () => {
+        const hit = discoveryCache.get(userDomain);
+        if (hit && Date.now() - hit.cachedAt < DISCOVERY_CACHE_TTL_MS) {
+          return hit.urls.map((u) => ({ url: u }));
+        }
+        const raw = await Promise.race([
+          findCompetitors(userUrl),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("discovery_timeout")), DISCOVERY_TIMEOUT_MS)),
+        ]).catch((e) => {
+          if (e?.message === "discovery_timeout") console.warn("[analyze] discovery timeout, using manual only");
+          return [];
+        });
+        if (raw.length > 0) {
+          discoveryCache.set(userDomain, {
+            urls: raw.map((c) => c.url),
+            cachedAt: Date.now(),
+          });
+        }
+        return raw;
+      })();
+
+      const userScrapeTask = scrapeWithTimeout({ url: userUrl, isUser: true }).then(
+        (data) => ({ ok: true, data }),
+        (reason) => ({ ok: false, reason })
+      );
+
+      const [autoDiscovered, userPack] = await Promise.all([discoveryTask, userScrapeTask]);
+      if (userPack.ok) userEarlyScrape = userPack.data;
+
       combined = [...manualUrls];
       for (const c of autoDiscovered) {
         if (combined.length >= MAX_COMPETITORS) break;
@@ -176,6 +249,7 @@ async function runPipeline(jobId) {
         if (d && d !== userDomain && !combined.some((x) => getDomain(x) === d)) combined.push(u);
       }
     }
+
     console.log(JSON.stringify({ step: "discovery_done", durationMs: Date.now() - t0 }));
 
     const toScrape = [{ url: userUrl, isUser: true }, ...combined.map((url) => ({ url, isUser: false }))];
@@ -192,84 +266,119 @@ async function runPipeline(jobId) {
     });
     pushProgress(jobId, { event: "competitors_found", urls: toScrape.map((t) => t.url) });
 
-    const t1 = Date.now();
-    const scrapeWithTimeout = (item) =>
-      Promise.race([
-        scrapeWithScreenshot(item.url).then((data) => ({ url: item.url, isUser: item.isUser, ...data })),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`scrape_timeout:${item.url}`)), SCRAPE_TIMEOUT_MS)
-        ),
-      ]);
-
-    const scrapeSettled = await Promise.all(
-      toScrape.map(async (item) => {
-        try {
-          const data = await scrapeWithTimeout(item);
-          await patchLive(jobId, (live) => {
-            const s = live.sites.find((x) => x.url === item.url);
-            if (s) {
-              s.screenshotReady = true;
-              s.screenshotUrl = data.screenshot || null;
-            }
-          });
-          pushProgress(jobId, { event: "screenshot_ready", url: item.url });
-          return { status: "fulfilled", value: data };
-        } catch (reason) {
-          return { status: "rejected", reason, item };
+    if (userEarlyScrape) {
+      await patchLive(jobId, (live) => {
+        const s = live.sites.find((x) => x.url === userUrl);
+        if (s) {
+          s.screenshotReady = true;
+          s.screenshotUrl = userEarlyScrape.screenshot || null;
         }
-      })
-    );
-
-    const succeeded = scrapeSettled.filter((r) => r.status === "fulfilled").map((r) => r.value);
-    const userScrapeResult = succeeded.find((r) => r.isUser);
-    if (!userScrapeResult) {
-      const errMsg =
-        scrapeSettled.find((r) => r.status === "rejected")?.reason?.message || "Scrape failed";
-      throw new Error(errMsg);
+      });
+      pushProgress(jobId, { event: "screenshot_ready", url: userUrl });
     }
-    let scrapeResults = succeeded;
-    console.log(JSON.stringify({ step: "scrape_done", durationMs: Date.now() - t1, scraped: scrapeResults.length, total: toScrape.length }));
 
-    scrapeResults = await Promise.all(
-      scrapeResults.map(async (r) => {
-        if (!r.screenshot) return { ...r, screenshotBase64: null };
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), PREFETCH_TIMEOUT_MS);
-          const res = await fetch(r.screenshot, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (res.ok) {
-            const buf = Buffer.from(await res.arrayBuffer());
-            return { ...r, screenshotBase64: buf.toString("base64") };
+    const t1 = Date.now();
+    const competitorItems = toScrape.filter((item) => !item.isUser);
+
+    const scrapeOneCompetitor = async (item) => {
+      try {
+        const data = await scrapeWithTimeout(item);
+        await patchLive(jobId, (live) => {
+          const s = live.sites.find((x) => x.url === item.url);
+          if (s) {
+            s.screenshotReady = true;
+            s.screenshotUrl = data.screenshot || null;
           }
-        } catch (e) {
-          if (e?.name !== "AbortError") console.warn("[analyze] pre-fetch screenshot failed", r.url, e?.message);
+        });
+        pushProgress(jobId, { event: "screenshot_ready", url: item.url });
+        return { status: "fulfilled", value: data };
+      } catch (reason) {
+        return { status: "rejected", reason, item };
+      }
+    };
+
+    const userScrapeTask =
+      userEarlyScrape != null
+        ? Promise.resolve({ status: "fulfilled", value: userEarlyScrape })
+        : scrapeWithTimeout({ url: userUrl, isUser: true })
+            .then((data) => ({ status: "fulfilled", value: data }))
+            .catch((reason) => ({ status: "rejected", reason }));
+
+    const [competitorSettled, userSettled] = await Promise.all([
+      Promise.all(competitorItems.map(scrapeOneCompetitor)),
+      userScrapeTask,
+    ]);
+
+    if (userSettled.status === "rejected") {
+      throw new Error(userSettled.reason?.message || "Scrape failed for target URL");
+    }
+    const userScrapeResult = userSettled.value;
+
+    if (!userEarlyScrape) {
+      await patchLive(jobId, (live) => {
+        const s = live.sites.find((x) => x.url === userUrl);
+        if (s) {
+          s.screenshotReady = true;
+          s.screenshotUrl = userScrapeResult.screenshot || null;
         }
-        return r;
+      });
+      pushProgress(jobId, { event: "screenshot_ready", url: userUrl });
+    }
+
+    const competitorSucceeded = competitorSettled
+      .filter((r) => r.status === "fulfilled")
+      .map((r) => r.value);
+
+    const scrapeResults = [userScrapeResult, ...competitorSucceeded];
+    console.log(
+      JSON.stringify({
+        step: "scrape_done",
+        durationMs: Date.now() - t1,
+        scraped: scrapeResults.length,
+        total: toScrape.length,
       })
     );
 
     const userScrape = scrapeResults.find((r) => r.isUser);
     const competitorScrapes = scrapeResults.filter((r) => !r.isUser);
-    const analysisTasks = [
-      ...(userScrape ? [{ scrape: userScrape, isUser: true }] : []),
-      ...competitorScrapes.map((s) => ({ scrape: s, isUser: false })),
-    ];
-    const t2 = Date.now();
 
     const emitSectionsForAnalysis = async (scrapeUrl, analysis) => {
+      /** @type {Record<string, number | null>} */
+      const updates = {};
       for (const section of SECTIONS_FOR_LIVE) {
-        const score = parseScoreFromSection(analysis[section]);
-        await patchLive(jobId, (live) => {
-          const s = live.sites.find((x) => x.url === scrapeUrl);
-          if (s) s.sectionScores[section] = score;
-        });
-        pushProgress(jobId, { event: "section_analyzed", url: scrapeUrl, section, score });
-        await delay(110);
+        updates[section] = parseScoreFromSection(analysis[section]);
+      }
+      await patchLive(jobId, (live) => {
+        const s = live.sites.find((x) => x.url === scrapeUrl);
+        if (s) {
+          for (const section of SECTIONS_FOR_LIVE) {
+            s.sectionScores[section] = updates[section];
+          }
+        }
+      });
+      for (const section of SECTIONS_FOR_LIVE) {
+        pushProgress(jobId, { event: "section_analyzed", url: scrapeUrl, section, score: updates[section] });
       }
     };
 
-    const runPool = async () => {
+    /** @type {Record<string, string> | null} */
+    let userAnalysis = null;
+
+    const [userPrefetchedOrNull, competitorPrefetchedRows] = await Promise.all([
+      userScrape ? prefetchScreenshotBase64(userScrape) : Promise.resolve(null),
+      Promise.all(competitorScrapes.map((s) => prefetchScreenshotBase64(s))),
+    ]);
+
+    /** @type {Array<{ scrape: Record<string, unknown>, isUser: boolean }>} */
+    const analysisTasks = [];
+    if (userPrefetchedOrNull) {
+      analysisTasks.push({ scrape: userPrefetchedOrNull, isUser: true });
+    }
+    for (const scrape of competitorPrefetchedRows) {
+      analysisTasks.push({ scrape, isUser: false });
+    }
+
+    const runVisionPool = async () => {
       const results = [];
       let next = 0;
       const runOne = async (idx) => {
@@ -287,100 +396,105 @@ async function runPipeline(jobId) {
         await emitSectionsForAnalysis(scrape.url, analysis);
         return { isUser, url: scrape.url, analysis };
       };
-      const workers = Array.from({ length: Math.min(ANALYSIS_CONCURRENCY, analysisTasks.length) }, () =>
-        (async () => {
-          while (true) {
-            const idx = next++;
-            if (idx >= analysisTasks.length) return;
-            const one = await runOne(idx);
-            if (one) results.push(one);
-          }
-        })()
+      const workers = Array.from(
+        { length: Math.min(ANALYSIS_CONCURRENCY, Math.max(1, analysisTasks.length)) },
+        () =>
+          (async () => {
+            while (true) {
+              const idx = next++;
+              if (idx >= analysisTasks.length) return;
+              const one = await runOne(idx);
+              if (one) results.push(one);
+            }
+          })()
       );
       await Promise.all(workers);
       return results;
     };
-    const analysisResults = await runPool();
-    console.log(JSON.stringify({ step: "vision_done", durationMs: Date.now() - t2 }));
-    const byUrl = new Map(analysisResults.map((r) => [r.url, r]));
-    const userAnalysis = (userScrape && byUrl.get(userScrape.url))?.analysis ?? {};
-    const competitorAnalyses = competitorScrapes.map((s) => ({
-      url: s.url,
-      analysis: byUrl.get(s.url)?.analysis ?? {},
-    }));
+
+    const allVisionResults = await runVisionPool();
+    const userRow = allVisionResults.find((r) => r.isUser);
+    userAnalysis = userRow ? userRow.analysis : null;
+    let competitorAnalysisResults = allVisionResults.filter((r) => !r.isUser);
+    const competitorOrder = new Map(competitorScrapes.map((s, i) => [s.url, i]));
+    competitorAnalysisResults.sort(
+      (a, b) => (competitorOrder.get(a.url) ?? 0) - (competitorOrder.get(b.url) ?? 0)
+    );
+
+    if (!userAnalysis) {
+      throw new Error("Analysis failed for target URL");
+    }
 
     await patchLive(jobId, (live) => {
       live.synthesis.started = true;
     });
 
-    const t3 = Date.now();
-    const { report, overall_score: overallScore, gaps: synthesisGaps } = await synthesizeReport({
+    const synthesisInputCompetitors = competitorAnalysisResults.map(({ url, analysis }) => {
+      const shot = competitorScrapes.find((s) => s.url === url);
+      return {
+        url,
+        analysis,
+        screenshotUrl: shot?.screenshot ?? null,
+      };
+    });
+
+    const synthesis = await synthesizeReport({
       userUrl,
       userAnalysis,
-      competitors: competitorAnalyses,
+      competitors: synthesisInputCompetitors,
     });
 
-    const targetScreenshotUrl = userScrape?.screenshot || null;
-    const competitorsWithScreenshots = competitorAnalyses.map((c) => {
-      const scraped = scrapeResults.find((r) => r.url === c.url);
-      return { ...c, screenshotUrl: scraped?.screenshot || null };
-    });
     const result = {
-      report,
+      report: synthesis.report,
       userAnalysis,
-      competitors: competitorsWithScreenshots,
-      targetScreenshotUrl,
-      synthesis: overallScore != null ? { overall_score: overallScore } : undefined,
-      gaps: Array.isArray(synthesisGaps) ? synthesisGaps : [],
+      competitors: synthesisInputCompetitors,
+      targetScreenshotUrl: userScrape?.screenshot ?? null,
+      synthesis: { overall_score: synthesis.overall_score },
+      gaps: synthesis.gaps,
     };
-    console.log(JSON.stringify({ step: "synthesis_done", durationMs: Date.now() - t3, totalMs: Date.now() - t0 }));
-
-    await patchLive(jobId, (live) => {
-      live.synthesis.ready = true;
-      live.synthesis.overallScore = overallScore ?? null;
-      live.synthesis.gaps = Array.isArray(synthesisGaps) ? synthesisGaps : [];
-    });
-    pushProgress(jobId, { event: "synthesis_ready" });
 
     resultCache.set(cacheKey, { result, cachedAt: Date.now() });
-    jobStore.updateJob(jobId, { status: "completed", result });
+
+    jobStore.updateJob(jobId, {
+      status: "completed",
+      result,
+      live: liveFromCompletedResult(result, userUrl),
+    });
   } catch (err) {
-    const msg = err?.message || String(err);
-    console.error(JSON.stringify({ step: "pipeline_error", jobId, error: msg }));
-    jobStore.updateJob(jobId, { status: "failed", error: msg });
+    console.error("[analyze] pipeline failed", jobId, err?.message || err);
+    jobStore.updateJob(jobId, {
+      status: "failed",
+      error: err?.message || "Analysis failed",
+    });
   }
 }
 
-/**
- * POST /api/analyze
- * Body: { url: string, competitors?: string[] } — validated by validateAnalyzeBody (url required, valid http(s), max length; competitors optional, max 3).
- * Returns: { jobId: string } immediately. Pipeline runs in background; poll GET /api/analyze/job/:jobId for progress.
- */
 analyzeRouter.post("/analyze", validateAnalyzeBody, (req, res) => {
-  const { url, competitors } = req.body;
-  const job = jobStore.createJob({ url, competitors });
-  runPipeline(job.id).catch((e) => console.error(JSON.stringify({ step: "runPipeline_error", jobId: job.id, error: e?.message })));
-  res.json({ jobId: job.id });
+  const url = req.body.url;
+  const competitors = req.body.competitors || [];
+  const live = initialLiveForJob(url);
+  const job = jobStore.createJob({
+    url,
+    competitors,
+    status: "running",
+    live,
+  });
+  setImmediate(() => {
+    runPipeline(job.id).catch((e) => console.error("[analyze] runPipeline", e));
+  });
+  res.status(202).json({ jobId: job.id, live });
 });
 
-/**
- * GET /api/analyze/job/:jobId
- * Returns current job status, progress, live UI snapshot, and result when completed.
- */
 analyzeRouter.get("/analyze/job/:jobId", (req, res) => {
   const job = jobStore.getJob(req.params.jobId);
   if (!job) {
-    return res.status(404).json({
-      error: "Job not found",
-      code: "NOT_FOUND",
-      ...(req.id && { requestId: req.id }),
-    });
+    return res.status(404).json({ error: "Job not found", code: "NOT_FOUND" });
   }
   res.json({
     id: job.id,
     status: job.status,
-    progress: job.progress || [],
-    live: job.live ?? null,
+    progress: job.progress,
+    live: job.live,
     result: job.result,
     error: job.error,
   });
