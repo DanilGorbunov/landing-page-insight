@@ -364,21 +364,18 @@ async function runPipeline(jobId) {
     /** @type {Record<string, string> | null} */
     let userAnalysis = null;
 
-    const [userPrefetchedOrNull, competitorPrefetchedRows] = await Promise.all([
-      userScrape ? prefetchScreenshotBase64(userScrape) : Promise.resolve(null),
-      Promise.all(competitorScrapes.map((s) => prefetchScreenshotBase64(s))),
-    ]);
+    /** Start competitor screenshot prefetch immediately (does not block user path). */
+    const competitorPrefetchPromise = Promise.all(
+      competitorScrapes.map((s) => prefetchScreenshotBase64(s))
+    );
+    const userPrefetchPromise = userScrape ? prefetchScreenshotBase64(userScrape) : Promise.resolve(null);
 
-    /** @type {Array<{ scrape: Record<string, unknown>, isUser: boolean }>} */
-    const analysisTasks = [];
-    if (userPrefetchedOrNull) {
-      analysisTasks.push({ scrape: userPrefetchedOrNull, isUser: true });
-    }
-    for (const scrape of competitorPrefetchedRows) {
-      analysisTasks.push({ scrape, isUser: false });
-    }
-
-    const runVisionPool = async () => {
+    /**
+     * Worker pool for N competitor-only vision tasks (user runs on dedicated chain for fastest first metrics).
+     * @param {Array<{ scrape: Record<string, unknown>, isUser: boolean }>} analysisTasks
+     */
+    const runVisionPool = async (analysisTasks) => {
+      if (!analysisTasks.length) return [];
       const results = [];
       let next = 0;
       const runOne = async (idx) => {
@@ -412,10 +409,34 @@ async function runPipeline(jobId) {
       return results;
     };
 
-    const allVisionResults = await runVisionPool();
-    const userRow = allVisionResults.find((r) => r.isUser);
-    userAnalysis = userRow ? userRow.analysis : null;
-    let competitorAnalysisResults = allVisionResults.filter((r) => !r.isUser);
+    const userVisionChain = (async () => {
+      const userPrefetched = await userPrefetchPromise;
+      if (!userPrefetched) return null;
+      const analysis = await analyzeLandingSections(
+        {
+          markdown: userPrefetched.markdown,
+          screenshotUrl: userPrefetched.screenshot,
+          screenshotBase64: userPrefetched.screenshotBase64,
+          url: userPrefetched.url,
+        },
+        true
+      );
+      await emitSectionsForAnalysis(userPrefetched.url, analysis);
+      return analysis;
+    })();
+
+    const competitorVisionChain = (async () => {
+      const rows = await competitorPrefetchPromise;
+      const tasks = rows.map((scrape) => ({ scrape, isUser: false }));
+      return runVisionPool(tasks);
+    })();
+
+    const [userAnalysisResolved, competitorAnalysisResultsRaw] = await Promise.all([
+      userVisionChain,
+      competitorVisionChain,
+    ]);
+    userAnalysis = userAnalysisResolved;
+    let competitorAnalysisResults = competitorAnalysisResultsRaw;
     const competitorOrder = new Map(competitorScrapes.map((s, i) => [s.url, i]));
     competitorAnalysisResults.sort(
       (a, b) => (competitorOrder.get(a.url) ?? 0) - (competitorOrder.get(b.url) ?? 0)

@@ -5,15 +5,18 @@ import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult } from "@/lib/api";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  cn,
   getDomain,
   parseScoreFromReport,
   getCompetitorOverallScore,
+  parseSectionScores,
   analysisToBullets,
   stripMarkdownFormatting,
   cleanReportSummaryText,
   filterInsightLines,
   ensureScore,
   inferScoreFromAnalysis,
+  type SectionScoreKey,
 } from "@/lib/utils";
 import { containerVariants, itemVariants } from "@/lib/motion";
 import { CompetitiveCharts } from "@/components/CompetitiveCharts";
@@ -242,6 +245,88 @@ const sectionData: Record<SectionTab, { sites: { name: string; score: number; is
 };
 
 const RATING_LOW_THRESHOLD = 7;
+
+/** Rows for numeric section metrics (matches radar / progressive UI). */
+const SECTION_METRIC_ROWS: { key: SectionScoreKey; label: string }[] = [
+  { key: "hero", label: "Hero" },
+  { key: "value_prop", label: "Value Prop" },
+  { key: "features", label: "Features" },
+  { key: "social_proof", label: "Social Proof" },
+  { key: "cta", label: "CTA" },
+];
+
+function metricValueColor(score: number): string {
+  if (score >= 7.5) return "text-success";
+  if (score >= 5) return "text-warning";
+  return "text-destructive";
+}
+
+/** Per-site numeric breakdown; scores parsed from analysis text (X/10). */
+function SiteSectionMetricsCard({
+  domain,
+  siteUrl,
+  isUser,
+  analysis,
+  variants,
+}: {
+  domain: string;
+  siteUrl: string;
+  isUser?: boolean;
+  analysis: Record<string, string> | undefined;
+  variants: typeof itemVariants;
+}) {
+  const parsed = parseSectionScores(analysis);
+  const avgSections = getCompetitorOverallScore(analysis) ?? inferScoreFromAnalysis(analysis);
+  const displayAvg = avgSections != null ? ensureScore(avgSections) : null;
+  if (!parsed) return null;
+
+  return (
+    <motion.div variants={variants} className="glass-surface rounded-xl border border-white/10 overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${isUser ? "bg-primary" : "bg-[hsl(var(--chart-competitor))]"}`} />
+            <a
+              href={siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-sm text-foreground truncate hover:underline"
+            >
+              {domain}
+            </a>
+            {isUser && <span className="text-[10px] text-primary shrink-0">← you</span>}
+          </div>
+          {displayAvg != null && (
+            <span
+              className={cn("font-mono text-xs font-bold tabular-nums shrink-0", metricValueColor(displayAvg))}
+              title="Average of section scores when all sections include X/10"
+            >
+              {displayAvg.toFixed(1)}
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-2 pb-2 border-b border-border/60">
+          Section scores
+        </p>
+        <div className="space-y-2">
+          {SECTION_METRIC_ROWS.map(({ key, label }) => {
+            const v = parsed[key];
+            return (
+              <div key={key} className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-muted-foreground">{label}</span>
+                {v == null ? (
+                  <span className="font-mono text-muted-foreground tabular-nums">—</span>
+                ) : (
+                  <span className={cn("font-mono font-semibold tabular-nums", metricValueColor(v))}>{v.toFixed(1)}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 function ratingTheme(score: number | null) {
   const value = score ?? 0;
@@ -563,6 +648,37 @@ const ReportScreen = ({ url, result, savedEntry, onBack, onOpenHistory, onGoHome
                 )}
               </div>
             </motion.div>
+
+            {/* Numeric section scores — directly above charts */}
+            {hasRealData && apiResult && (
+              <motion.div variants={itemVariants} className="space-y-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Metrics by section</h2>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Scores parsed from each section (look for <span className="font-mono">X/10</span> in the model output).
+                    Right: average when scores are present.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <SiteSectionMetricsCard
+                    domain={domain}
+                    siteUrl={url}
+                    isUser
+                    analysis={apiResult.userAnalysis}
+                    variants={itemVariants}
+                  />
+                  {(apiResult.competitors ?? []).slice(0, 3).map((comp) => (
+                    <SiteSectionMetricsCard
+                      key={comp.url}
+                      domain={getDomain(comp.url)}
+                      siteUrl={comp.url}
+                      analysis={comp.analysis}
+                      variants={itemVariants}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
             {/* Competitive radar + bar charts — above Critical Gaps */}
             {hasRealData && apiResult && (

@@ -3,6 +3,8 @@ import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
 const MODEL = "claude-sonnet-4-20250514";
 const SECTION_MAX_CHARS = 700;
+/** Lower ceiling → faster generation when model finishes under cap; raise if responses truncate. */
+const SYNTHESIS_MAX_TOKENS = 2048;
 
 /** Section keys as in analysis output. Weights: Hero & CTA matter most for conversion; Features least. */
 const WEIGHTS = {
@@ -125,8 +127,8 @@ export async function synthesizeReport(input) {
 
   const prompt = `${parts.join("")}
 
-Markdown report. First line exactly: "${scoreLine}"
-Then: (1) Executive summary 2–4 sentences (2) Strengths vs competitors (3) Gaps and recommendations — evidence from above only (4) Top 3 next steps. Be concise.
+Markdown report — first line exactly: "${scoreLine}"
+Sections: (1) Executive summary 2–4 tight sentences (2) Strengths vs competitors (bullets OK) (3) Gaps/recommendations — cite evidence from above only (4) Top 3 next steps. Prefer brevity; avoid repetition.
 
 ---
 CRITICAL GAPS
@@ -135,7 +137,7 @@ ${gapsPrompt}`;
 
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 2560,
+    max_tokens: SYNTHESIS_MAX_TOKENS,
     messages: [{ role: "user", content: prompt }],
   });
 
