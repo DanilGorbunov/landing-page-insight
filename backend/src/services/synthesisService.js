@@ -195,6 +195,30 @@ Based on all analysis above, generate a prioritized 4-week action plan. Output a
 Generate 4-6 actions total, ordered by impact.
 `;
 
+  const ctaTrustPrompt = `
+---
+CTA & TRUST SIGNALS INVENTORY
+
+Analyze the Target page for CTA elements and trust signals. Output a fenced JSON block tagged \`\`\`cta_trust_json with this structure:
+{
+  "ctas": [{ "text": "<button/link text>", "position": "above_fold"|"below_fold", "type": "primary"|"secondary"|"text_link" }],
+  "frictionReducers": ["<e.g. No credit card required, Free trial, etc>"],
+  "stickyCta": true|false|null,
+  "formFieldCount": <number or null>,
+  "trustSignals": {
+    "logoBadgeCount": <number>,
+    "testimonialCount": <number>,
+    "namedTestimonials": true|false,
+    "caseStudyCount": <number>,
+    "securityBadges": ["<e.g. SOC2, GDPR, SSL>"],
+    "pressMentions": <number>,
+    "ratingScore": "<e.g. 4.9 on G2>" | null
+  }
+}
+
+Only report what is actually visible on the page. Use null for items you cannot determine.
+`;
+
   const copySuggestionsPrompt = `
 ---
 COPY SUGGESTIONS
@@ -223,6 +247,8 @@ ${designPatternsPrompt}
 
 ${actionPlanPrompt}
 
+${ctaTrustPrompt}
+
 ${copySuggestionsPrompt}`;
 
   const msg = await client.messages.create({
@@ -250,6 +276,7 @@ ${copySuggestionsPrompt}`;
   const journeyMap = extractTaggedJson("journey_json") || [];
   const designPatterns = extractTaggedJson("patterns_json") || [];
   const actionPlan = extractTaggedJson("action_plan_json") || [];
+  const ctaTrust = extractTaggedJson("cta_trust_json") || null;
   const copySuggestions = extractTaggedJson("copy_suggestions_json") || [];
 
   const jsonBlockMatch = report.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -301,6 +328,7 @@ ${copySuggestionsPrompt}`;
     journeyMap: Array.isArray(journeyMap) ? journeyMap : [],
     designPatterns: Array.isArray(designPatterns) ? designPatterns : [],
     actionPlan: Array.isArray(actionPlan) ? actionPlan : [],
+    ctaTrust: ctaTrust && typeof ctaTrust === "object" ? ctaTrust : null,
     copySuggestions: Array.isArray(copySuggestions) ? copySuggestions : [],
   };
 }

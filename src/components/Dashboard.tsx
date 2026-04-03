@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, Trash2, FileText } from "lucide-react";
 import { getHistory, clearHistory, hasFullInsightsHistoryUnlock, type HistoryEntry } from "@/lib/analysisHistory";
 import { DEFAULT_SCORE } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const FAVICON = (domain: string) =>
   `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
@@ -76,10 +77,11 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
           >
             Landing Lens
           </button>
-          <nav className="flex items-center gap-2">
+          <nav className="ml-auto flex items-center gap-2">
             <span className="px-3 sm:px-4 py-2.5 text-sm font-medium rounded-lg bg-secondary text-foreground" aria-current="page">
               History
             </span>
+            <ThemeToggle className="-mr-1" />
           </nav>
         </div>
       </header>

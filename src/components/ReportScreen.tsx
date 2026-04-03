@@ -30,6 +30,7 @@ import { CopySuggestions } from "@/components/CopySuggestions";
 import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { ReadabilityPanel } from "@/components/ReadabilityPanel";
+import { CtaTrustPanel } from "@/components/CtaTrustPanel";
 
 export const SECTION_TO_BACKEND: Record<string, string> = {
   Hero: "hero",
@@ -603,6 +604,44 @@ const ReportScreen = ({
               </div>
             </motion.div>
 
+            {/* Full page screenshot */}
+            {apiResult?.targetScreenshotUrl && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">Full Page Screenshot</h2>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border border-primary/30 overflow-hidden bg-card/25">
+                    <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-primary" />
+                      <span className="text-xs font-medium text-foreground">{domain}</span>
+                      <span className="text-[9px] text-muted-foreground">← you</span>
+                    </div>
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity max-h-[600px] overflow-y-auto">
+                      <img src={apiResult.targetScreenshotUrl} alt={`Full page screenshot of ${domain}`} className="w-full h-auto block" />
+                    </a>
+                  </div>
+                  {apiResult.competitors?.slice(0, 1).map((comp) => comp.screenshotUrl && (
+                    <div key={comp.url} className="rounded-lg border border-border overflow-hidden bg-card/25">
+                      <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+                        <span className="text-xs font-medium text-foreground">{getDomain(comp.url)}</span>
+                      </div>
+                      <a href={comp.url} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity max-h-[600px] overflow-y-auto">
+                        <img src={comp.screenshotUrl} alt={`Full page screenshot of ${getDomain(comp.url)}`} className="w-full h-auto block" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* CTA & Trust Signals */}
+            {apiResult?.ctaTrust && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">CTA & Trust Signals</h2>
+                <CtaTrustPanel data={apiResult.ctaTrust} />
+              </motion.div>
+            )}
+
             {/* 2. Section breakdown — 4 cards: 1 you + 3 competitors */}
             <motion.div variants={itemVariants}>
               <div className="flex gap-2 mb-6 flex-wrap">
@@ -923,13 +962,13 @@ const ReportScreen = ({
                             <span className="font-mono text-sm text-foreground">{compDomain}</span>
                           </div>
                           {comp.screenshotUrl ? (
-                            <div className="w-full h-40 rounded-sm overflow-hidden bg-card border border-border mb-4">
+                            <a href={comp.url} target="_blank" rel="noopener noreferrer" className="block w-full rounded-sm overflow-hidden border border-border mb-4 bg-card hover:opacity-90 transition-opacity">
                               <img
                                 src={comp.screenshotUrl}
                                 alt={`Screenshot of ${compDomain}`}
-                                className="w-full h-full object-cover object-top"
+                                className="w-full h-auto block"
                               />
-                            </div>
+                            </a>
                           ) : (
                             <div className="w-full h-40 rounded-sm bg-card border border-border mb-4 flex items-center justify-center">
                               <span className="text-xs text-muted-foreground font-mono">Screenshot unavailable</span>
@@ -1034,13 +1073,13 @@ const ReportScreen = ({
                           </a>
                         </div>
                         {comp.screenshotUrl ? (
-                          <div className="w-full h-24 rounded-sm overflow-hidden bg-card mb-3 border border-border">
+                          <a href={comp.url} target="_blank" rel="noopener noreferrer" className="block w-full rounded-sm overflow-hidden bg-card mb-3 border border-border hover:opacity-90 transition-opacity">
                             <img
                               src={comp.screenshotUrl}
                               alt={`Screenshot of ${compDomain}`}
-                              className="w-full h-full object-cover object-top"
+                              className="w-full h-auto block"
                             />
-                          </div>
+                          </a>
                         ) : (
                           <div className="w-full h-24 rounded-sm bg-card border border-border mb-3 flex items-center justify-center">
                             <span className="text-[10px] text-muted-foreground font-mono">No screenshot</span>

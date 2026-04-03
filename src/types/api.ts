@@ -32,6 +32,7 @@ export interface AnalysisResult {
   journeyMap?: JourneyStage[];
   designPatterns?: DesignPattern[];
   actionPlan?: ActionPlanItem[];
+  ctaTrust?: CtaTrustData | null;
   copySuggestions?: CopySuggestion[];
   performance?: PerformanceData;
   readability?: ReadabilityData;
@@ -71,6 +72,30 @@ export interface CopySuggestion {
   section: string;
   current?: string;
   suggestions: string[];
+}
+
+export interface CtaCta {
+  text: string;
+  position: "above_fold" | "below_fold";
+  type: "primary" | "secondary" | "text_link";
+}
+
+export interface TrustSignals {
+  logoBadgeCount: number;
+  testimonialCount: number;
+  namedTestimonials: boolean;
+  caseStudyCount: number;
+  securityBadges: string[];
+  pressMentions: number;
+  ratingScore: string | null;
+}
+
+export interface CtaTrustData {
+  ctas: CtaCta[];
+  frictionReducers: string[];
+  stickyCta: boolean | null;
+  formFieldCount: number | null;
+  trustSignals: TrustSignals;
 }
 
 export interface PerformanceScores {

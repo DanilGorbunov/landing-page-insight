@@ -3,6 +3,7 @@ import { ArrowLeft, Check } from "lucide-react";
 import { TouchTargetButton } from "@/components/ui/touch-target-button";
 import { CardContainer } from "@/components/ui/card-container";
 import { TOUCH_TARGET_CLASS } from "@/lib/constants";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const PLANS = [
   {
@@ -63,7 +64,7 @@ const Pricing = () => {
           Back
         </TouchTargetButton>
         <Link to="/" className={`${TOUCH_TARGET_CLASS} font-sans text-base font-semibold tracking-tight text-foreground hover:text-primary transition-colors`}>Landing Lens</Link>
-        <div className="w-16" />
+        <ThemeToggle />
       </div>
     </header>
 

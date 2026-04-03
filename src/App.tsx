@@ -6,7 +6,6 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ThemeToggle } from "@/components/theme-toggle";
 import Index from "./pages/Index.tsx";
 
 const Pricing = lazy(() => import("./pages/Pricing.tsx"));
@@ -55,9 +54,6 @@ const App = () => (
               </Routes>
             </Suspense>
           </BrowserRouter>
-          <div className="fixed bottom-4 right-4 z-[100] flex items-center gap-1 rounded-xl border border-border bg-background/90 p-1 shadow-lg backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
-            <ThemeToggle />
-          </div>
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>

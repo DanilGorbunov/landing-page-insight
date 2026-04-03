@@ -20,6 +20,7 @@ import { CopySuggestions } from "@/components/CopySuggestions";
 import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { ReadabilityPanel } from "@/components/ReadabilityPanel";
+import { CtaTrustPanel } from "@/components/CtaTrustPanel";
 import {
   getDomain,
   cn,
@@ -111,6 +112,9 @@ export default function FullInsightsReport() {
     }
     if (payload?.result?.readability?.user) {
       links.push({ href: "#readability", label: "Readability" });
+    }
+    if (payload?.result?.ctaTrust) {
+      links.push({ href: "#cta-trust", label: "CTA & Trust" });
     }
     if ((payload?.result?.competitors?.length ?? 0) > 0) {
       links.push({ href: "#heatmap", label: "Heatmap" });
@@ -508,6 +512,48 @@ export default function FullInsightsReport() {
             description="How easy your copy is to read — lower grade level = higher conversion potential."
           >
             <ReadabilityPanel data={result.readability} />
+          </ReportSection>
+        )}
+
+        {result.ctaTrust && (
+          <ReportSection
+            id="cta-trust"
+            title="CTA & Trust Signals"
+            description="Call-to-action inventory, friction reducers, and trust signal audit."
+          >
+            <CtaTrustPanel data={result.ctaTrust} />
+          </ReportSection>
+        )}
+
+        {/* Full page screenshots */}
+        {result.targetScreenshotUrl && (
+          <ReportSection
+            id="screenshots"
+            title="Full Page Screenshots"
+            description="Complete page captures used for visual analysis — scroll to see the full page."
+            contentClassName="grid grid-cols-1 gap-4 md:grid-cols-2"
+          >
+            <div className="rounded-lg border border-primary/30 overflow-hidden bg-card/25">
+              <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-primary" />
+                <span className="text-xs font-medium text-foreground">{domain}</span>
+                <span className="text-[9px] text-muted-foreground">← you</span>
+              </div>
+              <a href={url} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity max-h-[800px] overflow-y-auto">
+                <img src={result.targetScreenshotUrl} alt={`Full page screenshot of ${domain}`} className="w-full h-auto block" />
+              </a>
+            </div>
+            {(result.competitors ?? []).slice(0, 3).map((comp) => comp.screenshotUrl && (
+              <div key={comp.url} className="rounded-lg border border-border overflow-hidden bg-card/25">
+                <div className="px-3 py-2 border-b border-border flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+                  <span className="text-xs font-medium text-foreground">{getDomain(comp.url)}</span>
+                </div>
+                <a href={comp.url} target="_blank" rel="noopener noreferrer" className="block hover:opacity-90 transition-opacity max-h-[800px] overflow-y-auto">
+                  <img src={comp.screenshotUrl!} alt={`Full page screenshot of ${getDomain(comp.url)}`} className="w-full h-auto block" />
+                </a>
+              </div>
+            ))}
           </ReportSection>
         )}
 

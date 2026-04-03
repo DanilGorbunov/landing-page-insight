@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, Loader2, AlertTriangle, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { getJobStatus, type AnalysisResult, type CriticalGap, type JobLiveState, type LiveSiteState } from "@/lib/api";
 import {
   getDomain,
@@ -288,11 +289,12 @@ export default function ProgressiveReportView({
               Landing Lens
             </Link>
           )}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground ml-auto">
+          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />
             <span>
               Live report <span className="font-mono text-foreground">{domain}</span>
             </span>
+            <ThemeToggle className="-mr-0.5 shrink-0" />
           </div>
         </div>
       </header>

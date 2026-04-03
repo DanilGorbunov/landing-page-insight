@@ -5,6 +5,7 @@ import { Globe, Plus, ChevronDown, X, History, ArrowUpRight, Users } from "lucid
 import { staggerContainer, staggerItem } from "@/lib/motion";
 import { cn, isValidHttpUrl, normalizeInputUrl, DEFAULT_SCORE } from "@/lib/utils";
 import type { HistoryEntry } from "@/lib/analysisHistory";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const SAMPLE_SITES = ["apollo.io", "linear.app", "hubspot.com", "notion.so"];
 
@@ -104,9 +105,9 @@ const InputScreen = ({
 
   return (
     <div className="min-h-screen flex flex-col relative z-10">
-      {/* Topbar: History (right) */}
+      {/* Topbar: History + theme (right) */}
       {onOpenHistory && (
-        <header className="sticky top-0 z-20 left-0 right-0 h-14 flex items-center justify-end px-4 md:px-8 border-b border-border bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
+        <header className="sticky top-0 z-20 left-0 right-0 h-14 flex items-center justify-end gap-2 px-4 md:px-8 border-b border-border bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
           <button
             type="button"
             onClick={onOpenHistory}
@@ -121,6 +122,7 @@ const InputScreen = ({
               </span>
             )}
           </button>
+          <ThemeToggle className="-mr-1" />
         </header>
       )}
 

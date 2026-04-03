@@ -517,6 +517,7 @@ async function runPipeline(jobId) {
       journeyMap: synthesis.journeyMap || [],
       designPatterns: synthesis.designPatterns || [],
       actionPlan: synthesis.actionPlan || [],
+      ctaTrust: synthesis.ctaTrust || null,
       copySuggestions: synthesis.copySuggestions || [],
       performance: {
         user: userPerf ? { url: userPerf.url, ...userPerf } : null,
