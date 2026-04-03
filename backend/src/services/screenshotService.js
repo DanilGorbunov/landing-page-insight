@@ -1,11 +1,6 @@
 const FIRECRAWL_API = "https://api.firecrawl.dev/v1/scrape";
 
-/**
- * Scrape URL via Firecrawl: get markdown, full-page screenshot, and raw HTML.
- * @param {string} url - Page URL
- * @returns {Promise<{ markdown?: string, screenshot?: string, html?: string }>}
- */
-export async function scrapeWithScreenshot(url) {
+async function firecrawlFetch(url, formats, waitFor) {
   const key = process.env.FIRECRAWL_API_KEY;
   if (!key) throw new Error("FIRECRAWL_API_KEY is not set");
 
@@ -15,11 +10,7 @@ export async function scrapeWithScreenshot(url) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
     },
-    body: JSON.stringify({
-      url,
-      formats: ["markdown", "screenshot@fullPage", "rawHtml"],
-      waitFor: 2000,
-    }),
+    body: JSON.stringify({ url, formats, waitFor }),
   });
 
   if (!res.ok) {
@@ -31,7 +22,25 @@ export async function scrapeWithScreenshot(url) {
   if (!data.success || !data.data) {
     throw new Error(data.error || "Firecrawl returned no data");
   }
+  return data.data;
+}
 
-  const { markdown, screenshot, rawHtml } = data.data;
-  return { markdown: markdown || "", screenshot: screenshot || null, html: rawHtml || "" };
+/**
+ * Scrape the USER's page: markdown + full-page screenshot + rawHtml (for SEO audit).
+ * @param {string} url
+ * @returns {Promise<{ markdown: string, screenshot: string|null, html: string }>}
+ */
+export async function scrapeWithScreenshot(url) {
+  const d = await firecrawlFetch(url, ["markdown", "screenshot@fullPage", "rawHtml"], 2000);
+  return { markdown: d.markdown || "", screenshot: d.screenshot || null, html: d.rawHtml || "" };
+}
+
+/**
+ * Scrape a COMPETITOR page: markdown + screenshot only — no rawHtml, shorter wait.
+ * @param {string} url
+ * @returns {Promise<{ markdown: string, screenshot: string|null, html: string }>}
+ */
+export async function scrapeCompetitor(url) {
+  const d = await firecrawlFetch(url, ["markdown", "screenshot@fullPage"], 1000);
+  return { markdown: d.markdown || "", screenshot: d.screenshot || null, html: "" };
 }

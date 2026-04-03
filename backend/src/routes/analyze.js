@@ -11,7 +11,7 @@ import {
 } from "../config/constants.js";
 import { validateAnalyzeBody } from "../middleware/validateAnalyze.js";
 import { jobStore } from "../utils/jobStore.js";
-import { scrapeWithScreenshot } from "../services/screenshotService.js";
+import { scrapeWithScreenshot, scrapeCompetitor } from "../services/screenshotService.js";
 import { findCompetitors } from "../services/competitorDiscovery.js";
 import { analyzeLandingSections } from "../services/analysisService.js";
 import { synthesizeReport, parseScoreFromSection } from "../services/synthesisService.js";
@@ -213,7 +213,8 @@ async function runPipeline(jobId) {
 
     const scrapeWithTimeout = (item) =>
       Promise.race([
-        scrapeWithScreenshot(item.url).then((data) => ({ url: item.url, isUser: item.isUser, ...data })),
+        (item.isUser ? scrapeWithScreenshot(item.url) : scrapeCompetitor(item.url))
+          .then((data) => ({ url: item.url, isUser: item.isUser, ...data })),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`scrape_timeout:${item.url}`)), SCRAPE_TIMEOUT_MS)
         ),
@@ -387,87 +388,50 @@ async function runPipeline(jobId) {
     /** @type {Record<string, string> | null} */
     let userAnalysis = null;
 
-    /** Start competitor screenshot prefetch immediately (does not block user path). */
-    const competitorPrefetchPromise = Promise.all(
-      competitorScrapes.map((s) => prefetchScreenshotBase64(s))
-    );
-    const userPrefetchPromise = userScrape ? prefetchScreenshotBase64(userScrape) : Promise.resolve(null);
-
-    /**
-     * Worker pool for N competitor-only vision tasks (user runs on dedicated chain for fastest first metrics).
-     * @param {Array<{ scrape: Record<string, unknown>, isUser: boolean }>} analysisTasks
-     */
-    const runVisionPool = async (analysisTasks) => {
-      if (!analysisTasks.length) return [];
-      const results = [];
-      let next = 0;
-      const runOne = async (idx) => {
-        if (idx >= analysisTasks.length) return null;
-        const { scrape, isUser } = analysisTasks[idx];
-        const analysis = await analyzeLandingSections(
-          {
-            markdown: scrape.markdown,
-            screenshotUrl: scrape.screenshot,
-            screenshotBase64: scrape.screenshotBase64,
-            url: scrape.url,
-          },
-          isUser
-        );
-        await emitSectionsForAnalysis(scrape.url, analysis);
-        return { isUser, url: scrape.url, analysis };
-      };
-      const workers = Array.from(
-        { length: Math.min(ANALYSIS_CONCURRENCY, Math.max(1, analysisTasks.length)) },
-        () =>
-          (async () => {
-            while (true) {
-              const idx = next++;
-              if (idx >= analysisTasks.length) return;
-              const one = await runOne(idx);
-              if (one) results.push(one);
-            }
-          })()
-      );
-      await Promise.all(workers);
-      return results;
-    };
-
-    const userVisionChain = (async () => {
-      const userPrefetched = await userPrefetchPromise;
-      if (!userPrefetched) return null;
-      const analysis = await analyzeLandingSections(
-        {
-          markdown: userPrefetched.markdown,
-          screenshotUrl: userPrefetched.screenshot,
-          screenshotBase64: userPrefetched.screenshotBase64,
-          url: userPrefetched.url,
-        },
-        true
-      );
-      await emitSectionsForAnalysis(userPrefetched.url, analysis);
-      return analysis;
-    })();
-
-    const competitorVisionChain = (async () => {
-      const rows = await competitorPrefetchPromise;
-      const tasks = rows.map((scrape) => ({ scrape, isUser: false }));
-      return runVisionPool(tasks);
-    })();
-
+    // PageSpeed runs fully in parallel from the start — never blocks synthesis.
     const allUrls = [userUrl, ...competitorScrapes.map((s) => s.url)];
     const pageSpeedPromise = fetchPageSpeedBatch(allUrls).catch((err) => {
       console.warn("[pagespeed] batch failed:", err?.message || err);
       return [];
     });
 
-    const [userAnalysisResolved, competitorAnalysisResultsRaw, pageSpeedResults] = await Promise.all([
+    /**
+     * Pipeline a single site: prefetch screenshot → vision analysis.
+     * Each site runs independently so fast prefetches don't wait for slow ones.
+     */
+    const runVisionForScrape = async (scrape, isUser) => {
+      const prefetched = await prefetchScreenshotBase64(scrape);
+      const analysis = await analyzeLandingSections(
+        {
+          markdown: prefetched.markdown,
+          screenshotUrl: prefetched.screenshot,
+          screenshotBase64: prefetched.screenshotBase64,
+          url: prefetched.url,
+        },
+        isUser
+      );
+      await emitSectionsForAnalysis(prefetched.url, analysis);
+      return { isUser, url: prefetched.url, analysis };
+    };
+
+    // User vision chain — dedicated path for fastest first score display.
+    const userVisionChain = userScrape
+      ? runVisionForScrape(userScrape, true).then((r) => r.analysis)
+      : Promise.resolve(null);
+
+    // Each competitor pipelines independently: no batch barrier.
+    const competitorVisionChain = Promise.all(
+      competitorScrapes.map((scrape) => runVisionForScrape(scrape, false))
+    );
+
+    // Synthesis starts as soon as visions complete — does NOT wait for PageSpeed.
+    const [userAnalysisResolved, competitorAnalysisResultsRaw] = await Promise.all([
       userVisionChain,
       competitorVisionChain,
-      pageSpeedPromise,
     ]);
     userAnalysis = userAnalysisResolved;
-    let competitorAnalysisResults = competitorAnalysisResultsRaw;
     const competitorOrder = new Map(competitorScrapes.map((s, i) => [s.url, i]));
+    let competitorAnalysisResults = [...competitorAnalysisResultsRaw];
     competitorAnalysisResults.sort(
       (a, b) => (competitorOrder.get(a.url) ?? 0) - (competitorOrder.get(b.url) ?? 0)
     );
@@ -489,11 +453,15 @@ async function runPipeline(jobId) {
       };
     });
 
-    const synthesis = await synthesizeReport({
-      userUrl,
-      userAnalysis,
-      competitors: synthesisInputCompetitors,
-    });
+    // Synthesis and PageSpeed run concurrently — PageSpeed was already in-flight.
+    const [synthesis, pageSpeedResults] = await Promise.all([
+      synthesizeReport({
+        userUrl,
+        userAnalysis,
+        competitors: synthesisInputCompetitors,
+      }),
+      pageSpeedPromise,
+    ]);
 
     const siteType = userAnalysis?._siteType || null;
     const uxSignals = userAnalysis?._uxSignals || null;
