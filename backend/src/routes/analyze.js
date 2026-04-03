@@ -244,11 +244,12 @@ async function runPipeline(jobId) {
           if (scrapeResult?.ok) pageMarkdown = scrapeResult.data?.markdown;
         } catch { /* proceed without context */ }
 
+        const discT0 = Date.now();
         const raw = await Promise.race([
           findCompetitors(userUrl, { pageMarkdown }),
           new Promise((_, reject) => setTimeout(() => reject(new Error("discovery_timeout")), DISCOVERY_TIMEOUT_MS)),
         ]).catch((e) => {
-          if (e?.message === "discovery_timeout") console.warn("[analyze] discovery timeout, using manual only");
+          console.warn(`[analyze] competitor discovery failed (${Date.now() - discT0}ms):`, e?.message);
           return [];
         });
         if (raw.length > 0) {

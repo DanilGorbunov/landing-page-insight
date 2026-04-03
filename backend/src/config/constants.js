@@ -12,8 +12,8 @@ export const DISCOVERY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** Max competitors (user + auto-discovered) per analysis. */
 export const MAX_COMPETITORS = 3;
 
-/** Timeout for competitor discovery (Tavily) in ms. */
-export const DISCOVERY_TIMEOUT_MS = 8000;
+/** Timeout for competitor discovery (Claude + optional Tavily) in ms. */
+export const DISCOVERY_TIMEOUT_MS = 15000;
 
 /** Timeout per URL for Firecrawl scrape in ms. */
 export const SCRAPE_TIMEOUT_MS = 28000;

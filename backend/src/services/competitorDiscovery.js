@@ -51,6 +51,8 @@ function parseClaudeCompetitors(text) {
   return parsed.filter((x) => typeof x === "string" && x.length > 0);
 }
 
+const TAVILY_CHECK_TIMEOUT_MS = 4000;
+
 /**
  * Validate that a domain returns at least one Tavily result (site exists).
  * @param {string} domain
@@ -58,20 +60,28 @@ function parseClaudeCompetitors(text) {
  * @returns {Promise<boolean>}
  */
 async function tavilyValidateDomain(domain, apiKey) {
-  const res = await fetch(TAVILY_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query: domain,
-      search_depth: "basic",
-      max_results: 1,
-    }),
-  });
-  if (!res.ok) return false;
-  const data = await res.json();
-  const results = data.results || [];
-  return results.length > 0;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TAVILY_CHECK_TIMEOUT_MS);
+    const res = await fetch(TAVILY_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query: domain,
+        search_depth: "basic",
+        max_results: 1,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return false;
+    const data = await res.json();
+    const results = data.results || [];
+    return results.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 const PAGE_CONTEXT_MAX_CHARS = 1200;
@@ -133,15 +143,19 @@ Rules:
   let results = filtered.slice(0, 4).map((url) => ({ url, title: undefined }));
 
   if (tavilyKey) {
-    const checks = await Promise.all(
-      results.map(async ({ url }) => {
-        const domainForCheck = url.replace(/^https?:\/\//, "").split("/")[0];
-        const ok = await tavilyValidateDomain(domainForCheck, tavilyKey);
-        return ok ? { url, title: domainForCheck } : null;
-      })
-    );
-    const validated = checks.filter(Boolean);
-    if (validated.length > 0) results = validated;
+    try {
+      const checks = await Promise.all(
+        results.map(async ({ url }) => {
+          const domainForCheck = url.replace(/^https?:\/\//, "").split("/")[0];
+          const ok = await tavilyValidateDomain(domainForCheck, tavilyKey);
+          return ok ? { url, title: domainForCheck } : null;
+        })
+      );
+      const validated = checks.filter(Boolean);
+      if (validated.length > 0) results = validated;
+    } catch (e) {
+      console.warn("[discovery] tavily validation failed, using unvalidated list:", e?.message);
+    }
   }
 
   return results.slice(0, 4);
