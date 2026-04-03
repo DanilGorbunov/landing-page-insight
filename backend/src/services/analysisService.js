@@ -7,7 +7,7 @@ const MODEL_SONNET = "claude-sonnet-4-20250514";
 const MAX_IMAGE_WIDTH = 1000;
 const JPEG_QUALITY = 76;
 const MARKDOWN_MAX_CHARS = 6000;
-const MAX_TOKENS = 3072;
+const MAX_TOKENS = 4096;
 const SECTIONS = [
   "hero",
   "value proposition",
@@ -179,7 +179,24 @@ Rubric: 1-2 broken/missing, 3-4 underperforms, 5-6 average, 7-8 good, 9-10 excep
     "Reply in markdown with exactly these headers and analysis (including score and [SITE_TYPE: ...]) under each:",
     SECTIONS.map((s) => `## ${s}`).join("\n"),
   ];
-  if (!isUserSite) {
+  if (isUserSite) {
+    textParts.push(`
+After the section analyses, output a fenced JSON block tagged \`\`\`ux_signals_json with a single object:
+{
+  "visualHierarchy": "strong"|"moderate"|"weak",
+  "contrastQuality": "good"|"needs_improvement"|"poor",
+  "whitespaceBalance": "spacious"|"balanced"|"cramped",
+  "aboveFoldContent": ["<key elements visible above fold, e.g. headline, CTA, logo, nav>"],
+  "navigationComplexity": "minimal"|"moderate"|"complex",
+  "mobileReadiness": "optimized"|"adequate"|"poor",
+  "ctaProminence": "dominant"|"visible"|"buried",
+  "colorConsistency": "cohesive"|"mostly_consistent"|"inconsistent",
+  "imageQuality": "professional"|"stock"|"low_quality"|"none",
+  "loadingUxHints": ["<observations about lazy placeholders, skeleton screens, animations>"],
+  "accessibilityFlags": ["<visible a11y issues: tiny text, low contrast, missing labels, etc>"]
+}
+Assess from the screenshots only. Use null for items you cannot determine.`);
+  } else {
     textParts.push('\nIf you cannot clearly see or read an element in the screenshot, write "not visible" — never infer or assume.');
   }
   if (markdown) {
@@ -197,8 +214,19 @@ Rubric: 1-2 broken/missing, 3-4 underperforms, 5-6 average, 7-8 good, 9-10 excep
 
   const textBlock = msg.content.find((b) => b.type === "text");
   const raw = textBlock ? textBlock.text : "";
-  const sections = parseSectionsResponse(raw);
-  sections._siteType = parseSiteType(raw);
+
+  let uxSignals = null;
+  if (isUserSite) {
+    const uxMatch = raw.match(/```ux_signals_json\s*([\s\S]*?)```/);
+    if (uxMatch) {
+      try { uxSignals = JSON.parse(uxMatch[1].trim()); } catch { /* ignore */ }
+    }
+  }
+
+  const cleaned = raw.replace(/\n?```ux_signals_json\s*[\s\S]*?```\s*/g, "");
+  const sections = parseSectionsResponse(cleaned);
+  sections._siteType = parseSiteType(cleaned);
+  sections._uxSignals = uxSignals;
   return sections;
 }
 

@@ -1,9 +1,9 @@
 const FIRECRAWL_API = "https://api.firecrawl.dev/v1/scrape";
 
 /**
- * Scrape URL via Firecrawl: get markdown + screenshot URL.
+ * Scrape URL via Firecrawl: get markdown, full-page screenshot, and raw HTML.
  * @param {string} url - Page URL
- * @returns {Promise<{ markdown?: string, screenshot?: string }>}
+ * @returns {Promise<{ markdown?: string, screenshot?: string, html?: string }>}
  */
 export async function scrapeWithScreenshot(url) {
   const key = process.env.FIRECRAWL_API_KEY;
@@ -17,7 +17,7 @@ export async function scrapeWithScreenshot(url) {
     },
     body: JSON.stringify({
       url,
-      formats: ["markdown", "screenshot@fullPage"],
+      formats: ["markdown", "screenshot@fullPage", "rawHtml"],
       waitFor: 2000,
     }),
   });
@@ -32,6 +32,6 @@ export async function scrapeWithScreenshot(url) {
     throw new Error(data.error || "Firecrawl returned no data");
   }
 
-  const { markdown, screenshot } = data.data;
-  return { markdown: markdown || "", screenshot: screenshot || null };
+  const { markdown, screenshot, rawHtml } = data.data;
+  return { markdown: markdown || "", screenshot: screenshot || null, html: rawHtml || "" };
 }

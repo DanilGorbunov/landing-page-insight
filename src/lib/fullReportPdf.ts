@@ -505,6 +505,68 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
     y += 4;
   }
 
+  // SEO Audit
+  if (result.seoAudit?.user) {
+    newPageIfNeeded(40);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("SEO Audit", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    const seo = result.seoAudit.user;
+    y = addWrapped(doc, `Score: ${seo.passCount}/${seo.total} checks passed (${seo.warnCount} warnings, ${seo.failCount} failures)`, margin, y, maxW, 4);
+    y += 2;
+    for (const item of seo.items) {
+      const icon = item.status === "pass" ? "✓" : item.status === "warn" ? "⚠" : "✗";
+      y = addWrapped(doc, `${icon} [${item.category}] ${item.label}: ${item.value || "—"}`, margin, y, maxW, 4);
+      y += 1;
+      if (item.hint) {
+        y = addWrapped(doc, `  → ${item.hint}`, margin, y, maxW, 4);
+        y += 1;
+      }
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
+  }
+
+  // UX Signals
+  if (result.uxSignals) {
+    newPageIfNeeded(30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("UX Quality Signals", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    const ux = result.uxSignals;
+    const signalEntries: [string, string | null][] = [
+      ["Visual hierarchy", ux.visualHierarchy],
+      ["Contrast quality", ux.contrastQuality],
+      ["Whitespace balance", ux.whitespaceBalance],
+      ["Navigation complexity", ux.navigationComplexity],
+      ["Mobile readiness", ux.mobileReadiness],
+      ["CTA prominence", ux.ctaProminence],
+      ["Color consistency", ux.colorConsistency],
+      ["Image quality", ux.imageQuality],
+    ];
+    for (const [label, val] of signalEntries) {
+      y = addWrapped(doc, `${label}: ${val ? val.replace(/_/g, " ") : "n/a"}`, margin, y, maxW, 4);
+      y += 1;
+    }
+    if (ux.aboveFoldContent?.length) {
+      y += 1;
+      y = addWrapped(doc, `Above fold: ${ux.aboveFoldContent.join(", ")}`, margin, y, maxW, 4);
+      y += 1;
+    }
+    if (ux.accessibilityFlags?.length) {
+      y += 1;
+      y = addWrapped(doc, `Accessibility flags: ${ux.accessibilityFlags.join("; ")}`, margin, y, maxW, 4);
+      y += 1;
+    }
+    y += 4;
+  }
+
   // Best Practices Checklist
   if (result.bestPractices && result.bestPractices.length > 0) {
     newPageIfNeeded(40);
@@ -560,6 +622,36 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
     y += 4;
   }
 
+  // Competitive Edge
+  if (result.competitiveEdge && result.competitiveEdge.length > 0) {
+    newPageIfNeeded(40);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("How to Beat Your Competitors", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    for (const entry of result.competitiveEdge) {
+      doc.setFont("helvetica", "bold");
+      y = addWrapped(doc, entry.competitor, margin, y, maxW, 4);
+      doc.setFont("helvetica", "normal");
+      y += 2;
+      for (const adv of entry.advantages) {
+        y = addWrapped(doc, `[${adv.effort}] ${adv.element}`, margin, y, maxW, 4);
+        y += 1;
+        y = addWrapped(doc, `Their approach: ${adv.theirApproach}`, margin, y, maxW, 4);
+        y += 1;
+        y = addWrapped(doc, `Your weakness: ${adv.yourWeakness}`, margin, y, maxW, 4);
+        y += 1;
+        y = addWrapped(doc, `→ Steal this: ${adv.stealThis}`, margin, y, maxW, 4);
+        y += 3;
+        if (y > 275) { doc.addPage(); y = 16; }
+      }
+      y += 2;
+    }
+    y += 4;
+  }
+
   // Action Plan
   if (result.actionPlan && result.actionPlan.length > 0) {
     newPageIfNeeded(30);
@@ -576,6 +668,32 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
         y = addWrapped(doc, `  → ${item.rationale}`, margin, y, maxW, 4);
         y += 1;
       }
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
+  }
+
+  // UX Improvement Hints
+  if (result.uxHints && result.uxHints.length > 0) {
+    newPageIfNeeded(30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("UX Improvement Hints", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    for (const hint of result.uxHints) {
+      y = addWrapped(doc, `[${hint.impact}] ${hint.section} (${hint.score}/10): ${hint.issue}`, margin, y, maxW, 4);
+      y += 1;
+      y = addWrapped(doc, `Fix: ${hint.hint}`, margin, y, maxW, 4);
+      y += 1;
+      y = addWrapped(doc, `Effort: ~${hint.effort} · ${hint.impactReason}`, margin, y, maxW, 4);
+      y += 1;
+      if (hint.reference) {
+        y = addWrapped(doc, `Ref: ${hint.reference}`, margin, y, maxW, 4);
+        y += 1;
+      }
+      y += 2;
       if (y > 275) { doc.addPage(); y = 16; }
     }
     y += 4;

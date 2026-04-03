@@ -34,6 +34,10 @@ export interface AnalysisResult {
   actionPlan?: ActionPlanItem[];
   ctaTrust?: CtaTrustData | null;
   copySuggestions?: CopySuggestion[];
+  competitiveEdge?: CompetitiveEdgeEntry[];
+  uxHints?: UxImprovementHint[];
+  uxSignals?: UxSignals | null;
+  seoAudit?: SeoAuditData;
   performance?: PerformanceData;
   readability?: ReadabilityData;
   /** Set by frontend when saving to history; not returned by API. */
@@ -139,6 +143,78 @@ export interface ReadabilitySite {
 export interface ReadabilityData {
   user: ReadabilitySite | null;
   competitors: ReadabilitySite[];
+}
+
+// --- SEO Audit ---
+
+export interface SeoAuditItem {
+  id: string;
+  category: "Meta" | "Social" | "Structure" | "Content" | "Technical";
+  label: string;
+  status: "pass" | "warn" | "fail";
+  value: string | null;
+  hint: string | null;
+}
+
+export interface SeoAuditResult {
+  items: SeoAuditItem[];
+  passCount: number;
+  warnCount: number;
+  failCount: number;
+  total: number;
+}
+
+export interface SeoAuditSite extends SeoAuditResult {
+  url: string;
+}
+
+export interface SeoAuditData {
+  user: SeoAuditSite | null;
+  competitors: SeoAuditSite[];
+}
+
+// --- UX Signals ---
+
+export interface UxSignals {
+  visualHierarchy: "strong" | "moderate" | "weak" | null;
+  contrastQuality: "good" | "needs_improvement" | "poor" | null;
+  whitespaceBalance: "spacious" | "balanced" | "cramped" | null;
+  aboveFoldContent: string[];
+  navigationComplexity: "minimal" | "moderate" | "complex" | null;
+  mobileReadiness: "optimized" | "adequate" | "poor" | null;
+  ctaProminence: "dominant" | "visible" | "buried" | null;
+  colorConsistency: "cohesive" | "mostly_consistent" | "inconsistent" | null;
+  imageQuality: "professional" | "stock" | "low_quality" | "none" | null;
+  loadingUxHints: string[];
+  accessibilityFlags: string[];
+}
+
+// --- Competitive Edge ---
+
+export interface CompetitiveAdvantage {
+  element: string;
+  theirApproach: string;
+  yourWeakness: string;
+  stealThis: string;
+  effort: "Quick Win" | "Medium" | "Strategic";
+}
+
+export interface CompetitiveEdgeEntry {
+  competitor: string;
+  advantages: CompetitiveAdvantage[];
+}
+
+// --- UX Improvement Hints ---
+
+export interface UxImprovementHint {
+  section: string;
+  score: number;
+  issue: string;
+  hint: string;
+  effort: string;
+  impact: "High" | "Medium" | "Low";
+  impactReason: string;
+  reference: string;
 }
 
 export interface JobProgressEntry {

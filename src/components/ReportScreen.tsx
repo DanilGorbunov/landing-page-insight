@@ -31,6 +31,10 @@ import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { ReadabilityPanel } from "@/components/ReadabilityPanel";
 import { CtaTrustPanel } from "@/components/CtaTrustPanel";
+import { SeoAuditPanel } from "@/components/SeoAuditPanel";
+import { UxSignalsPanel } from "@/components/UxSignalsPanel";
+import { CompetitiveEdgePanel } from "@/components/CompetitiveEdgePanel";
+import { UxHintsPanel } from "@/components/UxHintsPanel";
 
 export const SECTION_TO_BACKEND: Record<string, string> = {
   Hero: "hero",
@@ -642,6 +646,14 @@ const ReportScreen = ({
               </motion.div>
             )}
 
+            {/* UX Signals */}
+            {apiResult?.uxSignals && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">UX Quality Signals</h2>
+                <UxSignalsPanel data={apiResult.uxSignals} />
+              </motion.div>
+            )}
+
             {/* 2. Section breakdown — 4 cards: 1 you + 3 competitors */}
             <motion.div variants={itemVariants}>
               <div className="flex gap-2 mb-6 flex-wrap">
@@ -835,6 +847,14 @@ const ReportScreen = ({
               </motion.div>
             )}
 
+            {/* SEO Audit */}
+            {apiResult?.seoAudit?.user && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">SEO Audit</h2>
+                <SeoAuditPanel data={apiResult.seoAudit} />
+              </motion.div>
+            )}
+
             {/* Readability */}
             {apiResult?.readability?.user && (
               <motion.div variants={itemVariants}>
@@ -848,6 +868,14 @@ const ReportScreen = ({
               <motion.div variants={itemVariants}>
                 <h2 className="text-sm font-semibold text-foreground mb-4">Competitive Heatmap</h2>
                 <CompetitiveHeatmap userUrl={url} result={apiResult} />
+              </motion.div>
+            )}
+
+            {/* Competitive Edge */}
+            {apiResult?.competitiveEdge && apiResult.competitiveEdge.length > 0 && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">How to Beat Your Competitors</h2>
+                <CompetitiveEdgePanel data={apiResult.competitiveEdge} />
               </motion.div>
             )}
 
@@ -880,6 +908,14 @@ const ReportScreen = ({
               <motion.div variants={itemVariants}>
                 <h2 className="text-sm font-semibold text-foreground mb-4">Action Plan</h2>
                 <ActionPlan items={apiResult.actionPlan} />
+              </motion.div>
+            )}
+
+            {/* UX Improvement Hints */}
+            {apiResult?.uxHints && apiResult.uxHints.length > 0 && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">UX Improvement Hints</h2>
+                <UxHintsPanel data={apiResult.uxHints} />
               </motion.div>
             )}
 

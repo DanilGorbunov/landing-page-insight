@@ -3,7 +3,7 @@ import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
 const MODEL = "claude-sonnet-4-20250514";
 const SECTION_MAX_CHARS = 700;
-const SYNTHESIS_MAX_TOKENS = 4096;
+const SYNTHESIS_MAX_TOKENS = 6144;
 
 /** Section keys as in analysis output. Weights: Hero & CTA matter most for conversion; Features least. */
 const WEIGHTS = {
@@ -249,7 +249,41 @@ ${actionPlanPrompt}
 
 ${ctaTrustPrompt}
 
-${copySuggestionsPrompt}`;
+${copySuggestionsPrompt}
+
+---
+COMPETITIVE EDGE ANALYSIS
+
+For each competitor analyzed, identify 3-5 specific elements where they outperform the Target. Output a fenced JSON block tagged \`\`\`competitive_edge_json with an array:
+[{
+  "competitor": "<domain>",
+  "advantages": [{
+    "element": "<specific UI/copy/UX element, max 6 words>",
+    "theirApproach": "<what they do well, with specifics>",
+    "yourWeakness": "<what Target does poorly in this area>",
+    "stealThis": "<concrete action to implement, max 20 words>",
+    "effort": "Quick Win"|"Medium"|"Strategic"
+  }]
+}]
+
+Focus on actionable, specific differences — not generic advice. Reference actual page elements.
+
+---
+UX IMPROVEMENT HINTS
+
+For every section scored below 7/10 on the Target, generate a specific fix. Output a fenced JSON block tagged \`\`\`ux_hints_json with an array:
+[{
+  "section": "hero"|"value_prop"|"features"|"social_proof"|"cta",
+  "score": <number>,
+  "issue": "<specific problem, max 10 words>",
+  "hint": "<exact fix instruction with example copy/layout change>",
+  "effort": "15 min"|"1 hour"|"half day"|"1-2 days",
+  "impact": "High"|"Medium"|"Low",
+  "impactReason": "<1 sentence why this matters for conversion>",
+  "reference": "<competitor that does this well, if any>"
+}]
+
+Be hyper-specific: quote actual text from Target, suggest exact replacement copy, reference real competitor elements.`;
 
   const msg = await client.messages.create({
     model: MODEL,
@@ -278,6 +312,8 @@ ${copySuggestionsPrompt}`;
   const actionPlan = extractTaggedJson("action_plan_json") || [];
   const ctaTrust = extractTaggedJson("cta_trust_json") || null;
   const copySuggestions = extractTaggedJson("copy_suggestions_json") || [];
+  const competitiveEdge = extractTaggedJson("competitive_edge_json") || [];
+  const uxHints = extractTaggedJson("ux_hints_json") || [];
 
   const jsonBlockMatch = report.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonBlockMatch) {
@@ -330,6 +366,8 @@ ${copySuggestionsPrompt}`;
     actionPlan: Array.isArray(actionPlan) ? actionPlan : [],
     ctaTrust: ctaTrust && typeof ctaTrust === "object" ? ctaTrust : null,
     copySuggestions: Array.isArray(copySuggestions) ? copySuggestions : [],
+    competitiveEdge: Array.isArray(competitiveEdge) ? competitiveEdge : [],
+    uxHints: Array.isArray(uxHints) ? uxHints : [],
   };
 }
 

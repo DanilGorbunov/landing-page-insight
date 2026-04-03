@@ -21,6 +21,10 @@ import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { ReadabilityPanel } from "@/components/ReadabilityPanel";
 import { CtaTrustPanel } from "@/components/CtaTrustPanel";
+import { SeoAuditPanel } from "@/components/SeoAuditPanel";
+import { UxSignalsPanel } from "@/components/UxSignalsPanel";
+import { CompetitiveEdgePanel } from "@/components/CompetitiveEdgePanel";
+import { UxHintsPanel } from "@/components/UxHintsPanel";
 import {
   getDomain,
   cn,
@@ -110,14 +114,23 @@ export default function FullInsightsReport() {
     if (payload?.result?.performance?.user?.scores) {
       links.push({ href: "#performance", label: "Performance" });
     }
+    if (payload?.result?.seoAudit?.user) {
+      links.push({ href: "#seo-audit", label: "SEO Audit" });
+    }
     if (payload?.result?.readability?.user) {
       links.push({ href: "#readability", label: "Readability" });
     }
     if (payload?.result?.ctaTrust) {
       links.push({ href: "#cta-trust", label: "CTA & Trust" });
     }
+    if (payload?.result?.uxSignals) {
+      links.push({ href: "#ux-signals", label: "UX Signals" });
+    }
     if ((payload?.result?.competitors?.length ?? 0) > 0) {
       links.push({ href: "#heatmap", label: "Heatmap" });
+    }
+    if (payload?.result?.competitiveEdge?.length) {
+      links.push({ href: "#competitive-edge", label: "Beat Competitors" });
     }
     if (payload?.result?.bestPractices?.length) {
       links.push({ href: "#best-practices", label: "Best Practices" });
@@ -130,6 +143,9 @@ export default function FullInsightsReport() {
     }
     if (payload?.result?.actionPlan?.length) {
       links.push({ href: "#action-plan", label: "Action Plan" });
+    }
+    if (payload?.result?.uxHints?.length) {
+      links.push({ href: "#ux-hints", label: "UX Hints" });
     }
     if (payload?.result?.copySuggestions?.length) {
       links.push({ href: "#copy-suggestions", label: "Copy Ideas" });
@@ -505,6 +521,16 @@ export default function FullInsightsReport() {
           </ReportSection>
         )}
 
+        {result.seoAudit?.user && (
+          <ReportSection
+            id="seo-audit"
+            title="SEO Audit"
+            description="Technical SEO health check — meta tags, headings, images, links, structured data, and fix hints."
+          >
+            <SeoAuditPanel data={result.seoAudit} />
+          </ReportSection>
+        )}
+
         {result.readability?.user && (
           <ReportSection
             id="readability"
@@ -522,6 +548,16 @@ export default function FullInsightsReport() {
             description="Call-to-action inventory, friction reducers, and trust signal audit."
           >
             <CtaTrustPanel data={result.ctaTrust} />
+          </ReportSection>
+        )}
+
+        {result.uxSignals && (
+          <ReportSection
+            id="ux-signals"
+            title="UX Quality Signals"
+            description="Visual hierarchy, contrast, whitespace, mobile readiness, and accessibility assessment from page screenshots."
+          >
+            <UxSignalsPanel data={result.uxSignals} />
           </ReportSection>
         )}
 
@@ -567,6 +603,16 @@ export default function FullInsightsReport() {
           </ReportSection>
         )}
 
+        {result.competitiveEdge && result.competitiveEdge.length > 0 && (
+          <ReportSection
+            id="competitive-edge"
+            title="How to Beat Your Competitors"
+            description="Specific elements where competitors outperform you, with concrete 'steal this' actions."
+          >
+            <CompetitiveEdgePanel data={result.competitiveEdge} />
+          </ReportSection>
+        )}
+
         {result.bestPractices && result.bestPractices.length > 0 && (
           <ReportSection
             id="best-practices"
@@ -604,6 +650,16 @@ export default function FullInsightsReport() {
             description="Sequenced 4-week plan with estimated impact for each improvement."
           >
             <ActionPlan items={result.actionPlan} />
+          </ReportSection>
+        )}
+
+        {result.uxHints && result.uxHints.length > 0 && (
+          <ReportSection
+            id="ux-hints"
+            title="UX Improvement Hints"
+            description="Specific, actionable fixes for low-scoring sections — with effort estimates, impact ratings, and competitor references."
+          >
+            <UxHintsPanel data={result.uxHints} />
           </ReportSection>
         )}
 
