@@ -17,7 +17,8 @@ export async function scrapeWithScreenshot(url) {
     },
     body: JSON.stringify({
       url,
-      formats: ["markdown", "screenshot"],
+      formats: ["markdown", "screenshot@fullPage"],
+      waitFor: 2000,
     }),
   });
 

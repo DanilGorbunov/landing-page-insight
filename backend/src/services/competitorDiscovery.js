@@ -74,17 +74,24 @@ async function tavilyValidateDomain(domain, apiKey) {
   return results.length > 0;
 }
 
+const PAGE_CONTEXT_MAX_CHARS = 1200;
+
 /**
  * Find competitor sites: Claude for discovery, optional Tavily for validation.
  * @param {string} domainOrProduct - e.g. "myapp.com" or "https://apollo.io"
+ * @param {{ pageMarkdown?: string }} [opts] - optional page content for better context
  * @returns {Promise<Array<{ url: string, title?: string }>>}
  */
-export async function findCompetitors(domainOrProduct) {
+export async function findCompetitors(domainOrProduct, opts = {}) {
   const domain = extractDomain(domainOrProduct);
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY_LAND_LENS;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY or CLAUDE_API_KEY_LAND_LENS is not set");
 
   const client = new Anthropic({ apiKey });
+
+  const contextBlock = opts.pageMarkdown
+    ? `\nHere is the actual content from ${domain}'s landing page (use this to understand what the company does):\n---\n${opts.pageMarkdown.slice(0, PAGE_CONTEXT_MAX_CHARS)}\n---\n`
+    : "";
 
   const response = await client.messages.create({
     model: DISCOVERY_MODEL,
@@ -93,12 +100,14 @@ export async function findCompetitors(domainOrProduct) {
       {
         role: "user",
         content: `What are the 4 most direct competitors of ${domain}?
+${contextBlock}
 Return ONLY a JSON array of domains, nothing else.
 Example: ["competitor1.com", "competitor2.com"]
 Rules:
 - Only homepage domains (no /blog/ paths)
-- Direct competitors in same category
-- Real companies with landing pages`,
+- Direct competitors offering the SAME type of product/service
+- Real companies with landing pages
+- Determine the company's actual business from the page content above, not just the domain name`,
       },
     ],
   });

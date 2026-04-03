@@ -6,7 +6,7 @@ import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 const MODEL_SONNET = "claude-sonnet-4-20250514";
 const MAX_IMAGE_WIDTH = 1000;
 const JPEG_QUALITY = 76;
-const MARKDOWN_MAX_CHARS = 2800;
+const MARKDOWN_MAX_CHARS = 6000;
 const MAX_TOKENS = 3072;
 const SECTIONS = [
   "hero",

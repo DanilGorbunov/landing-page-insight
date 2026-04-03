@@ -223,13 +223,28 @@ async function runPipeline(jobId) {
     } else {
       const userDomain = getDomain(userUrl);
 
+      const userScrapeTask = scrapeWithTimeout({ url: userUrl, isUser: true }).then(
+        (data) => ({ ok: true, data }),
+        (reason) => ({ ok: false, reason })
+      );
+
       const discoveryTask = (async () => {
         const hit = discoveryCache.get(userDomain);
         if (hit && Date.now() - hit.cachedAt < DISCOVERY_CACHE_TTL_MS) {
           return hit.urls.map((u) => ({ url: u }));
         }
+
+        let pageMarkdown;
+        try {
+          const scrapeResult = await Promise.race([
+            userScrapeTask,
+            new Promise((resolve) => setTimeout(() => resolve({ ok: false }), 8000)),
+          ]);
+          if (scrapeResult?.ok) pageMarkdown = scrapeResult.data?.markdown;
+        } catch { /* proceed without context */ }
+
         const raw = await Promise.race([
-          findCompetitors(userUrl),
+          findCompetitors(userUrl, { pageMarkdown }),
           new Promise((_, reject) => setTimeout(() => reject(new Error("discovery_timeout")), DISCOVERY_TIMEOUT_MS)),
         ]).catch((e) => {
           if (e?.message === "discovery_timeout") console.warn("[analyze] discovery timeout, using manual only");
@@ -243,11 +258,6 @@ async function runPipeline(jobId) {
         }
         return raw;
       })();
-
-      const userScrapeTask = scrapeWithTimeout({ url: userUrl, isUser: true }).then(
-        (data) => ({ ok: true, data }),
-        (reason) => ({ ok: false, reason })
-      );
 
       const [autoDiscovered, userPack] = await Promise.all([discoveryTask, userScrapeTask]);
       if (userPack.ok) userEarlyScrape = userPack.data;
