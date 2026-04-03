@@ -284,7 +284,7 @@ export function SiteSectionMetricsCard({
   if (!parsed) return null;
 
   return (
-    <motion.div variants={variants} className="glass-surface rounded-xl border border-white/10 overflow-hidden">
+    <motion.div variants={variants} className="glass-surface rounded-xl border border-border overflow-hidden">
       <div className="p-4">
         <div className="flex items-center justify-between gap-2 mb-1">
           <div className="flex items-center gap-2 min-w-0">
@@ -368,7 +368,7 @@ export function SectionCard({
   return (
     <motion.div
       variants={variants}
-      className="glass-surface rounded-lg overflow-hidden border border-white/10"
+      className="glass-surface rounded-lg overflow-hidden border border-border"
     >
       <div className="p-4">
         {/* Header: dot, domain (link) ← you, rating badge (always visible, color by score) */}
@@ -470,13 +470,13 @@ const ReportScreen = ({
   return (
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Top bar — aligned to content container start */}
-      <div className="sticky top-0 z-20 h-14 flex items-center border-b border-white/[0.06] bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
+      <div className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
         <div className="max-w-6xl mx-auto w-full px-4 md:px-8 flex items-center min-w-0">
           {onBack && (
             <button
               type="button"
               onClick={onBack}
-              className="touch-target mr-2 sm:mr-4 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors flex items-center justify-center"
+              className="touch-target mr-2 sm:mr-4 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center justify-center"
               aria-label="Back"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -535,7 +535,7 @@ const ReportScreen = ({
             {/* 1. Competitive position — minimal info, expand → Pricing */}
             <motion.div
               variants={itemVariants}
-              className="glass-surface-elevated rounded-xl p-6 border border-white/10"
+              className="glass-surface-elevated rounded-xl p-6 border border-border"
             >
               <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:gap-8">
                 <div className="flex-1 min-w-0 flex flex-col order-2 sm:order-1">
@@ -594,7 +594,7 @@ const ReportScreen = ({
                     className={`px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
                       activeSection === tab
                         ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                        : "border border-white/[0.08] bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                        : "border border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                     }`}
                   >
                     {tab}
@@ -770,7 +770,7 @@ const ReportScreen = ({
                   className={`px-4 py-2.5 text-xs font-semibold rounded-full transition-all ${
                     activeSection === tab
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                      : "border border-white/[0.08] bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                      : "border border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                   }`}
                 >
                   {tab}

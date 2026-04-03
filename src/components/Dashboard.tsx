@@ -64,7 +64,7 @@ const Dashboard = ({ onBack, onGoHome, onViewReport, historyCount }: DashboardPr
           <button
             type="button"
             onClick={onBack}
-            className="touch-target mr-2 sm:mr-4 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors flex items-center justify-center"
+            className="touch-target mr-2 sm:mr-4 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors flex items-center justify-center"
             aria-label="Back"
           >
             <ArrowLeft className="w-5 h-5" />

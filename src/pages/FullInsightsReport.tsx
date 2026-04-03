@@ -154,12 +154,12 @@ export default function FullInsightsReport() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="sticky top-0 z-20 flex h-14 items-center border-b border-white/[0.06] bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
+      <header className="sticky top-0 z-20 flex h-14 items-center border-b border-border bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
         <div className="mx-auto flex min-h-[44px] min-w-0 w-full max-w-6xl items-center px-4 md:px-8">
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="touch-target mr-2 flex shrink-0 items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground sm:mr-4"
+            className="touch-target mr-2 flex shrink-0 items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:mr-4"
             aria-label="Back to home"
           >
             <ArrowLeft className="h-5 w-5" aria-hidden />
@@ -244,7 +244,7 @@ export default function FullInsightsReport() {
               ].map((cell) => (
                 <div
                   key={cell.k}
-                  className="rounded-xl border border-white/[0.06] bg-background/50 px-3 py-4 sm:px-4 text-center"
+                  className="rounded-xl border border-border bg-background/50 px-3 py-4 sm:px-4 text-center"
                 >
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     {cell.label}
@@ -287,12 +287,12 @@ export default function FullInsightsReport() {
           description="Parsed from each site’s analysis text (X/10). Avg is the mean when all five sections carry a score."
           contentClassName="space-y-4"
         >
-          <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-card/25 shadow-sm shadow-black/5">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card/25 shadow-sm dark:shadow-black/5">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[520px] text-sm">
                 <caption className="sr-only">Per-section scores for your site and competitors</caption>
                 <thead>
-                  <tr className="border-b border-white/[0.06] bg-muted/30">
+                  <tr className="border-b border-border bg-muted/30">
                     <th scope="col" className="text-left px-4 py-3.5 font-semibold text-muted-foreground">
                       Site
                     </th>
@@ -317,7 +317,7 @@ export default function FullInsightsReport() {
                     return (
                       <tr
                         key={site.label}
-                        className="border-b border-white/[0.04] last:border-0 hover:bg-muted/15 transition-colors"
+                        className="border-b border-border/70 last:border-0 hover:bg-muted/15 transition-colors"
                       >
                         <td className="px-4 py-3.5 font-mono text-xs sm:text-sm">
                           <a
@@ -370,12 +370,12 @@ export default function FullInsightsReport() {
               <AccordionItem
                 key={key}
                 value={key}
-                className="rounded-2xl border border-white/[0.07] bg-card/20 px-1 data-[state=open]:bg-card/35 transition-colors"
+                className="rounded-2xl border border-border bg-card/20 px-1 data-[state=open]:bg-card/35 transition-colors"
               >
                 <AccordionTrigger className="px-4 py-4 text-left text-sm font-semibold hover:no-underline [&[data-state=open]]:text-primary">
                   {label}
                 </AccordionTrigger>
-                <AccordionContent className="px-4 pb-5 pt-0 space-y-5 text-sm border-t border-white/[0.04]">
+                <AccordionContent className="px-4 pb-5 pt-0 space-y-5 text-sm border-t border-border/70">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-primary mb-2">Your site</p>
                     <p className="text-muted-foreground leading-relaxed">{snippet(result.userAnalysis?.[key])}</p>
@@ -388,7 +388,7 @@ export default function FullInsightsReport() {
                     </ul>
                   </div>
                   {(result.competitors ?? []).slice(0, 3).map((c) => (
-                    <div key={c.url} className="pt-4 border-t border-white/[0.06]">
+                    <div key={c.url} className="pt-4 border-t border-border">
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                         {getDomain(c.url)}
                       </p>
@@ -412,7 +412,7 @@ export default function FullInsightsReport() {
               <article
                 key={i}
                 className={cn(
-                  "rounded-2xl border border-white/[0.07] bg-card/25 p-5 shadow-sm shadow-black/5 pl-5",
+                  "rounded-2xl border border-border bg-card/25 p-5 shadow-sm dark:shadow-black/5 pl-5",
                   g.priority === "P1" ? "border-l-4 border-l-destructive" : "border-l-4 border-l-primary/50"
                 )}
               >
@@ -445,7 +445,7 @@ export default function FullInsightsReport() {
         {hasChartData && (
           <section
             id="appendix"
-            className="scroll-mt-[5.5rem] border-t border-dashed border-white/[0.1] pt-14 pb-8"
+            className="scroll-mt-[5.5rem] border-t border-dashed border-border pt-14 pb-8"
             aria-labelledby="appendix-heading"
           >
             <header className="mb-10 max-w-2xl">
@@ -487,7 +487,7 @@ export default function FullInsightsReport() {
                         "touch-target rounded-full px-4 py-2 text-xs font-semibold transition-all",
                         activeSection === tab
                           ? "bg-primary text-primary-foreground shadow-md shadow-primary/20"
-                          : "border border-white/[0.08] bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                          : "border border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
                       )}
                     >
                       {tab}
@@ -577,7 +577,7 @@ export default function FullInsightsReport() {
           </section>
         )}
 
-        <footer className="mt-8 pt-8 border-t border-white/[0.06] text-center text-xs text-muted-foreground">
+        <footer className="mt-8 pt-8 border-t border-border text-center text-xs text-muted-foreground">
           <p>Landing Lens — demo insights. Projections are illustrative.</p>
         </footer>
       </main>

@@ -49,7 +49,7 @@ export default function WaitingSlider({ slides = DEFAULT_SLIDES, statusText = "A
   return (
     <div className="w-full max-w-lg md:max-w-4xl mx-auto flex flex-col items-center justify-center gap-4 md:gap-5 px-4">
       {/* Badge: spinner + status (Lovable-style) */}
-      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-muted-foreground">
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/60 border border-border text-muted-foreground">
         <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
         <span className="text-xs font-medium">{statusText}</span>
       </div>
@@ -74,7 +74,7 @@ export default function WaitingSlider({ slides = DEFAULT_SLIDES, statusText = "A
         </div>
 
         {/* Card – larger on desktop */}
-        <div className="order-1 md:order-2 w-full max-w-md md:max-w-2xl rounded-2xl md:rounded-3xl overflow-hidden border border-white/10 bg-white/[0.06] shadow-xl">
+        <div className="order-1 md:order-2 w-full max-w-md md:max-w-2xl rounded-2xl md:rounded-3xl overflow-hidden border border-border bg-card/50 shadow-xl dark:bg-white/[0.06]">
           <div className="aspect-video w-full bg-muted/30 relative overflow-hidden flex items-center justify-center">
             <AnimatePresence mode="wait">
               <motion.img
@@ -109,7 +109,7 @@ export default function WaitingSlider({ slides = DEFAULT_SLIDES, statusText = "A
           <button
             type="button"
             onClick={() => go(-1)}
-            className="p-2 rounded-full border border-white/15 bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+            className="p-2 rounded-full border border-border bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             aria-label="Previous slide"
           >
             <ChevronUp className="w-4 h-4 rotate-90 md:rotate-0" />
@@ -117,7 +117,7 @@ export default function WaitingSlider({ slides = DEFAULT_SLIDES, statusText = "A
           <button
             type="button"
             onClick={() => setIsPaused((p) => !p)}
-            className="p-2 rounded-full border border-white/15 bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+            className="p-2 rounded-full border border-border bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             aria-label={isPaused ? "Resume" : "Pause"}
           >
             {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -125,7 +125,7 @@ export default function WaitingSlider({ slides = DEFAULT_SLIDES, statusText = "A
           <button
             type="button"
             onClick={() => go(1)}
-            className="p-2 rounded-full border border-white/15 bg-white/5 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+            className="p-2 rounded-full border border-border bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             aria-label="Next slide"
           >
             <ChevronDown className="w-4 h-4 rotate-90 md:rotate-0" />

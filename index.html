@@ -1,6 +1,22 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      (function () {
+        try {
+          var k = "landinglens-theme";
+          var t = localStorage.getItem(k);
+          var root = document.documentElement;
+          root.classList.remove("dark");
+          if (t === "light") return;
+          if (t === "system") {
+            if (window.matchMedia("(prefers-color-scheme: dark)").matches) root.classList.add("dark");
+            return;
+          }
+          if (t === "dark" || t == null) root.classList.add("dark");
+        } catch (_) {}
+      })();
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

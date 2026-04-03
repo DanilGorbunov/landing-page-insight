@@ -269,7 +269,7 @@ export default function ProgressiveReportView({
             <button
               type="button"
               onClick={onBack}
-              className="touch-target p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/5"
+              className="touch-target p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary"
               aria-label="Back"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -328,7 +328,7 @@ export default function ProgressiveReportView({
             </div>
 
             {(live?.synthesis?.started || live?.synthesis?.ready) && (
-              <motion.section {...fadeUp} className="glass-surface-elevated rounded-xl p-6 border border-white/10">
+              <motion.section {...fadeUp} className="glass-surface-elevated rounded-xl p-6 border border-border">
                 <h2 className="text-sm font-semibold text-foreground mb-4">Synthesis</h2>
                 {!live?.synthesis?.ready ? (
                   <div className="flex items-center gap-3 text-muted-foreground">
@@ -375,7 +375,7 @@ export default function ProgressiveReportView({
                                 hidden: { opacity: 0, y: 8 },
                                 show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
                               }}
-                              className="glass-surface rounded-lg p-4 border border-white/10"
+                              className="glass-surface rounded-lg p-4 border border-border"
                             >
                               <div className="flex items-center gap-2 mb-2">
                                 <PriorityBadge level={gap.priority} />
@@ -446,7 +446,7 @@ function CompetitorLiveCard({ site }: { site: LiveSiteState }) {
     <motion.article
       layout
       {...fadeUp}
-      className="glass-surface rounded-xl overflow-hidden border border-white/10"
+      className="glass-surface rounded-xl overflow-hidden border border-border"
     >
       <div className="p-4">
         <div className="flex items-center gap-2 mb-3 min-w-0">

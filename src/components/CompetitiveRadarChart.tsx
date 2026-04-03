@@ -219,7 +219,7 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
                 className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0 border border-white/20"
+                  className="w-2.5 h-2.5 rounded-full shrink-0 border border-border/80"
                   style={{
                     backgroundColor: isHidden ? "transparent" : colorHex,
                   }}

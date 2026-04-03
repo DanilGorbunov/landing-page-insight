@@ -42,7 +42,7 @@ export function ReportMetaChips({
       {items.map((item) => (
         <li
           key={`${item.label}-${item.value}`}
-          className="inline-flex items-baseline gap-2 rounded-full border border-white/[0.08] bg-secondary/40 px-3.5 py-1.5 text-xs"
+          className="inline-flex items-baseline gap-2 rounded-full border border-border bg-secondary/40 px-3.5 py-1.5 text-xs"
         >
           <span className="text-muted-foreground font-medium">{item.label}</span>
           <span className="text-foreground tabular-nums">{item.value}</span>
@@ -73,7 +73,7 @@ export function ReportSection({
     <section
       id={id}
       className={cn(
-        "scroll-mt-[5.5rem] border-b border-white/[0.06] pb-12 pt-12 first:pt-6 last:border-b-0 last:pb-8",
+        "scroll-mt-[5.5rem] border-b border-border pb-12 pt-12 first:pt-6 last:border-b-0 last:pb-8",
         className
       )}
       aria-labelledby={headingId}
@@ -102,7 +102,7 @@ export function ReportJumpNav({
   return (
     <nav
       className={cn(
-        "sticky top-14 z-10 -mx-4 mb-0 border-b border-white/[0.06] bg-background/85 px-4 py-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:mx-0 sm:mb-2 sm:rounded-xl sm:border sm:py-2.5",
+        "sticky top-14 z-10 -mx-4 mb-0 border-b border-border bg-background/85 px-4 py-3 backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:mx-0 sm:mb-2 sm:rounded-xl sm:border sm:py-2.5",
         className
       )}
       aria-label="On this page"
@@ -138,8 +138,8 @@ export function ReportSurface({
     <div
       className={cn(
         "rounded-2xl border p-5 sm:p-6 md:p-7",
-        variant === "default" && "border-white/[0.07] bg-card/35 shadow-sm shadow-black/10",
-        variant === "muted" && "border-dashed border-white/[0.1] bg-muted/15",
+        variant === "default" && "border-border bg-card/35 shadow-sm dark:shadow-black/10",
+        variant === "muted" && "border-dashed border-border bg-muted/15",
         variant === "highlight" && "border-primary/20 bg-gradient-to-b from-primary/[0.07] to-transparent",
         className
       )}

@@ -53,8 +53,8 @@ function SectionCard({ section, index }: { section: SynthesisSection; index: num
   return (
     <article
       className={cn(
-        "rounded-2xl border border-white/[0.07] bg-card/30 p-5 space-y-3 shadow-sm shadow-black/[0.03]",
-        section.level === 3 && "border-dashed border-white/[0.1] bg-muted/10"
+        "rounded-2xl border border-border bg-card/30 p-5 space-y-3 shadow-sm shadow-sm dark:shadow-black/[0.03]",
+        section.level === 3 && "border-dashed border-border bg-muted/10"
       )}
     >
       <h3 className="text-base font-semibold text-foreground leading-snug tracking-tight">{section.title}</h3>
@@ -88,7 +88,7 @@ export function StructuredSynthesis({ report, className }: Props) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/[0.07] bg-card/25 p-5 sm:p-6 space-y-6 shadow-sm shadow-black/5",
+        "rounded-2xl border border-border bg-card/25 p-5 sm:p-6 space-y-6 shadow-sm shadow-sm dark:shadow-black/5",
         className
       )}
     >
@@ -100,7 +100,7 @@ export function StructuredSynthesis({ report, className }: Props) {
       )}
 
       {parsed.preamble.length > 0 && (
-        <div className="space-y-3 pb-2 border-b border-white/[0.06]">{renderBlocks(parsed.preamble, "pre")}</div>
+        <div className="space-y-3 pb-2 border-b border-border">{renderBlocks(parsed.preamble, "pre")}</div>
       )}
 
       {parsed.sections.length > 0 && (

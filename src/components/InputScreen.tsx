@@ -106,7 +106,7 @@ const InputScreen = ({
     <div className="min-h-screen flex flex-col relative z-10">
       {/* Topbar: History (right) */}
       {onOpenHistory && (
-        <header className="sticky top-0 z-20 left-0 right-0 h-14 flex items-center justify-end px-4 md:px-8 border-b border-white/[0.06] bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
+        <header className="sticky top-0 z-20 left-0 right-0 h-14 flex items-center justify-end px-4 md:px-8 border-b border-border bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
           <button
             type="button"
             onClick={onOpenHistory}
@@ -207,7 +207,7 @@ const InputScreen = ({
               type="button"
               onClick={() => setUrl(`https://${site}`)}
               className={cn(
-                "inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-white/[0.08] bg-card/40 px-3 text-xs font-mono tabular-nums leading-none text-secondary-foreground transition-colors",
+                "inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-border bg-card/40 px-3 text-xs font-mono tabular-nums leading-none text-secondary-foreground transition-colors",
                 "hover:border-primary/40 hover:bg-card/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 i >= 2 && "hidden sm:inline-flex"
               )}
@@ -296,13 +296,13 @@ const InputScreen = ({
                     <button
                       type="button"
                       onClick={() => onSelectRecent(entry)}
-                      className="group flex h-full w-full flex-col rounded-2xl border border-white/[0.08] bg-card/35 p-4 text-left shadow-sm shadow-black/20 transition-all hover:border-primary/35 hover:bg-card/55 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      className="group flex h-full w-full flex-col rounded-2xl border border-border bg-card/35 p-4 text-left shadow-sm dark:shadow-black/20 transition-all hover:border-primary/35 hover:bg-card/55 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     >
                       <div className="flex items-start gap-3">
                         <img
                           src={FAVICON(entry.domain)}
                           alt=""
-                          className="mt-0.5 h-10 w-10 shrink-0 rounded-lg border border-white/10 bg-background/80 object-contain p-1"
+                          className="mt-0.5 h-10 w-10 shrink-0 rounded-lg border border-border bg-background/80 object-contain p-1"
                           width={40}
                           height={40}
                         />
@@ -312,7 +312,7 @@ const InputScreen = ({
                               {entry.domain}
                             </p>
                             {entry.source === "demo" && (
-                              <span className="shrink-0 rounded border border-white/15 bg-muted/50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              <span className="shrink-0 rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
                                 Sample
                               </span>
                             )}
@@ -327,7 +327,7 @@ const InputScreen = ({
                           </p>
                         </div>
                       </div>
-                      <div className="mt-4 border-t border-white/[0.06] pt-4">
+                      <div className="mt-4 border-t border-border pt-4">
                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                           Overall score
                         </p>
@@ -365,7 +365,7 @@ const InputScreen = ({
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Trusted by teams at
           </p>
-          <div className="relative overflow-hidden rounded-xl border border-white/10 bg-muted/20 py-4 shadow-inner shadow-black/30">
+          <div className="relative overflow-hidden rounded-xl border border-border bg-muted/20 py-4 shadow-inner shadow-black/10 dark:shadow-black/30">
             <div
               className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-background to-transparent sm:w-16"
               aria-hidden

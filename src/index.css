@@ -5,7 +5,61 @@
 @tailwind utilities;
 
 @layer base {
+  /* Light theme (default when .dark is not on html) */
   :root {
+    --background: 0 0% 98%;
+    --foreground: 240 12% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 12% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 12% 12%;
+
+    --primary: 152 65% 36%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hex: #1f9d55;
+
+    --secondary: 240 6% 94%;
+    --secondary-foreground: 240 12% 20%;
+
+    --muted: 240 5% 92%;
+    --muted-foreground: 240 5% 42%;
+
+    --accent: 152 55% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 147 45% 38%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 32 92% 42%;
+    --warning-foreground: 0 0% 8%;
+
+    --chart-competitor: 176 50% 42%;
+
+    --border: 240 6% 88%;
+    --input: 240 6% 88%;
+    --ring: 152 65% 36%;
+
+    --radius: 0.5rem;
+
+    --surface-1: 0 0% 100%;
+    --surface-2: 240 6% 96%;
+
+    --sidebar-background: 0 0% 99%;
+    --sidebar-foreground: 240 12% 12%;
+    --sidebar-primary: 152 65% 36%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 6% 94%;
+    --sidebar-accent-foreground: 240 12% 12%;
+    --sidebar-border: 240 6% 88%;
+    --sidebar-ring: 152 65% 36%;
+  }
+
+  .dark {
     --background: 240 14% 4%;
     --foreground: 0 0% 97%;
 
@@ -42,8 +96,6 @@
     --border: 0 0% 100% / 0.08;
     --input: 0 0% 100% / 0.08;
     --ring: 152 72% 52%;
-
-    --radius: 0.5rem;
 
     --surface-1: 240 10% 6%;
     --surface-2: 240 12% 10%;
@@ -85,8 +137,12 @@
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    opacity: 0.03;
+    opacity: 0.025;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  }
+
+  .dark body::before {
+    opacity: 0.03;
   }
 }
 
@@ -100,14 +156,21 @@
   }
 
   .glass-surface {
-    @apply bg-card/80 backdrop-blur-md;
-    border: 0.5px solid hsl(0 0% 100% / 0.08);
+    @apply bg-card/80 backdrop-blur-md border border-border/80;
   }
 
   .glass-surface-elevated {
-    @apply bg-secondary/80 backdrop-blur-md;
-    border: 0.5px solid hsl(0 0% 100% / 0.1);
-    box-shadow: 0 1px 1px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.4);
+    @apply bg-secondary/80 backdrop-blur-md border border-border;
+    box-shadow:
+      0 1px 2px rgba(15, 23, 42, 0.06),
+      0 4px 12px rgba(15, 23, 42, 0.08);
+  }
+
+  .dark .glass-surface-elevated {
+    box-shadow:
+      0 1px 1px rgba(0, 0, 0, 0.1),
+      0 2px 4px rgba(0, 0, 0, 0.2),
+      0 4px 8px rgba(0, 0, 0, 0.4);
   }
 
   .amber-glow {
@@ -115,7 +178,7 @@
   }
 
   .border-thin {
-    border: 0.5px solid hsl(0 0% 100% / 0.08);
+    @apply border border-border/80;
   }
 
   /* Minimum touch target for mobile (44px) */

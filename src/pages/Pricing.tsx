@@ -53,7 +53,7 @@ const Pricing = () => {
 
   return (
   <div className="min-h-screen bg-background flex flex-col">
-    <header className="sticky top-0 z-20 h-14 flex items-center border-b border-white/[0.06] bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
+    <header className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
       <div className="max-w-5xl mx-auto w-full px-4 flex items-center justify-between">
         <TouchTargetButton
           onClick={handleBack}

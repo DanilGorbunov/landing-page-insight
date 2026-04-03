@@ -16,7 +16,7 @@ function CardContainer({ className, highlighted, ...props }: CardContainerProps)
         "glass-surface rounded-lg p-6 flex flex-col border transition-colors",
         highlighted
           ? "border-primary ring-1 ring-primary/30 md:scale-[1.02]"
-          : "border-white/5 hover:border-primary/30",
+          : "border-border/60 hover:border-primary/30",
         className
       )}
       {...props}
