@@ -21,6 +21,15 @@ import {
 } from "@/lib/utils";
 import { containerVariants, itemVariants } from "@/lib/motion";
 import { CompetitiveCharts } from "@/components/CompetitiveCharts";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { BestPracticesChecklist } from "@/components/BestPracticesChecklist";
+import { CustomerJourneyMap } from "@/components/CustomerJourneyMap";
+import { DesignPatterns } from "@/components/DesignPatterns";
+import { ActionPlan } from "@/components/ActionPlan";
+import { CopySuggestions } from "@/components/CopySuggestions";
+import { PerformanceGauges } from "@/components/PerformanceGauges";
+import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
+import { ReadabilityPanel } from "@/components/ReadabilityPanel";
 
 export const SECTION_TO_BACKEND: Record<string, string> = {
   Hero: "hero",
@@ -30,7 +39,7 @@ export const SECTION_TO_BACKEND: Record<string, string> = {
   CTA: "CTA",
 };
 
-const TABS = ["Overview"] as const;
+const TABS = ["Overview", "Sections", "Competitors"] as const;
 export const SECTION_TABS = ["Hero", "Value Prop", "Features", "Social Proof", "CTA"] as const;
 
 type Tab = (typeof TABS)[number];
@@ -510,19 +519,22 @@ const ReportScreen = ({
               </button>
             ))}
             {onOpenHistory && (
-              <button
-                type="button"
-                onClick={onOpenHistory}
-                className="touch-target inline-flex shrink-0 items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-sm font-semibold rounded-full text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
-                aria-label={historyCount > 0 ? `History, ${historyCount} analyses` : "Open history"}
-              >
-                History
-                {historyCount > 0 && (
-                  <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary/20 text-primary text-xs font-semibold flex items-center justify-center">
-                    {historyCount}
-                  </span>
-                )}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onOpenHistory}
+                  className="touch-target inline-flex shrink-0 items-center justify-center gap-2 px-3 sm:px-4 py-2.5 text-sm font-semibold rounded-full text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
+                  aria-label={historyCount > 0 ? `History, ${historyCount} analyses` : "Open history"}
+                >
+                  History
+                  {historyCount > 0 && (
+                    <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary/20 text-primary text-xs font-semibold flex items-center justify-center">
+                      {historyCount}
+                    </span>
+                  )}
+                </button>
+                <ThemeToggle className="-mr-1 shrink-0" />
+              </>
             )}
           </nav>
         </div>
@@ -539,7 +551,14 @@ const ReportScreen = ({
             >
               <div className="flex flex-col sm:flex-row sm:items-start gap-6 sm:gap-8">
                 <div className="flex-1 min-w-0 flex flex-col order-2 sm:order-1">
-                  <h2 className="font-display text-xl font-medium tracking-tight text-foreground mb-2">{domain}</h2>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h2 className="font-display text-xl font-medium tracking-tight text-foreground">{domain}</h2>
+                    {apiResult?.siteType && (
+                      <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                        {apiResult.siteType}
+                      </span>
+                    )}
+                  </div>
                   <div className="relative overflow-hidden max-h-[8rem] space-y-2 pr-1">
                     {(() => {
                       let raw = stripMarkdownFormatting(synthesisText || "");
@@ -726,11 +745,22 @@ const ReportScreen = ({
                         <ConfidencePill level={gap.confidence} />
                       </div>
                     </div>
+                    {gap.title && (
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">{gap.title}</p>
+                    )}
                     <p className="text-sm font-medium text-foreground mb-2">{gap.problem}</p>
+                    {gap.evidence && (
+                      <p className="text-[11px] italic text-muted-foreground/80 mb-2 border-l-2 border-border pl-2">"{gap.evidence}"</p>
+                    )}
                     <p className="text-xs text-muted-foreground leading-relaxed mb-3">{gap.recommendation}</p>
+                    {gap.competitorAction && (
+                      <p className="text-[11px] text-primary/80 mb-2">
+                        <span className="font-medium">{gap.competitor || "Competitor"}:</span> {gap.competitorAction}
+                      </p>
+                    )}
                     {gap.competitor ? (
                       <a
-                        href={/^https?:\/\//i.test(gap.competitor) ? gap.competitor : `https://${gap.competitor}`}
+                        href={gap.competitorUrl ? (gap.competitorUrl.startsWith("http") ? gap.competitorUrl : `https://${gap.competitorUrl}`) : `https://${gap.competitor}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:underline"
@@ -757,6 +787,70 @@ const ReportScreen = ({
                 </button>
               </div>
             </motion.div>
+
+            {/* Performance */}
+            {apiResult?.performance?.user?.scores && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">Performance</h2>
+                <PerformanceGauges data={apiResult.performance} />
+              </motion.div>
+            )}
+
+            {/* Readability */}
+            {apiResult?.readability?.user && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">Readability</h2>
+                <ReadabilityPanel data={apiResult.readability} />
+              </motion.div>
+            )}
+
+            {/* Heatmap */}
+            {apiResult && (apiResult.competitors?.length ?? 0) > 0 && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">Competitive Heatmap</h2>
+                <CompetitiveHeatmap userUrl={url} result={apiResult} />
+              </motion.div>
+            )}
+
+            {/* Best Practices */}
+            {apiResult?.bestPractices && apiResult.bestPractices.length > 0 && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">2026 Best Practices</h2>
+                <BestPracticesChecklist checks={apiResult.bestPractices} />
+              </motion.div>
+            )}
+
+            {/* Customer Journey */}
+            {apiResult?.journeyMap && apiResult.journeyMap.length > 0 && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">Customer Journey Map</h2>
+                <CustomerJourneyMap stages={apiResult.journeyMap} />
+              </motion.div>
+            )}
+
+            {/* Design Patterns */}
+            {apiResult?.designPatterns && apiResult.designPatterns.length > 0 && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">Design Patterns</h2>
+                <DesignPatterns patterns={apiResult.designPatterns} />
+              </motion.div>
+            )}
+
+            {/* Action Plan */}
+            {apiResult?.actionPlan && apiResult.actionPlan.length > 0 && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">Action Plan</h2>
+                <ActionPlan items={apiResult.actionPlan} />
+              </motion.div>
+            )}
+
+            {/* Copy Suggestions */}
+            {apiResult?.copySuggestions && apiResult.copySuggestions.length > 0 && (
+              <motion.div variants={itemVariants}>
+                <h2 className="text-sm font-semibold text-foreground mb-4">Copy Suggestions</h2>
+                <CopySuggestions suggestions={apiResult.copySuggestions} />
+              </motion.div>
+            )}
           </motion.div>
         )}
 

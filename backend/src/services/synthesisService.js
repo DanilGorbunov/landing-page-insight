@@ -3,8 +3,7 @@ import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
 const MODEL = "claude-sonnet-4-20250514";
 const SECTION_MAX_CHARS = 700;
-/** Lower ceiling → faster generation when model finishes under cap; raise if responses truncate. */
-const SYNTHESIS_MAX_TOKENS = 2048;
+const SYNTHESIS_MAX_TOKENS = 4096;
 
 /** Section keys as in analysis output. Weights: Hero & CTA matter most for conversion; Features least. */
 const WEIGHTS = {
@@ -125,6 +124,87 @@ export async function synthesizeReport(input) {
 
   const gapsPrompt = buildGapsPromptBlock(input.userUrl, competitorUrlsList);
 
+  const bestPracticesPrompt = `
+---
+BEST PRACTICES CHECKLIST (2026)
+
+Evaluate the Target page against these checks. Output a fenced JSON block tagged \`\`\`best_practices_json with an array of objects:
+{ "id": "<snake_case_id>", "label": "<check name>", "pass": true|false|null, "impact": "High"|"Medium"|"Low", "note": "<1 sentence evidence or reason>" }
+
+Checks (use these exact IDs):
+1. benefit_headline — Benefit-driven headline (not feature-driven)
+2. cta_above_fold — CTA visible without scrolling
+3. social_proof_above_fold — Social proof above the fold
+4. mobile_optimized — Mobile-optimized (thumb-friendly CTA areas)
+5. video_demo — Video or interactive demo present
+6. readability — Readability at 7th grade or below
+7. single_goal — Single primary goal per page
+8. specific_outcomes — Specific outcomes vs abstract claims
+9. logo_trust_bar — Logo/trust bar present
+10. friction_reducer — "No credit card" or friction reducer present
+11. sticky_cta — Sticky CTA on scroll
+12. product_screenshots — Real product screenshots (not generic illustrations)
+13. comparison_pricing — Comparison or pricing table present
+14. aeo_ready — AEO-ready (semantic HTML, structured data)
+
+If you cannot determine a check from available data, set pass to null.
+`;
+
+  const journeyPrompt = `
+---
+CUSTOMER JOURNEY MAP
+
+Evaluate Target against the 7-stage SaaS customer journey. Output a fenced JSON block tagged \`\`\`journey_json with an array of objects:
+{ "stage": "<stage_name>", "status": "addressed"|"partial"|"missing", "evidence": "<1 sentence>" }
+
+Stages:
+1. Awareness — Does headline clearly communicate what the product is?
+2. Consideration — Are comparison elements, case studies, or demo CTAs present?
+3. Trial — Is there a free trial / freemium CTA? How prominent?
+4. Activation — Does the page hint at time-to-value or "aha moment"?
+5. Conversion — Are pricing/upgrade paths clear?
+6. Retention — Is there community, docs, or support link?
+7. Advocacy — Are referral programs, review links visible?
+`;
+
+  const designPatternsPrompt = `
+---
+DESIGN PATTERNS
+
+Identify which of these 8 proven landing page patterns the Target uses. Output a fenced JSON block tagged \`\`\`patterns_json with an array of objects:
+{ "id": "<snake_case>", "label": "<pattern name>", "present": true|false, "note": "<1 sentence>" }
+
+Patterns:
+1. minimal_nav — Minimal nav with single primary CTA
+2. benefit_hero — Hero with benefit-driven headline
+3. logo_bar — Logo/trust bar
+4. problem_empathy — Problem empathy section (addresses pain points)
+5. show_dont_tell — Show-don't-tell features (screenshots, demos, not just text)
+6. metric_testimonials — Metric-backed testimonials (specific numbers/results)
+7. anchored_pricing — Anchored pricing tiers
+8. final_cta — Final CTA restating core benefit
+`;
+
+  const actionPlanPrompt = `
+---
+ACTION PLAN
+
+Based on all analysis above, generate a prioritized 4-week action plan. Output a fenced JSON block tagged \`\`\`action_plan_json with an array of objects:
+{ "week": 1|2|3|4, "impact": "High"|"Medium"|"Low", "action": "<specific actionable task, max 15 words>", "rationale": "<1 sentence why>" }
+
+Generate 4-6 actions total, ordered by impact.
+`;
+
+  const copySuggestionsPrompt = `
+---
+COPY SUGGESTIONS
+
+For each section scored below 7/10, suggest 2 alternative headline or CTA copy options inspired by what competitors do well. Output a fenced JSON block tagged \`\`\`copy_suggestions_json with an array:
+{ "section": "hero"|"value_prop"|"features"|"social_proof"|"cta", "current": "<current text if visible>", "suggestions": ["<option 1>", "<option 2>"] }
+
+Only include sections that scored below 7.
+`;
+
   const prompt = `${parts.join("")}
 
 Markdown report — first line exactly: "${scoreLine}"
@@ -133,7 +213,17 @@ Then use these H2 headings in order (## exactly): ## Executive summary — 2–4
 ---
 CRITICAL GAPS
 
-${gapsPrompt}`;
+${gapsPrompt}
+
+${bestPracticesPrompt}
+
+${journeyPrompt}
+
+${designPatternsPrompt}
+
+${actionPlanPrompt}
+
+${copySuggestionsPrompt}`;
 
   const msg = await client.messages.create({
     model: MODEL,
@@ -145,10 +235,30 @@ ${gapsPrompt}`;
 
   const textBlock = msg.content.find((b) => b.type === "text");
   let report = textBlock ? textBlock.text : "";
+
+  const extractTaggedJson = (tag) => {
+    const re = new RegExp("```" + tag + "\\s*([\\s\\S]*?)```");
+    const m = report.match(re);
+    if (m) {
+      report = report.replace(re, "").trim();
+      try { return JSON.parse(m[1].trim()); } catch { return null; }
+    }
+    return null;
+  };
+
+  const bestPractices = extractTaggedJson("best_practices_json") || [];
+  const journeyMap = extractTaggedJson("journey_json") || [];
+  const designPatterns = extractTaggedJson("patterns_json") || [];
+  const actionPlan = extractTaggedJson("action_plan_json") || [];
+  const copySuggestions = extractTaggedJson("copy_suggestions_json") || [];
+
   const jsonBlockMatch = report.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonBlockMatch) {
     report = report.replace(/\n?```(?:json)?\s*[\s\S]*?```\s*/, "").trim();
   }
+
+  report = report.replace(/\n?```\w*\s*[\s\S]*?```\s*/g, "").trim();
+
   if (weightedScore != null && report) {
     report = report.replace(/^Overall score:\s*[\d.—]+\s*\/\s*10.*$/m, `${scoreLine}`).trimStart();
     if (!report.startsWith("Overall score:")) {
@@ -163,20 +273,36 @@ ${gapsPrompt}`;
       const arr = Array.isArray(raw) ? raw : [raw];
       gaps = arr
         .filter((g) => g && typeof g === "object" && (g.priority || g.problem))
-        .map((g) => ({
-          priority: g.priority === "P1" || g.priority === "P2" ? g.priority : "P2",
-          area: sectionToArea(g.section) || g.title || "General",
-          problem: g.problem || "",
-          recommendation: g.recommendation || "",
-          competitor: getDomainFromUrl(g.competitor_benchmark?.url || g.competitor_benchmark || ""),
-          confidence: g.severity === "High" || g.severity === "Medium" || g.severity === "Low" ? g.severity : "Medium",
-        }));
+        .map((g) => {
+          const benchUrl = g.competitor_benchmark?.url || "";
+          return {
+            priority: g.priority === "P1" || g.priority === "P2" ? g.priority : "P2",
+            area: sectionToArea(g.section) || g.title || "General",
+            problem: g.problem || "",
+            recommendation: g.recommendation || "",
+            competitor: getDomainFromUrl(benchUrl || g.competitor_benchmark || ""),
+            confidence: g.severity === "High" || g.severity === "Medium" || g.severity === "Low" ? g.severity : "Medium",
+            title: g.title || undefined,
+            evidence: g.evidence || undefined,
+            competitorAction: g.competitor_benchmark?.what_they_do || undefined,
+            competitorUrl: benchUrl || undefined,
+          };
+        });
     } catch (_) {
       gaps = [];
     }
   }
 
-  return { report, overall_score: weightedScore ?? undefined, gaps };
+  return {
+    report,
+    overall_score: weightedScore ?? undefined,
+    gaps,
+    bestPractices: Array.isArray(bestPractices) ? bestPractices : [],
+    journeyMap: Array.isArray(journeyMap) ? journeyMap : [],
+    designPatterns: Array.isArray(designPatterns) ? designPatterns : [],
+    actionPlan: Array.isArray(actionPlan) ? actionPlan : [],
+    copySuggestions: Array.isArray(copySuggestions) ? copySuggestions : [],
+  };
 }
 
 function sectionToArea(section) {

@@ -16,6 +16,8 @@ import { findCompetitors } from "../services/competitorDiscovery.js";
 import { analyzeLandingSections } from "../services/analysisService.js";
 import { synthesizeReport, parseScoreFromSection } from "../services/synthesisService.js";
 import { recordRecentComparison, getRecentComparisons } from "../services/recentComparisonsStore.js";
+import { fetchPageSpeedMetrics, fetchPageSpeedBatch } from "../services/performanceService.js";
+import { analyzeReadability } from "../services/readabilityService.js";
 
 export const analyzeRouter = Router();
 
@@ -440,9 +442,16 @@ async function runPipeline(jobId) {
       return runVisionPool(tasks);
     })();
 
-    const [userAnalysisResolved, competitorAnalysisResultsRaw] = await Promise.all([
+    const allUrls = [userUrl, ...competitorScrapes.map((s) => s.url)];
+    const pageSpeedPromise = fetchPageSpeedBatch(allUrls).catch((err) => {
+      console.warn("[pagespeed] batch failed:", err?.message || err);
+      return [];
+    });
+
+    const [userAnalysisResolved, competitorAnalysisResultsRaw, pageSpeedResults] = await Promise.all([
       userVisionChain,
       competitorVisionChain,
+      pageSpeedPromise,
     ]);
     userAnalysis = userAnalysisResolved;
     let competitorAnalysisResults = competitorAnalysisResultsRaw;
@@ -474,13 +483,39 @@ async function runPipeline(jobId) {
       competitors: synthesisInputCompetitors,
     });
 
+    const siteType = userAnalysis?._siteType || null;
+    const cleanedUserAnalysis = { ...userAnalysis };
+    delete cleanedUserAnalysis._siteType;
+
+    const userPerf = pageSpeedResults.find((p) => p.url === userUrl) || null;
+    const competitorPerfs = pageSpeedResults.filter((p) => p.url !== userUrl);
+
+    const userReadability = userScrape?.markdown ? analyzeReadability(userScrape.markdown) : null;
+    const competitorReadabilities = competitorScrapes
+      .filter((s) => s.markdown)
+      .map((s) => ({ url: s.url, ...analyzeReadability(s.markdown) }));
+
     const result = {
       report: synthesis.report,
-      userAnalysis,
+      userAnalysis: cleanedUserAnalysis,
       competitors: synthesisInputCompetitors,
       targetScreenshotUrl: userScrape?.screenshot ?? null,
       synthesis: { overall_score: synthesis.overall_score },
       gaps: synthesis.gaps,
+      siteType,
+      bestPractices: synthesis.bestPractices || [],
+      journeyMap: synthesis.journeyMap || [],
+      designPatterns: synthesis.designPatterns || [],
+      actionPlan: synthesis.actionPlan || [],
+      copySuggestions: synthesis.copySuggestions || [],
+      performance: {
+        user: userPerf ? { url: userPerf.url, ...userPerf } : null,
+        competitors: competitorPerfs.filter(Boolean),
+      },
+      readability: {
+        user: userReadability ? { url: userUrl, ...userReadability } : null,
+        competitors: competitorReadabilities,
+      },
     };
 
     resultCache.set(cacheKey, { result, cachedAt: Date.now() });

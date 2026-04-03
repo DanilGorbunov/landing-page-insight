@@ -11,6 +11,15 @@ import {
 import { readFullInsightsPayload } from "@/lib/reportSession";
 import { getHistoryCount, enableFullInsightsHistoryPersistence } from "@/lib/analysisHistory";
 import { downloadFullInsightsPdf } from "@/lib/fullReportPdf";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { BestPracticesChecklist } from "@/components/BestPracticesChecklist";
+import { CustomerJourneyMap } from "@/components/CustomerJourneyMap";
+import { DesignPatterns } from "@/components/DesignPatterns";
+import { ActionPlan } from "@/components/ActionPlan";
+import { CopySuggestions } from "@/components/CopySuggestions";
+import { PerformanceGauges } from "@/components/PerformanceGauges";
+import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
+import { ReadabilityPanel } from "@/components/ReadabilityPanel";
 import {
   getDomain,
   cn,
@@ -96,6 +105,30 @@ export default function FullInsightsReport() {
     ];
     if (payload?.result?.gaps && payload.result.gaps.length > 0) {
       links.push({ href: "#gaps", label: "Gaps" });
+    }
+    if (payload?.result?.performance?.user?.scores) {
+      links.push({ href: "#performance", label: "Performance" });
+    }
+    if (payload?.result?.readability?.user) {
+      links.push({ href: "#readability", label: "Readability" });
+    }
+    if ((payload?.result?.competitors?.length ?? 0) > 0) {
+      links.push({ href: "#heatmap", label: "Heatmap" });
+    }
+    if (payload?.result?.bestPractices?.length) {
+      links.push({ href: "#best-practices", label: "Best Practices" });
+    }
+    if (payload?.result?.journeyMap?.length) {
+      links.push({ href: "#journey", label: "Journey" });
+    }
+    if (payload?.result?.designPatterns?.length) {
+      links.push({ href: "#patterns", label: "Patterns" });
+    }
+    if (payload?.result?.actionPlan?.length) {
+      links.push({ href: "#action-plan", label: "Action Plan" });
+    }
+    if (payload?.result?.copySuggestions?.length) {
+      links.push({ href: "#copy-suggestions", label: "Copy Ideas" });
     }
     links.push({ href: "#synthesis", label: "Synthesis" });
     const hasChartData = Boolean(
@@ -187,6 +220,7 @@ export default function FullInsightsReport() {
                 </span>
               ) : null}
             </button>
+            <ThemeToggle className="-mr-1 shrink-0" />
           </nav>
           <div className="ml-auto flex shrink-0 items-center pl-2">
             <button
@@ -209,7 +243,14 @@ export default function FullInsightsReport() {
       >
         <div id="report-top" className="scroll-mt-[5.5rem] pt-8 sm:pt-10 pb-2">
           <ReportEyebrow>Full insights</ReportEyebrow>
-          <ReportPageTitle>{domain}</ReportPageTitle>
+          <div className="flex flex-wrap items-center gap-3">
+            <ReportPageTitle>{domain}</ReportPageTitle>
+            {result.siteType && (
+              <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary translate-y-1">
+                {result.siteType}
+              </span>
+            )}
+          </div>
           <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
             Weighted view of your landing versus competitors—structured for scanning, then synthesis.
           </p>
@@ -425,11 +466,108 @@ export default function FullInsightsReport() {
                     {g.confidence}
                   </span>
                 </div>
+                {g.title && (
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{g.title}</p>
+                )}
                 <p className="text-sm font-semibold text-foreground leading-snug mb-2">{g.problem}</p>
+                {g.evidence && (
+                  <p className="text-[11px] italic text-muted-foreground/80 mb-2 border-l-2 border-border pl-2">"{g.evidence}"</p>
+                )}
                 <p className="text-sm text-muted-foreground leading-relaxed">{g.recommendation}</p>
-                <p className="mt-3 text-xs font-medium text-primary">{g.competitor}</p>
+                {g.competitorAction && (
+                  <p className="mt-2 text-xs text-primary/80">
+                    <span className="font-medium">{g.competitor || "Competitor"}:</span> {g.competitorAction}
+                  </p>
+                )}
+                <p className="mt-3 text-xs font-medium text-primary">
+                  {g.competitorUrl ? (
+                    <a href={g.competitorUrl.startsWith("http") ? g.competitorUrl : `https://${g.competitorUrl}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                      {g.competitor} ↗
+                    </a>
+                  ) : g.competitor}
+                </p>
               </article>
             ))}
+          </ReportSection>
+        )}
+
+        {result.performance?.user?.scores && (
+          <ReportSection
+            id="performance"
+            title="Performance Metrics"
+            description="PageSpeed Insights scores and Core Web Vitals for your page and competitors."
+          >
+            <PerformanceGauges data={result.performance} />
+          </ReportSection>
+        )}
+
+        {result.readability?.user && (
+          <ReportSection
+            id="readability"
+            title="Readability Analysis"
+            description="How easy your copy is to read — lower grade level = higher conversion potential."
+          >
+            <ReadabilityPanel data={result.readability} />
+          </ReportSection>
+        )}
+
+        {(result.competitors?.length ?? 0) > 0 && (
+          <ReportSection
+            id="heatmap"
+            title="Competitive Heatmap"
+            description="Color-coded comparison matrix — quickly spot where you win and lose across sections."
+          >
+            <CompetitiveHeatmap userUrl={url} result={result} />
+          </ReportSection>
+        )}
+
+        {result.bestPractices && result.bestPractices.length > 0 && (
+          <ReportSection
+            id="best-practices"
+            title="2026 Best Practices"
+            description="How your landing page stacks up against modern conversion best practices."
+          >
+            <BestPracticesChecklist checks={result.bestPractices} />
+          </ReportSection>
+        )}
+
+        {result.journeyMap && result.journeyMap.length > 0 && (
+          <ReportSection
+            id="journey"
+            title="Customer Journey Map"
+            description="Coverage of 7 key stages in the SaaS customer journey. Tap a stage for details."
+          >
+            <CustomerJourneyMap stages={result.journeyMap} />
+          </ReportSection>
+        )}
+
+        {result.designPatterns && result.designPatterns.length > 0 && (
+          <ReportSection
+            id="patterns"
+            title="Design Patterns"
+            description="Proven landing page patterns detected on your page."
+          >
+            <DesignPatterns patterns={result.designPatterns} />
+          </ReportSection>
+        )}
+
+        {result.actionPlan && result.actionPlan.length > 0 && (
+          <ReportSection
+            id="action-plan"
+            title="Priority Action Plan"
+            description="Sequenced 4-week plan with estimated impact for each improvement."
+          >
+            <ActionPlan items={result.actionPlan} />
+          </ReportSection>
+        )}
+
+        {result.copySuggestions && result.copySuggestions.length > 0 && (
+          <ReportSection
+            id="copy-suggestions"
+            title="Copy Suggestions"
+            description="Alternative headline and CTA options for sections that scored below 7/10."
+          >
+            <CopySuggestions suggestions={result.copySuggestions} />
           </ReportSection>
         )}
 

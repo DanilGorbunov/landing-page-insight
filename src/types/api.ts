@@ -10,6 +10,10 @@ export interface CriticalGap {
   recommendation: string;
   competitor: string;
   confidence: "High" | "Medium" | "Low";
+  title?: string;
+  evidence?: string;
+  competitorAction?: string;
+  competitorUrl?: string;
 }
 
 export interface AnalysisResult {
@@ -23,8 +27,93 @@ export interface AnalysisResult {
   targetScreenshotUrl?: string | null;
   synthesis?: { overall_score?: number };
   gaps?: CriticalGap[];
+  siteType?: "saas" | "ecommerce" | "utility" | "marketplace" | string | null;
+  bestPractices?: BestPracticeCheck[];
+  journeyMap?: JourneyStage[];
+  designPatterns?: DesignPattern[];
+  actionPlan?: ActionPlanItem[];
+  copySuggestions?: CopySuggestion[];
+  performance?: PerformanceData;
+  readability?: ReadabilityData;
   /** Set by frontend when saving to history; not returned by API. */
   jobId?: string;
+}
+
+export interface BestPracticeCheck {
+  id: string;
+  label: string;
+  pass: boolean | null;
+  impact: "High" | "Medium" | "Low";
+  note?: string;
+}
+
+export interface JourneyStage {
+  stage: string;
+  status: "addressed" | "partial" | "missing";
+  evidence?: string;
+}
+
+export interface DesignPattern {
+  id: string;
+  label: string;
+  present: boolean;
+  note?: string;
+}
+
+export interface ActionPlanItem {
+  week: number;
+  impact: "High" | "Medium" | "Low";
+  action: string;
+  rationale?: string;
+}
+
+export interface CopySuggestion {
+  section: string;
+  current?: string;
+  suggestions: string[];
+}
+
+export interface PerformanceScores {
+  performance: number | null;
+  accessibility: number | null;
+  seo: number | null;
+  bestPractices: number | null;
+}
+
+export interface PerformanceMetrics {
+  lcp: number | null;
+  fcp: number | null;
+  cls: number | null;
+  inp: number | null;
+  speedIndex: number | null;
+  tbt: number | null;
+}
+
+export interface PerformanceSite {
+  url: string;
+  scores: PerformanceScores | null;
+  metrics: PerformanceMetrics | null;
+  fetchedAt?: string;
+}
+
+export interface PerformanceData {
+  user: PerformanceSite | null;
+  competitors: PerformanceSite[];
+}
+
+export interface ReadabilitySite {
+  url: string;
+  gradeLevel: number | null;
+  readingEase: number | null;
+  wordCount: number;
+  sentenceCount: number;
+  avgSentenceLength: number;
+  avgSyllablesPerWord: number;
+}
+
+export interface ReadabilityData {
+  user: ReadabilitySite | null;
+  competitors: ReadabilitySite[];
 }
 
 export interface JobProgressEntry {

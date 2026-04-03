@@ -430,10 +430,22 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
     for (const g of result.gaps!.slice(0, 16)) {
       y = addWrapped(doc, `[${g.priority}] ${g.area} · confidence: ${g.confidence}`, margin, y, maxW, 4);
       y += 1;
+      if (g.title) {
+        y = addWrapped(doc, `Title: ${g.title}`, margin, y, maxW, 4);
+        y += 1;
+      }
       y = addWrapped(doc, `Problem: ${g.problem}`, margin, y, maxW, 4);
       y += 1;
+      if (g.evidence) {
+        y = addWrapped(doc, `Evidence: "${g.evidence}"`, margin, y, maxW, 4);
+        y += 1;
+      }
       y = addWrapped(doc, `Recommendation: ${g.recommendation}`, margin, y, maxW, 4);
       y += 1;
+      if (g.competitorAction) {
+        y = addWrapped(doc, `Competitor action: ${g.competitorAction}`, margin, y, maxW, 4);
+        y += 1;
+      }
       y = addWrapped(doc, `Competitor benchmark: ${g.competitor}`, margin, y, maxW, 4);
       y += 4;
       if (y > 275) {
@@ -441,6 +453,160 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
         y = 16;
       }
     }
+  }
+
+  // Performance metrics
+  if (result.performance?.user?.scores) {
+    newPageIfNeeded(40);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Performance Metrics (PageSpeed Insights)", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    const perf = result.performance.user;
+    const s = perf.scores;
+    if (s) {
+      y = addWrapped(doc, `Performance: ${s.performance ?? "—"} · Accessibility: ${s.accessibility ?? "—"} · SEO: ${s.seo ?? "—"} · Best Practices: ${s.bestPractices ?? "—"}`, margin, y, maxW, 4);
+      y += 2;
+    }
+    const m = perf.metrics;
+    if (m) {
+      y = addWrapped(doc, `LCP: ${m.lcp != null ? Math.round(m.lcp) + "ms" : "—"} · FCP: ${m.fcp != null ? Math.round(m.fcp) + "ms" : "—"} · CLS: ${m.cls != null ? m.cls.toFixed(2) : "—"} · TBT: ${m.tbt != null ? Math.round(m.tbt) + "ms" : "—"}`, margin, y, maxW, 4);
+      y += 4;
+    }
+    for (const cp of result.performance.competitors ?? []) {
+      if (!cp.scores) continue;
+      const cd = getDomain(cp.url);
+      y = addWrapped(doc, `${cd}: Perf ${cp.scores.performance ?? "—"} · A11y ${cp.scores.accessibility ?? "—"} · SEO ${cp.scores.seo ?? "—"}`, margin, y, maxW, 4);
+      y += 2;
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
+  }
+
+  // Readability
+  if (result.readability?.user) {
+    newPageIfNeeded(30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Readability Analysis", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    const r = result.readability.user;
+    y = addWrapped(doc, `Your site: Grade Level ${r.gradeLevel ?? "—"} · Flesch Ease ${r.readingEase ?? "—"} · ${r.wordCount} words · ${r.avgSentenceLength} avg words/sentence`, margin, y, maxW, 4);
+    y += 2;
+    for (const cr of result.readability.competitors ?? []) {
+      y = addWrapped(doc, `${getDomain(cr.url)}: Grade ${cr.gradeLevel ?? "—"} · Ease ${cr.readingEase ?? "—"} · ${cr.wordCount} words`, margin, y, maxW, 4);
+      y += 2;
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
+  }
+
+  // Best Practices Checklist
+  if (result.bestPractices && result.bestPractices.length > 0) {
+    newPageIfNeeded(40);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("2026 Best Practices Checklist", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    for (const check of result.bestPractices) {
+      const icon = check.pass === true ? "✓" : check.pass === false ? "✗" : "?";
+      y = addWrapped(doc, `${icon} [${check.impact}] ${check.label}${check.note ? ` — ${check.note}` : ""}`, margin, y, maxW, 4);
+      y += 1;
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
+  }
+
+  // Customer Journey Map
+  if (result.journeyMap && result.journeyMap.length > 0) {
+    newPageIfNeeded(40);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Customer Journey Map", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    for (const stage of result.journeyMap) {
+      const icon = stage.status === "addressed" ? "●" : stage.status === "partial" ? "◐" : "○";
+      y = addWrapped(doc, `${icon} ${stage.stage}: ${stage.status}${stage.evidence ? ` — ${stage.evidence}` : ""}`, margin, y, maxW, 4);
+      y += 1;
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
+  }
+
+  // Design Patterns
+  if (result.designPatterns && result.designPatterns.length > 0) {
+    newPageIfNeeded(30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    const present = result.designPatterns.filter((p) => p.present).length;
+    doc.text(`Design Patterns (${present}/${result.designPatterns.length})`, margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    for (const p of result.designPatterns) {
+      const icon = p.present ? "✓" : "✗";
+      y = addWrapped(doc, `${icon} ${p.label}${p.note ? ` — ${p.note}` : ""}`, margin, y, maxW, 4);
+      y += 1;
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
+  }
+
+  // Action Plan
+  if (result.actionPlan && result.actionPlan.length > 0) {
+    newPageIfNeeded(30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Priority Action Plan", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    for (const item of result.actionPlan) {
+      y = addWrapped(doc, `Week ${item.week} [${item.impact}]: ${item.action}`, margin, y, maxW, 4);
+      y += 1;
+      if (item.rationale) {
+        y = addWrapped(doc, `  → ${item.rationale}`, margin, y, maxW, 4);
+        y += 1;
+      }
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
+  }
+
+  // Copy Suggestions
+  if (result.copySuggestions && result.copySuggestions.length > 0) {
+    newPageIfNeeded(30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Copy Suggestions", margin, y);
+    y += 6;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    for (const s of result.copySuggestions) {
+      doc.setFont("helvetica", "bold");
+      y = addWrapped(doc, s.section.toUpperCase(), margin, y, maxW, 4);
+      doc.setFont("helvetica", "normal");
+      y += 1;
+      if (s.current) {
+        y = addWrapped(doc, `Current: "${s.current}"`, margin, y, maxW, 4);
+        y += 1;
+      }
+      for (const suggestion of s.suggestions) {
+        y = addWrapped(doc, `→ "${suggestion}"`, margin, y, maxW, 4);
+        y += 1;
+      }
+      y += 2;
+      if (y > 275) { doc.addPage(); y = 16; }
+    }
+    y += 4;
   }
 
   doc.setFontSize(7);

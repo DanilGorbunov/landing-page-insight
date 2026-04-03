@@ -197,5 +197,14 @@ Rubric: 1-2 broken/missing, 3-4 underperforms, 5-6 average, 7-8 good, 9-10 excep
 
   const textBlock = msg.content.find((b) => b.type === "text");
   const raw = textBlock ? textBlock.text : "";
-  return parseSectionsResponse(raw);
+  const sections = parseSectionsResponse(raw);
+  sections._siteType = parseSiteType(raw);
+  return sections;
+}
+
+/** Extract [SITE_TYPE: ...] from analysis text. */
+function parseSiteType(text) {
+  if (!text) return null;
+  const m = text.match(/\[SITE_TYPE:\s*(\w+)\]/i);
+  return m ? m[1].toLowerCase() : null;
 }
