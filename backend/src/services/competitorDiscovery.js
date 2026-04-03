@@ -1,8 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
-/** Same Sonnet as vision/synthesis for consistent quality on competitor discovery. */
-const DISCOVERY_MODEL = "claude-sonnet-4-20250514";
+/** Haiku is sufficient for finding competitor domains — no analysis needed. */
+const DISCOVERY_MODEL = "claude-haiku-4-20250514";
 const TAVILY_API = "https://api.tavily.com/search";
 
 const SKIP_PATHS = ["/blog/", "/alternatives", "/competitors", "/vs-"];

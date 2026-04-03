@@ -2,12 +2,16 @@ import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
-/** Sonnet for all landings (user + competitors) — consistent comparison quality. */
+/** Sonnet for the user's own site; Haiku for competitors (3.75x cheaper + faster). */
 const MODEL_SONNET = "claude-sonnet-4-20250514";
+const MODEL_HAIKU = "claude-haiku-4-20250514";
 const MAX_IMAGE_WIDTH = 1000;
+const MAX_IMAGE_WIDTH_COMPETITOR = 800; // smaller = fewer image tokens for competitors
 const JPEG_QUALITY = 76;
-const MARKDOWN_MAX_CHARS = 6000;
-const MAX_TOKENS = 4096;
+const MARKDOWN_MAX_CHARS = 6000;         // user site: full context
+const MARKDOWN_MAX_CHARS_COMPETITOR = 2500; // competitors: enough for scoring
+const MAX_TOKENS_USER = 4096;
+const MAX_TOKENS_COMPETITOR = 1800;      // competitors don't emit UX signals JSON
 const SECTIONS = [
   "hero",
   "value proposition",
@@ -129,7 +133,11 @@ function parseSectionsResponse(text) {
 export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
   const { markdown, screenshotUrl, screenshotBase64 } = scrapeResult;
   const url = scrapeResult.url || "(no url)";
-  console.log("[model] sonnet →", url);
+  const model = isUserSite ? MODEL_SONNET : MODEL_HAIKU;
+  const maxTokens = isUserSite ? MAX_TOKENS_USER : MAX_TOKENS_COMPETITOR;
+  const markdownMax = isUserSite ? MARKDOWN_MAX_CHARS : MARKDOWN_MAX_CHARS_COMPETITOR;
+  const imgWidth = isUserSite ? MAX_IMAGE_WIDTH : MAX_IMAGE_WIDTH_COMPETITOR;
+  console.log(`[model] ${model} →`, url);
 
   let base64 = screenshotBase64;
   if (!base64 && screenshotUrl) {
@@ -137,7 +145,7 @@ export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
     if (res.ok) base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
   }
 
-  const imageOpts = { maxWidth: MAX_IMAGE_WIDTH, jpegQuality: JPEG_QUALITY };
+  const imageOpts = { maxWidth: imgWidth, jpegQuality: JPEG_QUALITY };
   let resizedBuffer = null;
   if (base64) {
     resizedBuffer = await getResizedBuffer(base64, imageOpts);
@@ -200,17 +208,17 @@ Assess from the screenshots only. Use null for items you cannot determine.`);
     textParts.push('\nIf you cannot clearly see or read an element in the screenshot, write "not visible" — never infer or assume.');
   }
   if (markdown) {
-    textParts.push("\n\nPage text (markdown):\n" + markdown.slice(0, MARKDOWN_MAX_CHARS));
+    textParts.push("\n\nPage text (markdown):\n" + markdown.slice(0, markdownMax));
   }
   content.push({ type: "text", text: textParts.join("\n") });
 
   const msg = await client.messages.create({
-    model: MODEL_SONNET,
-    max_tokens: MAX_TOKENS,
+    model,
+    max_tokens: maxTokens,
     messages: [{ role: "user", content }],
   });
 
-  logClaudeUsage("vision", MODEL_SONNET, msg);
+  logClaudeUsage("vision", model, msg);
 
   const textBlock = msg.content.find((b) => b.type === "text");
   const raw = textBlock ? textBlock.text : "";

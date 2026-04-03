@@ -2,8 +2,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
 const MODEL = "claude-sonnet-4-20250514";
-const SECTION_MAX_CHARS = 700;
-const SYNTHESIS_MAX_TOKENS = 6144;
+const SECTION_MAX_CHARS_USER = 500;        // user site: slightly more context
+const SECTION_MAX_CHARS_COMPETITOR = 300;  // competitors: just enough for gaps/scores
+const SYNTHESIS_MAX_TOKENS = 5000;         // was 6144; saves output cost
 
 /** Section keys as in analysis output. Weights: Hero & CTA matter most for conversion; Features least. */
 const WEIGHTS = {
@@ -97,13 +98,14 @@ export async function synthesizeReport(input) {
 
   const weightedScore = computeWeightedScore(input.userAnalysis);
 
-  const trunc = (text) => (typeof text === "string" ? text.slice(0, SECTION_MAX_CHARS) : "");
+  const truncUser = (text) => (typeof text === "string" ? text.slice(0, SECTION_MAX_CHARS_USER) : "");
+  const truncComp = (text) => (typeof text === "string" ? text.slice(0, SECTION_MAX_CHARS_COMPETITOR) : "");
 
   const parts = [
     `# Competitive analysis: ${input.userUrl}\n`,
     "## Your landing\n",
     Object.entries(input.userAnalysis || {})
-      .map(([section, text]) => `### ${section}\n${trunc(text)}`)
+      .map(([section, text]) => `### ${section}\n${truncUser(text)}`)
       .join("\n"),
     "\n## Competitors\n",
   ];
@@ -112,7 +114,7 @@ export async function synthesizeReport(input) {
     parts.push(`### ${c.url}\n`);
     parts.push(
       Object.entries(c.analysis || {})
-        .map(([section, text]) => `#### ${section}\n${trunc(text)}`)
+        .map(([section, text]) => `#### ${section}\n${truncComp(text)}`)
         .join("\n")
     );
     parts.push("\n");
