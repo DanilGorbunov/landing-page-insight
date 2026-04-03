@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
 /** Haiku is sufficient for finding competitor domains — no analysis needed. */
-const DISCOVERY_MODEL = "claude-haiku-4-20250514";
+const DISCOVERY_MODEL = "claude-haiku-4-5-20251001";
 const TAVILY_API = "https://api.tavily.com/search";
 
 const SKIP_PATHS = ["/blog/", "/alternatives", "/competitors", "/vs-"];
@@ -103,13 +103,15 @@ export async function findCompetitors(domainOrProduct, opts = {}) {
     ? `\nHere is the actual content from ${domain}'s landing page (use this to understand what the company does):\n---\n${opts.pageMarkdown.slice(0, PAGE_CONTEXT_MAX_CHARS)}\n---\n`
     : "";
 
-  const response = await client.messages.create({
-    model: DISCOVERY_MODEL,
-    max_tokens: 200,
-    messages: [
-      {
-        role: "user",
-        content: `What are the 4 most direct competitors of ${domain}?
+  let response;
+  try {
+    response = await client.messages.create({
+      model: DISCOVERY_MODEL,
+      max_tokens: 200,
+      messages: [
+        {
+          role: "user",
+          content: `What are the 4 most direct competitors of ${domain}?
 ${contextBlock}
 Return ONLY a JSON array of domains, nothing else.
 Example: ["competitor1.com", "competitor2.com"]
@@ -118,9 +120,13 @@ Rules:
 - Direct competitors offering the SAME type of product/service
 - Real companies with landing pages
 - Determine the company's actual business from the page content above, not just the domain name`,
-      },
-    ],
-  });
+        },
+      ],
+    });
+  } catch (e) {
+    console.error("[discovery] Claude API error:", e?.message || e);
+    throw e;
+  }
 
   logClaudeUsage("discovery", DISCOVERY_MODEL, response);
 

@@ -4,7 +4,8 @@ import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
 /** Sonnet for the user's own site; Haiku for competitors (3.75x cheaper + faster). */
 const MODEL_SONNET = "claude-sonnet-4-20250514";
-const MODEL_HAIKU = "claude-haiku-4-20250514";
+/** Must match Anthropic API model IDs (invalid ID = empty competitors). */
+const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 const MAX_IMAGE_WIDTH = 1000;
 const MAX_IMAGE_WIDTH_COMPETITOR = 800; // smaller = fewer image tokens for competitors
 const JPEG_QUALITY = 76;
