@@ -18,7 +18,6 @@ import { synthesizeReport, parseScoreFromSection } from "../services/synthesisSe
 import { recordRecentComparison, getRecentComparisons } from "../services/recentComparisonsStore.js";
 import { fetchPageSpeedMetrics, fetchPageSpeedBatch } from "../services/performanceService.js";
 import { analyzeReadability } from "../services/readabilityService.js";
-import { runSeoAudit } from "../services/seoAuditService.js";
 
 export const analyzeRouter = Router();
 
@@ -477,11 +476,6 @@ async function runPipeline(jobId) {
       .filter((s) => s.markdown)
       .map((s) => ({ url: s.url, ...analyzeReadability(s.markdown) }));
 
-    const userSeoAudit = userScrape?.html ? runSeoAudit(userScrape.html, userUrl) : null;
-    const competitorSeoAudits = competitorScrapes
-      .filter((s) => s.html)
-      .map((s) => ({ url: s.url, ...runSeoAudit(s.html, s.url) }));
-
     const result = {
       report: synthesis.report,
       userAnalysis: cleanedUserAnalysis,
@@ -499,10 +493,6 @@ async function runPipeline(jobId) {
       competitiveEdge: synthesis.competitiveEdge || [],
       uxHints: synthesis.uxHints || [],
       uxSignals: uxSignals || null,
-      seoAudit: {
-        user: userSeoAudit ? { url: userUrl, ...userSeoAudit } : null,
-        competitors: competitorSeoAudits,
-      },
       performance: {
         user: userPerf ? { url: userPerf.url, ...userPerf } : null,
         competitors: competitorPerfs.filter(Boolean),

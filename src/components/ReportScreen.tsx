@@ -31,7 +31,6 @@ import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { ReadabilityPanel } from "@/components/ReadabilityPanel";
 import { CtaTrustPanel } from "@/components/CtaTrustPanel";
-import { SeoAuditPanel } from "@/components/SeoAuditPanel";
 import { UxSignalsPanel } from "@/components/UxSignalsPanel";
 import { CompetitiveEdgePanel } from "@/components/CompetitiveEdgePanel";
 import { UxHintsPanel } from "@/components/UxHintsPanel";
@@ -844,14 +843,6 @@ const ReportScreen = ({
               <motion.div variants={itemVariants}>
                 <h2 className="text-sm font-semibold text-foreground mb-4">Performance</h2>
                 <PerformanceGauges data={apiResult.performance} />
-              </motion.div>
-            )}
-
-            {/* SEO Audit */}
-            {apiResult?.seoAudit?.user && (
-              <motion.div variants={itemVariants}>
-                <h2 className="text-sm font-semibold text-foreground mb-4">SEO Audit</h2>
-                <SeoAuditPanel data={apiResult.seoAudit} />
               </motion.div>
             )}
 

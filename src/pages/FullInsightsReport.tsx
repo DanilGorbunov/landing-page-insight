@@ -21,7 +21,6 @@ import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { ReadabilityPanel } from "@/components/ReadabilityPanel";
 import { CtaTrustPanel } from "@/components/CtaTrustPanel";
-import { SeoAuditPanel } from "@/components/SeoAuditPanel";
 import { UxSignalsPanel } from "@/components/UxSignalsPanel";
 import { CompetitiveEdgePanel } from "@/components/CompetitiveEdgePanel";
 import { UxHintsPanel } from "@/components/UxHintsPanel";
@@ -113,9 +112,6 @@ export default function FullInsightsReport() {
     }
     if (payload?.result?.performance?.user?.scores) {
       links.push({ href: "#performance", label: "Performance" });
-    }
-    if (payload?.result?.seoAudit?.user) {
-      links.push({ href: "#seo-audit", label: "SEO Audit" });
     }
     if (payload?.result?.readability?.user) {
       links.push({ href: "#readability", label: "Readability" });
@@ -518,16 +514,6 @@ export default function FullInsightsReport() {
             description="PageSpeed Insights scores and Core Web Vitals for your page and competitors."
           >
             <PerformanceGauges data={result.performance} />
-          </ReportSection>
-        )}
-
-        {result.seoAudit?.user && (
-          <ReportSection
-            id="seo-audit"
-            title="SEO Audit"
-            description="Technical SEO health check — meta tags, headings, images, links, structured data, and fix hints."
-          >
-            <SeoAuditPanel data={result.seoAudit} />
           </ReportSection>
         )}
 

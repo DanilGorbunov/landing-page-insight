@@ -26,13 +26,13 @@ async function firecrawlFetch(url, formats, waitFor) {
 }
 
 /**
- * Scrape the USER's page: markdown + full-page screenshot + rawHtml (for SEO audit).
+ * Scrape the USER's page: markdown + full-page screenshot.
  * @param {string} url
  * @returns {Promise<{ markdown: string, screenshot: string|null, html: string }>}
  */
 export async function scrapeWithScreenshot(url) {
-  const d = await firecrawlFetch(url, ["markdown", "screenshot@fullPage", "rawHtml"], 2000);
-  return { markdown: d.markdown || "", screenshot: d.screenshot || null, html: d.rawHtml || "" };
+  const d = await firecrawlFetch(url, ["markdown", "screenshot@fullPage"], 2000);
+  return { markdown: d.markdown || "", screenshot: d.screenshot || null, html: "" };
 }
 
 /**

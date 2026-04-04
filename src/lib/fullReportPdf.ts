@@ -505,31 +505,6 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
     y += 4;
   }
 
-  // SEO Audit
-  if (result.seoAudit?.user) {
-    newPageIfNeeded(40);
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("SEO Audit", margin, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    const seo = result.seoAudit.user;
-    y = addWrapped(doc, `Score: ${seo.passCount}/${seo.total} checks passed (${seo.warnCount} warnings, ${seo.failCount} failures)`, margin, y, maxW, 4);
-    y += 2;
-    for (const item of seo.items) {
-      const icon = item.status === "pass" ? "✓" : item.status === "warn" ? "⚠" : "✗";
-      y = addWrapped(doc, `${icon} [${item.category}] ${item.label}: ${item.value || "—"}`, margin, y, maxW, 4);
-      y += 1;
-      if (item.hint) {
-        y = addWrapped(doc, `  → ${item.hint}`, margin, y, maxW, 4);
-        y += 1;
-      }
-      if (y > 275) { doc.addPage(); y = 16; }
-    }
-    y += 4;
-  }
-
   // UX Signals
   if (result.uxSignals) {
     newPageIfNeeded(30);

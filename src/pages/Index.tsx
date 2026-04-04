@@ -1,15 +1,14 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import InputScreen from "@/components/InputScreen";
 import ProgressiveReportView from "@/components/ProgressiveReportView";
-import ReportScreen from "@/components/ReportScreen";
 import Dashboard from "@/components/Dashboard";
 import { startAnalysis, fetchRecentComparisonsFromApi, type JobLiveState } from "@/lib/api";
-import { saveToHistory, getHistory, getHistoryCount, hasFullInsightsHistoryUnlock, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
+import { saveToHistory, getHistory, getHistoryCount, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
 import { getDefaultRecentComparisons } from "@/lib/demoRecentComparisons";
 import { REPORT_RETURN_KEY, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
 
-type Screen = "input" | "progress" | "report" | "dashboard";
+type Screen = "input" | "progress" | "dashboard";
 
 const Index = () => {
   const location = useLocation();
@@ -18,13 +17,36 @@ const Index = () => {
   const [url, setUrl] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [progressInitialLive, setProgressInitialLive] = useState<JobLiveState | null>(null);
-  const [lastResult, setLastResult] = useState<AnalysisResult | null>(null);
-  const [savedEntryForReport, setSavedEntryForReport] = useState<HistoryEntry | null>(null);
   const [historyCount, setHistoryCount] = useState(getHistoryCount);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [remoteRecentComparisons, setRemoteRecentComparisons] = useState<HistoryEntry[]>([]);
-  /** When user opened History from Report, back should return to Report; otherwise to Input */
-  const [screenBeforeDashboard, setScreenBeforeDashboard] = useState<"input" | "report">("input");
+
+  const openAnalysisDashboard = useCallback((rawUrl: string, result: AnalysisResult, paidAtOverride?: string) => {
+    const meta = readFullInsightsUnlockMeta();
+    const normalized = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl.replace(/^\/\//, "")}`;
+    writeFullInsightsPayload({
+      url: normalized,
+      result,
+      planId: meta?.planId ?? "analysis",
+      planName: meta?.planName ?? "Analysis",
+      paidAt: paidAtOverride ?? meta?.paidAt ?? new Date().toISOString(),
+    });
+    navigate("/full-insights");
+  }, [navigate]);
+
+  // Auto-start analysis when navigated here with ?url= param (e.g. from Monitor "Re-check")
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStarted.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const autoUrl = params.get("url");
+    if (autoUrl) {
+      autoStarted.current = true;
+      window.history.replaceState({}, "", "/");
+      handleAnalyze(decodeURIComponent(autoUrl), []);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (location.pathname !== "/" || location.state?.restoreReport !== true) return;
@@ -32,11 +54,19 @@ const Index = () => {
       const raw = sessionStorage.getItem(REPORT_RETURN_KEY);
       if (raw) {
         const data = JSON.parse(raw) as { url?: string; result?: AnalysisResult | null; savedEntry?: HistoryEntry | null };
-        if (data.url) setUrl(data.url);
-        if (data.result != null) setLastResult(data.result);
-        if (data.savedEntry != null) setSavedEntryForReport(data.savedEntry);
-        setScreen("report");
-        sessionStorage.removeItem(REPORT_RETURN_KEY);
+        if (data.url && data.result != null) {
+          const meta = readFullInsightsUnlockMeta();
+          writeFullInsightsPayload({
+            url: data.url.startsWith("http") ? data.url : `https://${data.url}`,
+            result: data.result,
+            planId: meta?.planId ?? "analysis",
+            planName: meta?.planName ?? "Analysis",
+            paidAt: meta?.paidAt ?? data.savedEntry?.analyzedAt ?? new Date().toISOString(),
+          });
+          sessionStorage.removeItem(REPORT_RETURN_KEY);
+          navigate("/full-insights", { replace: true });
+          return;
+        }
       }
     } catch (_) {}
     navigate(".", { state: {}, replace: true });
@@ -45,7 +75,6 @@ const Index = () => {
   useEffect(() => {
     if (location.pathname !== "/" || (location.state as { openHistory?: boolean })?.openHistory !== true) return;
     setHistoryCount(getHistoryCount());
-    setScreenBeforeDashboard("input");
     setScreen("dashboard");
     navigate(".", { state: {}, replace: true });
   }, [location.pathname, location.state, navigate]);
@@ -70,8 +99,6 @@ const Index = () => {
 
   const handleAnalyze = useCallback(async (inputUrl: string, competitorUrls: string[]) => {
     setAnalyzeError(null);
-    setSavedEntryForReport(null);
-    setLastResult(null);
     const urlToUse = normalizeUrl(inputUrl);
     if (!urlToUse) return;
     try {
@@ -89,75 +116,31 @@ const Index = () => {
     (result: AnalysisResult | null) => {
       const urlToSave = url || "";
       if (result) {
-        setLastResult(result);
         saveToHistory(urlToSave, result);
         setHistoryCount(getHistoryCount());
+        openAnalysisDashboard(urlToSave, result);
       }
       setJobId(null);
-      if (result && hasFullInsightsHistoryUnlock()) {
-        const meta = readFullInsightsUnlockMeta();
-        writeFullInsightsPayload({
-          url: urlToSave.startsWith("http") ? urlToSave : `https://${urlToSave.replace(/^\/\//, "")}`,
-          result,
-          planId: meta?.planId ?? "one-time",
-          planName: meta?.planName ?? "Full insights",
-          paidAt: new Date().toISOString(),
-        });
-        navigate("/full-insights");
-        return;
-      }
-      setScreen("report");
     },
-    [url, navigate]
+    [url, openAnalysisDashboard]
   );
 
   const handleOpenHistory = useCallback(() => {
     setHistoryCount(getHistoryCount());
-    setScreenBeforeDashboard(screen === "report" ? "report" : "input");
     setScreen("dashboard");
-  }, [screen]);
+  }, []);
 
   const handleViewReport = useCallback(
     (entry: HistoryEntry) => {
-      if (hasFullInsightsHistoryUnlock()) {
-        const meta = readFullInsightsUnlockMeta();
-        writeFullInsightsPayload({
-          url: `https://${entry.domain}`,
-          result: entry.result,
-          planId: meta?.planId ?? "one-time",
-          planName: meta?.planName ?? "Full insights",
-          paidAt: meta?.paidAt ?? entry.analyzedAt,
-        });
-        navigate("/full-insights");
-        return;
-      }
-      setUrl(`https://${entry.domain}`);
-      setSavedEntryForReport(entry);
-      setLastResult(entry.result);
-      setScreen("report");
+      openAnalysisDashboard(`https://${entry.domain}`, entry.result, entry.analyzedAt);
     },
-    [navigate]
+    [openAnalysisDashboard]
   );
-
-  const handleBackFromReport = useCallback(() => {
-    if (savedEntryForReport) {
-      setSavedEntryForReport(null);
-      setScreen("dashboard");
-    } else {
-      setHistoryCount(getHistoryCount());
-      setScreen("input");
-    }
-    setLastResult(null);
-  }, [savedEntryForReport]);
 
   const handleBackFromDashboard = useCallback(() => {
     setHistoryCount(getHistoryCount());
-    if (screenBeforeDashboard === "report") {
-      setScreen("report");
-    } else {
-      setScreen("input");
-    }
-  }, [screenBeforeDashboard]);
+    setScreen("input");
+  }, []);
 
   const handleBackFromProgress = useCallback(() => {
     setJobId(null);
@@ -168,8 +151,6 @@ const Index = () => {
   const handleGoHome = useCallback(() => {
     setScreen("input");
   }, []);
-
-  const reportResult = lastResult ?? savedEntryForReport?.result ?? null;
 
   const recentAnalysesForHome = useMemo(() => {
     const local = getHistory().slice(0, 3);
@@ -209,17 +190,6 @@ const Index = () => {
           onComplete={handleComplete}
           onBack={handleBackFromProgress}
           onGoHome={handleGoHome}
-        />
-      )}
-      {screen === "report" && (
-        <ReportScreen
-          url={savedEntryForReport ? `https://${savedEntryForReport.domain}` : url}
-          result={reportResult}
-          savedEntry={savedEntryForReport}
-          onBack={handleBackFromReport}
-          onOpenHistory={handleOpenHistory}
-          onGoHome={handleGoHome}
-          historyCount={historyCount}
         />
       )}
     </div>

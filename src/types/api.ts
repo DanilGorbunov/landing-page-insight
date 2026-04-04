@@ -37,7 +37,6 @@ export interface AnalysisResult {
   competitiveEdge?: CompetitiveEdgeEntry[];
   uxHints?: UxImprovementHint[];
   uxSignals?: UxSignals | null;
-  seoAudit?: SeoAuditData;
   performance?: PerformanceData;
   readability?: ReadabilityData;
   /** Set by frontend when saving to history; not returned by API. */
@@ -143,34 +142,6 @@ export interface ReadabilitySite {
 export interface ReadabilityData {
   user: ReadabilitySite | null;
   competitors: ReadabilitySite[];
-}
-
-// --- SEO Audit ---
-
-export interface SeoAuditItem {
-  id: string;
-  category: "Meta" | "Social" | "Structure" | "Content" | "Technical";
-  label: string;
-  status: "pass" | "warn" | "fail";
-  value: string | null;
-  hint: string | null;
-}
-
-export interface SeoAuditResult {
-  items: SeoAuditItem[];
-  passCount: number;
-  warnCount: number;
-  failCount: number;
-  total: number;
-}
-
-export interface SeoAuditSite extends SeoAuditResult {
-  url: string;
-}
-
-export interface SeoAuditData {
-  user: SeoAuditSite | null;
-  competitors: SeoAuditSite[];
 }
 
 // --- UX Signals ---
