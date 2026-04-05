@@ -60,6 +60,30 @@ export async function getJobStatus(jobId: string): Promise<JobStatus> {
 const PERMANENT_EXPIRES_AT = 8640000000000000;
 
 /** Latest completed comparisons from the API (global feed). Empty if backend missing or error. */
+export interface GenerateCopyVariant {
+  variant: string;
+  reasoning: string;
+}
+
+export async function generateCopyAlternatives(body: {
+  section: string;
+  currentCopy: string;
+  competitorExamples: string[];
+  issue: string;
+}): Promise<GenerateCopyVariant[]> {
+  const res = await fetchWithTimeout(`${API_BASE}/api/generate-copy`, {
+    method: "POST",
+    ...DEFAULT_FETCH_OPTIONS,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || `Generate copy failed: ${res.status}`);
+  }
+  const data = (await res.json()) as { variants?: GenerateCopyVariant[] };
+  return Array.isArray(data.variants) ? data.variants : [];
+}
+
 export async function fetchRecentComparisonsFromApi(limit = 3): Promise<HistoryEntry[]> {
   if (!API_BASE) return [];
   try {

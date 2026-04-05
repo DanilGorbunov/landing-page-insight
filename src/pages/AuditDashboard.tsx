@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import {
   ArrowRight,
   LayoutDashboard,
@@ -21,6 +22,7 @@ import {
   Bell,
   Home,
   FileDown,
+  Share2,
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
@@ -749,6 +751,8 @@ function SidebarAction({
 
 export default function AuditDashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isSharedView = searchParams.get("shared") === "true";
   const payload = readFullInsightsPayload();
   const [activeSection, setActiveSection] = useState("compare");
   const [compareSiteIdx, setCompareSiteIdx] = useState(0);
@@ -808,6 +812,17 @@ export default function AuditDashboard() {
     }
   };
 
+  const handleShare = () => {
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set("shared", "true");
+      void navigator.clipboard.writeText(u.toString());
+      toast.success("Report link copied to clipboard");
+    } catch {
+      toast.error("Could not copy link");
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
@@ -835,6 +850,7 @@ export default function AuditDashboard() {
                 sites={compareTabSites}
                 activeIdx={Math.min(compareSiteIdx, Math.max(0, compareTabSites.length - 1))}
                 onSelect={setCompareSiteIdx}
+                analysisResult={result}
               />
             </div>
           ) : (
@@ -863,6 +879,14 @@ export default function AuditDashboard() {
             <ThemeToggle className="shrink-0" />
             <button
               type="button"
+              onClick={handleShare}
+              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Share Report</span>
+            </button>
+            <button
+              type="button"
               onClick={handlePdf}
               disabled={pdfLoading}
               className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:brightness-110 disabled:opacity-60 disabled:pointer-events-none transition-all"
@@ -872,6 +896,20 @@ export default function AuditDashboard() {
             </button>
           </div>
         </header>
+
+        {isSharedView && (
+          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-950 dark:text-amber-50">
+            <span className="min-w-0">
+              👁 You&apos;re viewing a shared report · Run your own analysis →
+            </span>
+            <Link
+              to="/"
+              className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110"
+            >
+              Get started
+            </Link>
+          </div>
+        )}
 
         {/* Section content — Compare uses full main width so screenshot + insights can sit side-by-side */}
         <main className="flex-1 overflow-y-auto p-5 md:p-7">

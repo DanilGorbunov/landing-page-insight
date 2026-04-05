@@ -18,6 +18,7 @@ import { synthesizeReport, parseScoreFromSection } from "../services/synthesisSe
 import { recordRecentComparison, getRecentComparisons } from "../services/recentComparisonsStore.js";
 import { fetchPageSpeedMetrics, fetchPageSpeedBatch } from "../services/performanceService.js";
 import { analyzeReadability } from "../services/readabilityService.js";
+import { generateCopyAlternatives } from "../services/generateCopyService.js";
 
 export const analyzeRouter = Router();
 
@@ -526,6 +527,31 @@ async function runPipeline(jobId) {
     });
   }
 }
+
+analyzeRouter.post("/generate-copy", async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const section = typeof body.section === "string" ? body.section.trim() : "";
+    if (!section) {
+      return res.status(400).json({ error: "Missing or invalid section" });
+    }
+    const currentCopy = typeof body.currentCopy === "string" ? body.currentCopy : "";
+    const issue = typeof body.issue === "string" ? body.issue : "";
+    const competitorExamples = Array.isArray(body.competitorExamples)
+      ? body.competitorExamples.map((x) => (typeof x === "string" ? x : String(x ?? "")))
+      : [];
+
+    const variants = await generateCopyAlternatives({
+      section,
+      currentCopy,
+      competitorExamples,
+      issue,
+    });
+    res.json({ variants });
+  } catch (err) {
+    next(err);
+  }
+});
 
 analyzeRouter.get("/recent-comparisons", (req, res) => {
   const raw = req.query.limit;

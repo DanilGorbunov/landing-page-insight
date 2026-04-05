@@ -8,6 +8,17 @@ import { getDomain, parseScoreFromReport, ensureScore } from "@/lib/utils";
 const SECTION_ORDER = ["hero", "value proposition", "features", "social proof", "CTA"] as const;
 export type SectionOrderKey = (typeof SECTION_ORDER)[number];
 
+/** Map a gap `area` string to analysis section keys for copy/score lookups. */
+export function inferSectionKeyFromGapArea(area: string): SectionOrderKey | null {
+  const h = area.toLowerCase();
+  if (h.includes("hero") || h.includes("headline") || h.includes("above the fold")) return "hero";
+  if (h.includes("value") || h.includes("proposition")) return "value proposition";
+  if (h.includes("feature")) return "features";
+  if (h.includes("social") || h.includes("proof") || h.includes("testimonial")) return "social proof";
+  if (h.includes("cta") || h.includes("call to action")) return "CTA";
+  return null;
+}
+
 export interface HeroSubMetrics {
   clarity: number;
   valueSpecificity: number;
@@ -403,6 +414,37 @@ export function conversionRiskWhyBut(
   const but =
     conversion.mainIssue.length > 100 ? `${conversion.mainIssue.slice(0, 97)}…` : conversion.mainIssue;
   return { why, but };
+}
+
+/** Clean model text for tooltips and the right-hand detail panel. */
+export function annotationDisplayBody(text: string): string {
+  if (!text.trim()) return "";
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/^#{1,4}\s+/gm, "")
+    .replace(/^\s*[-•]\s*/gm, "• ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function annotationPreview(text: string, maxLen: number): string {
+  const b = annotationDisplayBody(text);
+  if (b.length <= maxLen) return b;
+  return `${b.slice(0, maxLen).trim()}…`;
+}
+
+/** Short sentences for pin bullets and “watch” lists. */
+export function annotationBulletPoints(text: string, maxBullets: number): string[] {
+  const b = annotationDisplayBody(text);
+  const parts = b.split(/(?<=[.!?])\s+/).filter((s) => s.length > 10);
+  const out: string[] = [];
+  for (const p of parts) {
+    const t = p.replace(/^•\s*/, "").trim();
+    if (t.length > 8) out.push(t);
+    if (out.length >= maxBullets) break;
+  }
+  if (out.length === 0 && b.length > 0) out.push(b.slice(0, Math.min(220, b.length)));
+  return out.slice(0, maxBullets);
 }
 
 /** Always-on insight above the fold (Problem → 3-second result). */

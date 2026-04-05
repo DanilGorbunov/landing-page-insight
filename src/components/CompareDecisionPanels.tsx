@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
-import type { AnalysisResult } from "@/types/api";
-import { cn } from "@/lib/utils";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { cn, getDomain } from "@/lib/utils";
 import {
   type HeroSubMetrics,
   type ConversionLayer,
@@ -15,7 +14,17 @@ import {
   conversionRiskWhyBut,
   topActionPlanRows,
   type ActionPlanRow,
+  annotationDisplayBody,
+  inferSectionKeyFromGapArea,
+  type SectionOrderKey,
 } from "@/lib/compareDecisionMetrics";
+import type { AnalysisResult } from "@/types/api";
+import { buildSectionScoreBreakdown } from "@/lib/scoreBreakdown";
+import { insightConfidenceFromResult } from "@/lib/insightConfidence";
+import { ScoreBreakdownPopover } from "@/components/ScoreBreakdownPopover";
+import { CopyGeneratorBlock } from "@/components/CopyGeneratorBlock";
+import { BusinessImpactEstimate } from "@/components/BusinessImpactEstimate";
+import { InsightConfidenceBadge } from "@/components/InsightConfidenceBadge";
 import {
   CheckCircle2,
   ChevronDown,
@@ -26,6 +35,8 @@ import {
   Rocket,
   ScanEye,
   Sparkles,
+  TrendingDown,
+  TrendingUp,
   Wrench,
   X,
 } from "lucide-react";
@@ -110,8 +121,20 @@ export function CompareHeaderStatus({
           </span>
         </div>
       </div>
+      {!isHeader && <BusinessImpactEstimate conversion={conversion} />}
     </div>
   );
+}
+
+function tabAnalysisResult(result: AnalysisResult, site: CompareSiteTab): AnalysisResult {
+  if (site.isUser) return result;
+  const comp = result.competitors?.find((c) => getDomain(c.url) === site.domain);
+  if (!comp) return result;
+  return {
+    ...result,
+    userAnalysis: { ...(comp.analysis ?? {}) },
+    targetScreenshotUrl: comp.screenshotUrl ?? null,
+  };
 }
 
 /** Horizontal site tabs for Compare dashboard header (You + competitors, Δ vs you). */
@@ -119,16 +142,41 @@ export function CompareHeaderSiteTabs({
   sites,
   activeIdx,
   onSelect,
+  analysisResult,
 }: {
   sites: CompareSiteTab[];
   activeIdx: number;
   onSelect: (i: number) => void;
+  /** When set, overall scores open methodology popovers (div tab avoids nested buttons). */
+  analysisResult?: AnalysisResult | null;
 }) {
   const userScore = sites.find((s) => s.isUser)?.overallScore ?? null;
   const scoreClass = (x: number | null) => {
     if (x == null) return "text-muted-foreground";
     return sColor(x);
   };
+
+  const ScoreOrDash = ({ site, active }: { site: CompareSiteTab; active: boolean }) => {
+    if (site.overallScore == null) return <span className="tabular-nums font-bold">—</span>;
+    if (analysisResult) {
+      return (
+        <ScoreBreakdownPopover
+          sectionTitle="Score methodology"
+          breakdown={buildSectionScoreBreakdown("hero", site.overallScore, tabAnalysisResult(analysisResult, site))}
+        >
+          <span className={cn("tabular-nums font-bold", active ? "text-primary" : site.isUser ? "text-foreground" : scoreClass(site.overallScore))}>
+            {site.overallScore.toFixed(1)}
+          </span>
+        </ScoreBreakdownPopover>
+      );
+    }
+    return (
+      <span className={cn("tabular-nums font-bold", active ? "text-primary" : site.isUser ? "text-foreground" : scoreClass(site.overallScore))}>
+        {site.overallScore.toFixed(1)}
+      </span>
+    );
+  };
+
   return (
     <div className="flex flex-1 min-w-0 items-center gap-1 overflow-x-auto py-0.5 scrollbar-hide">
       {sites.map((s, i) => {
@@ -138,12 +186,19 @@ export function CompareHeaderSiteTabs({
             : null;
         const active = i === activeIdx;
         return (
-          <button
+          <div
             key={s.url}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={() => onSelect(i)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(i);
+              }
+            }}
             className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+              "flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors cursor-pointer select-none",
               active
                 ? "border-primary bg-primary/15 text-primary shadow-sm"
                 : "border-border bg-card/80 text-muted-foreground hover:border-primary/30 hover:text-foreground"
@@ -152,32 +207,31 @@ export function CompareHeaderSiteTabs({
             {s.isUser ? (
               <>
                 <span className="text-[9px] font-bold uppercase tracking-wide text-primary/90">You</span>
-                <span className={cn("tabular-nums font-bold", active ? "text-primary" : "text-foreground")}>
-                  {s.overallScore != null ? s.overallScore.toFixed(1) : "—"}
-                </span>
+                <ScoreOrDash site={s} active={active} />
               </>
             ) : (
               <>
                 <span className="truncate max-w-[128px]">{s.domain}</span>
-                {s.overallScore != null && (
-                  <span className={cn("tabular-nums font-bold", active ? "text-primary" : scoreClass(s.overallScore))}>
-                    {s.overallScore.toFixed(1)}
-                  </span>
-                )}
+                {s.overallScore != null && <ScoreOrDash site={s} active={active} />}
                 {delta != null && (
                   <span
                     className={cn(
-                      "text-[10px] font-bold tabular-nums",
-                      delta > 0 ? "text-emerald-500" : delta < 0 ? "text-red-500" : "text-muted-foreground"
+                      "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums border",
+                      delta > 0
+                        ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : delta < 0
+                          ? "border-red-500/50 bg-red-500/15 text-red-600 dark:text-red-400"
+                          : "border-border bg-muted text-muted-foreground"
                     )}
                   >
+                    {delta > 0 ? <TrendingUp className="h-3 w-3 shrink-0" /> : delta < 0 ? <TrendingDown className="h-3 w-3 shrink-0" /> : null}
                     {delta > 0 ? "+" : ""}
                     {delta.toFixed(1)}
                   </span>
                 )}
               </>
             )}
-          </button>
+          </div>
         );
       })}
     </div>
@@ -189,6 +243,15 @@ interface SiteLite {
   isUser: boolean;
   overallScore: number | null;
 }
+
+/** Full section text opened from pin “More” — shown in the right column. */
+export type SectionDeepDivePayload = {
+  sectionKey: string;
+  label: string;
+  score: number | null;
+  fullText: string;
+  watchPoints: string[];
+};
 
 type DecisionPanelTab = "insight" | "plan" | "impact" | "compete" | "scores";
 
@@ -226,6 +289,9 @@ export function DecisionActionPanel({
   competitorAhead,
   statusBanner,
   threeSecondInsight,
+  sectionDeepDive,
+  onCloseSectionDeepDive,
+  focusPlanTick,
 }: {
   result: AnalysisResult;
   activeSite: SiteLite;
@@ -261,11 +327,34 @@ export function DecisionActionPanel({
   } | null;
   /** Hero problem + 3-second visitor read (moved from center column). */
   threeSecondInsight: { problem: string; result: string };
+  /** Pin “More” — full section analysis in the right column. */
+  sectionDeepDive?: SectionDeepDivePayload | null;
+  onCloseSectionDeepDive?: () => void;
+  focusPlanTick?: number;
 }) {
   const [panelTab, setPanelTab] = useState<DecisionPanelTab>("insight");
   const [heroOpen, setHeroOpen] = useState(true);
   const [behaviorOpen, setBehaviorOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
+  const lastPlanTickRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (sectionDeepDive) setPanelTab("scores");
+  }, [sectionDeepDive?.sectionKey]);
+
+  useEffect(() => {
+    if (focusPlanTick === undefined) return;
+    if (lastPlanTickRef.current === focusPlanTick) return;
+    if (focusPlanTick === 0) {
+      lastPlanTickRef.current = 0;
+      return;
+    }
+    lastPlanTickRef.current = focusPlanTick;
+    setPanelTab("plan");
+    requestAnimationFrame(() => {
+      document.getElementById("compare-scroll-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [focusPlanTick]);
 
   const gaps = useMemo(() => {
     const raw = result.gaps ?? [];
@@ -283,6 +372,7 @@ export function DecisionActionPanel({
 
   const topPlan = useMemo(() => topActionPlanRows(result), [result]);
   const riskWhyBut = useMemo(() => conversionRiskWhyBut(conversion, result), [conversion, result]);
+  const insightConf = useMemo(() => insightConfidenceFromResult(result), [result]);
 
   const verdictLine = useMemo(() => {
     if (focusedKey === "hero") {
@@ -331,6 +421,63 @@ export function DecisionActionPanel({
           conversion={statusBanner.conversion}
           mainIssue={statusBanner.mainIssue}
         />
+      )}
+      {sectionDeepDive && (
+        <div className="shrink-0 border-b border-amber-500/25 bg-gradient-to-b from-amber-500/[0.08] to-transparent px-3 py-3 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Section analysis</p>
+              <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                <span className="text-sm font-semibold text-foreground">{sectionDeepDive.label}</span>
+                {sectionDeepDive.score != null && (
+                  <ScoreBreakdownPopover
+                    sectionTitle={sectionDeepDive.label}
+                    breakdown={buildSectionScoreBreakdown(
+                      (sectionDeepDive.sectionKey as SectionOrderKey) || "hero",
+                      sectionDeepDive.score,
+                      result
+                    )}
+                  >
+                    <span className={cn("text-xs font-bold tabular-nums", sColor(sectionDeepDive.score))}>
+                      {sectionDeepDive.score.toFixed(1)}/10
+                    </span>
+                  </ScoreBreakdownPopover>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onCloseSectionDeepDive?.()}
+              className="shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Close section detail"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {sectionDeepDive.watchPoints.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Watch</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-foreground leading-snug">
+                {sectionDeepDive.watchPoints.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
+            <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
+              {annotationDisplayBody(sectionDeepDive.fullText) || "—"}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => copyLine(annotationDisplayBody(sectionDeepDive.fullText))}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+          >
+            <ClipboardCopy className="h-3 w-3" />
+            Copy full text
+          </button>
+        </div>
       )}
       <div className="flex items-center justify-between border-b border-primary/15 bg-primary/5 px-3 py-2.5 gap-2 shrink-0 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
@@ -388,6 +535,12 @@ export function DecisionActionPanel({
       <div className="p-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0">
         {panelTab === "insight" && (
           <div className="rounded-xl border border-red-500/40 bg-card/80 px-3 py-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(248,113,113,0.12)]">
+            <div className="flex flex-wrap items-center gap-2">
+              <InsightConfidenceBadge level={insightConf} />
+              <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-muted/50 px-1.5 py-0.5 text-muted-foreground">
+                Data coverage {dataCoveragePct}%
+              </span>
+            </div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-red-500 dark:text-red-400">Problem</p>
             <p className="text-sm text-foreground leading-snug">{threeSecondInsight.problem}</p>
             <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground pt-1">In 3 seconds</p>
@@ -407,7 +560,7 @@ export function DecisionActionPanel({
               </div>
             )}
 
-            <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+            <div id="compare-scroll-plan" className="rounded-xl border border-border bg-muted/20 p-3 space-y-2 scroll-mt-4">
               <p className="text-[10px] font-bold uppercase tracking-wide text-foreground">Recommended next steps</p>
               {topPlan.length === 0 ? (
                 <p className="text-muted-foreground">Add gaps or an action plan in the report to populate this list.</p>
@@ -459,6 +612,12 @@ export function DecisionActionPanel({
                 <ul className="space-y-2">
                   {gaps.slice(0, 6).map((g, i) => (
                     <li key={i} className="rounded-lg bg-muted/20 border border-border/60 p-2">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <InsightConfidenceBadge level={insightConf} />
+                        <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-background/60 px-1.5 py-0.5 text-muted-foreground">
+                          Data coverage {dataCoveragePct}%
+                        </span>
+                      </div>
                       <span
                         className={cn(
                           "text-[9px] font-bold rounded px-1.5 py-0.5",
@@ -469,6 +628,13 @@ export function DecisionActionPanel({
                       </span>
                       <p className="text-foreground mt-1">{g.problem}</p>
                       <p className="text-emerald-600 dark:text-emerald-400 text-[11px] mt-0.5">{g.recommendation}</p>
+                      {g.recommendation?.trim() ? (
+                        <CopyGeneratorBlock
+                          result={result}
+                          sectionKey={inferSectionKeyFromGapArea(g.area) ?? "hero"}
+                          issue={g.problem}
+                        />
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -479,6 +645,12 @@ export function DecisionActionPanel({
 
         {panelTab === "impact" && (
           <div className="rounded-xl border border-border p-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <InsightConfidenceBadge level={insightConf} />
+              <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
+                Data coverage {dataCoveragePct}%
+              </span>
+            </div>
             <p className="text-[10px] font-bold uppercase text-muted-foreground">Conversion impact</p>
             <p className="text-foreground leading-snug">{verdictLine}</p>
             <div className="flex flex-wrap gap-2 text-[10px]">
@@ -513,6 +685,12 @@ export function DecisionActionPanel({
           <div className="space-y-3">
             {winNarrative && (!activeSite.isUser || stealThree.length > 0) && (
               <div className="rounded-xl border border-primary/30 bg-gradient-to-b from-primary/8 to-transparent p-3 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <InsightConfidenceBadge level={insightConf} />
+                  <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-background/60 px-1.5 py-0.5 text-muted-foreground">
+                    Data coverage {dataCoveragePct}%
+                  </span>
+                </div>
                 <p className="text-[11px] font-bold text-primary flex items-center gap-1">
                   <Crown className="h-4 w-4" />
                   {winNarrative.competitorLabel} wins
@@ -542,6 +720,12 @@ export function DecisionActionPanel({
 
             {stealThree.length > 0 && (
               <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/[0.07] p-3 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <InsightConfidenceBadge level={insightConf} />
+                  <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-background/60 px-1.5 py-0.5 text-muted-foreground">
+                    Data coverage {dataCoveragePct}%
+                  </span>
+                </div>
                 <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400 flex items-center gap-1">
                   <Flame className="h-4 w-4" />
                   Steal this (from competitors)
@@ -556,8 +740,19 @@ export function DecisionActionPanel({
                 </ol>
                 {result.gaps?.[0]?.recommendation && (
                   <div className="rounded-lg border border-border bg-card/60 p-2.5">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <InsightConfidenceBadge level={insightConf} />
+                      <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-background/60 px-1.5 py-0.5 text-muted-foreground">
+                        Data coverage {dataCoveragePct}%
+                      </span>
+                    </div>
                     <p className="text-[10px] font-bold uppercase text-foreground mb-1">Fix this (your page)</p>
                     <p className="text-[11px] text-foreground leading-relaxed">{result.gaps[0].recommendation}</p>
+                    <CopyGeneratorBlock
+                      result={result}
+                      sectionKey={inferSectionKeyFromGapArea(result.gaps[0].area) ?? "hero"}
+                      issue={result.gaps[0].problem}
+                    />
                   </div>
                 )}
                 <button
@@ -573,6 +768,12 @@ export function DecisionActionPanel({
 
             {abVariants.length > 0 && (
               <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/[0.06] p-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <InsightConfidenceBadge level={insightConf} />
+                  <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-background/60 px-1.5 py-0.5 text-muted-foreground">
+                    Data coverage {dataCoveragePct}%
+                  </span>
+                </div>
                 <p className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400 flex items-center gap-1">
                   <Sparkles className="h-3.5 w-3.5" />
                   Recommended variant
@@ -591,6 +792,12 @@ export function DecisionActionPanel({
                 >
                   Use this headline
                 </button>
+                <CopyGeneratorBlock
+                  result={result}
+                  sectionKey="hero"
+                  issue="Strengthen hero headline for clarity and conversion"
+                  currentCopy={result.userAnalysis?.hero ?? abVariants[0]}
+                />
                 {abVariants.length > 1 && (
                   <details className="group pt-1">
                     <summary className="text-[10px] font-semibold text-muted-foreground cursor-pointer list-none flex items-center gap-1">
@@ -627,7 +834,10 @@ export function DecisionActionPanel({
             {!fixMode && (
               <div className="rounded-lg border border-border/80 p-2.5 flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-[10px] font-bold uppercase text-muted-foreground">Data coverage</p>
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <InsightConfidenceBadge level={insightConf} />
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">Data coverage</p>
+                  </div>
                   <p className="text-lg font-bold tabular-nums text-foreground">{dataCoveragePct}%</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{confidenceExplanation(gapConfidence)}</p>
                 </div>
@@ -643,10 +853,19 @@ export function DecisionActionPanel({
                     onClick={() => setHeroOpen(!heroOpen)}
                     className="w-full flex items-center justify-between px-3 py-2 bg-muted/30 hover:bg-muted/50"
                   >
-                    <span className="font-semibold text-foreground">
+                    <span className="font-semibold text-foreground inline-flex items-center gap-1 flex-wrap">
                       {sectionLabel}{" "}
                       {metricsHeadlineScore != null && (
-                        <span className={cn("tabular-nums", sColor(metricsHeadlineScore))}>{metricsHeadlineScore.toFixed(1)}</span>
+                        <ScoreBreakdownPopover
+                          sectionTitle={sectionLabel}
+                          breakdown={buildSectionScoreBreakdown(
+                            (focusedKey ?? "hero") as SectionOrderKey,
+                            metricsHeadlineScore,
+                            result
+                          )}
+                        >
+                          <span className={cn("tabular-nums", sColor(metricsHeadlineScore))}>{metricsHeadlineScore.toFixed(1)}</span>
+                        </ScoreBreakdownPopover>
                       )}
                     </span>
                     {heroOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -774,13 +993,27 @@ export function DecisionActionPanel({
   );
 }
 
-/** Overlay tint for screenshot: compare | attention | heatmap | copy */
+/** Analysis overlay modes applied on top of screenshots (compare = none). */
+export type CompareOverlayLayerMode =
+  | "compare"
+  | "attention"
+  | "heatmap"
+  | "copy"
+  | "trust"
+  | "readability"
+  | "first5s"
+  | "conversion";
+
+/** Overlay tint for screenshot: compare | attention | heatmap | copy | trust | readability | first5s | conversion */
 export function CompareOverlayLayer({
   mode,
   annotations,
+  first5sTopPct,
 }: {
-  mode: "compare" | "attention" | "heatmap" | "copy";
+  mode: CompareOverlayLayerMode;
   annotations: Array<{ top: number; height: number; score: number | null; label: string }>;
+  /** Percent from top of screenshot where the “below fold” darkening starts (from ~600px / image height). */
+  first5sTopPct?: number | null;
 }) {
   if (mode === "compare") return null;
 
@@ -819,6 +1052,58 @@ export function CompareOverlayLayer({
           style={{ top: "0%", height: "22%" }}
         />
       )}
+      {mode === "trust" && (
+        <>
+          <div
+            className="absolute left-0 right-0 border-y border-blue-500/30 bg-blue-500/[0.12] backdrop-blur-[0.5px]"
+            style={{ top: "53%", height: "19%" }}
+          />
+          <div
+            className="absolute left-0 right-0 border-y border-blue-500/35 bg-blue-500/[0.14] backdrop-blur-[0.5px]"
+            style={{ top: "70%", height: "20%" }}
+          />
+        </>
+      )}
+      {mode === "readability" && (
+        <>
+          <div
+            className="absolute left-0 right-0 border-y border-emerald-500/25 bg-emerald-500/[0.1]"
+            style={{ top: "0%", height: "22%" }}
+          />
+          <div
+            className="absolute left-0 right-0 border-y border-teal-500/25 bg-teal-500/[0.08]"
+            style={{ top: "18%", height: "17%" }}
+          />
+        </>
+      )}
+      {mode === "first5s" && first5sTopPct != null && first5sTopPct < 100 && (
+        <div
+          className="absolute left-0 right-0 bottom-0 z-[6]"
+          style={{
+            top: `${first5sTopPct}%`,
+            background: "linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.78) 45%, rgba(0,0,0,0.92) 100%)",
+          }}
+        />
+      )}
+      {mode === "conversion" &&
+        annotations.map((a) => {
+            const sc = a.score;
+            const ring =
+              sc == null
+                ? "border-muted-foreground/50 shadow-[inset_0_0_0_2px_rgba(148,163,184,0.5)]"
+                : sc >= 8
+                  ? "border-emerald-500 shadow-[inset_0_0_0_2px_rgba(16,185,129,0.65)]"
+                  : sc >= 6
+                    ? "border-amber-400 shadow-[inset_0_0_0_2px_rgba(251,191,36,0.55)]"
+                    : "border-red-500 shadow-[inset_0_0_0_2px_rgba(239,68,68,0.6)]";
+            return (
+              <div
+                key={`conv-${a.label}`}
+                className={cn("absolute left-[1.5%] right-[1.5%] rounded-lg", ring)}
+                style={{ top: `${a.top}%`, height: `${a.height}%` }}
+              />
+            );
+          })}
     </div>
   );
 }
