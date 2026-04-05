@@ -11,6 +11,7 @@ import Index from "./pages/Index.tsx";
 const Pricing = lazy(() => import("./pages/Pricing.tsx"));
 const CheckoutDemo = lazy(() => import("./pages/CheckoutDemo.tsx"));
 const AuditDashboard = lazy(() => import("./pages/AuditDashboard.tsx"));
+const HistoryPage = lazy(() => import("./pages/HistoryPage.tsx"));
 const MonitorPage = lazy(() => import("./pages/MonitorPage.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
@@ -50,6 +51,7 @@ const App = () => (
                 <Route path="/pricing" element={<Pricing />} />
                 <Route path="/checkout" element={<CheckoutDemo />} />
                 <Route path="/full-insights" element={<AuditDashboard />} />
+                <Route path="/history" element={<HistoryPage />} />
                 <Route path="/monitor" element={<MonitorPage />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />

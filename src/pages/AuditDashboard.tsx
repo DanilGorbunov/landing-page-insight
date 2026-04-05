@@ -1,47 +1,15 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  ArrowRight,
-  LayoutDashboard,
-  Zap,
-  ScanEye,
-  Eye,
-  ShieldCheck,
-  BookOpen,
-  Users,
-  Trophy,
-  ListChecks,
-  Map,
-  Grid3x3,
-  Target,
-  Lightbulb,
-  PenTool,
-  ChevronLeft,
-  ChevronRight,
-  Bell,
-  Home,
-  FileDown,
-  Share2,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, ChevronRight, FileDown, Share2, TrendingUp, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { readFullInsightsPayload } from "@/lib/reportSession";
 import { downloadFullInsightsPdf } from "@/lib/fullReportPdf";
 import { getHistoryCount } from "@/lib/analysisHistory";
 import { PerformanceGauges } from "@/components/PerformanceGauges";
-import { UxSignalsPanel } from "@/components/UxSignalsPanel";
-import { CtaTrustPanel } from "@/components/CtaTrustPanel";
-import { ReadabilityPanel } from "@/components/ReadabilityPanel";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { CompetitiveEdgePanel } from "@/components/CompetitiveEdgePanel";
-import { BestPracticesChecklist } from "@/components/BestPracticesChecklist";
-import { CustomerJourneyMap } from "@/components/CustomerJourneyMap";
-import { DesignPatterns } from "@/components/DesignPatterns";
 import { ActionPlan } from "@/components/ActionPlan";
 import { UxHintsPanel } from "@/components/UxHintsPanel";
 import { CopySuggestions } from "@/components/CopySuggestions";
@@ -53,35 +21,20 @@ import { parseSectionScores, ensureScore } from "@/lib/utils";
 import { weightedOverallFromSections, projectRatings } from "@/lib/insightsProjection";
 import { compareSitesList } from "@/lib/compareDecisionMetrics";
 import { CompareHeaderSiteTabs } from "@/components/CompareDecisionPanels";
+import { DashboardNavSidebar } from "@/components/DashboardNavSidebar";
 import type { AnalysisResult } from "@/types/api";
 
-// ─── Nav config ────────────────────────────────────────────────────────────────
-
-interface NavItem {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  group?: string;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { id: "compare", label: "Compare", icon: ScanEye },
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "performance", label: "Performance", icon: Zap, group: "Technical" },
-  { id: "ux", label: "UX Quality", icon: Eye, group: "UX" },
-  { id: "cta", label: "CTA & Trust", icon: ShieldCheck, group: "UX" },
-  { id: "readability", label: "Readability", icon: BookOpen, group: "UX" },
-  { id: "competitors", label: "Competitors", icon: Users, group: "Competitive" },
-  { id: "beat", label: "Beat Competitors", icon: Trophy, group: "Competitive" },
-  { id: "practices", label: "Best Practices", icon: ListChecks, group: "Growth" },
-  { id: "journey", label: "Customer Journey", icon: Map, group: "Growth" },
-  { id: "patterns", label: "Design Patterns", icon: Grid3x3, group: "Growth" },
-  { id: "actions", label: "Action Plan", icon: Target, group: "Growth" },
-  { id: "hints", label: "UX Hints", icon: Lightbulb, group: "Growth" },
-  { id: "copy", label: "Copy Ideas", icon: PenTool, group: "Growth" },
-];
-
-const NAV_GROUPS = ["Technical", "UX", "Competitive", "Growth"];
+/** Section ids valid for /full-insights (?section=) — excludes `history` and `monitor` (separate routes). */
+const FULL_INSIGHTS_SECTION_IDS = new Set([
+  "overview",
+  "compare",
+  "performance",
+  "actions",
+  "copy",
+  "hints",
+  "competitors",
+  "beat",
+]);
 
 // ─── Score helpers ──────────────────────────────────────────────────────────────
 
@@ -91,20 +44,6 @@ function perfScore(result: AnalysisResult): number | null {
 
 function lighthouseSeoScore(result: AnalysisResult): number | null {
   return result.performance?.user?.scores?.seo ?? null;
-}
-
-function getNavBadge(id: string, result: AnalysisResult): { text: string; variant: "good" | "warn" | "bad" } | null {
-  if (id === "performance") {
-    const s = perfScore(result);
-    if (s == null) return null;
-    return { text: String(s), variant: s >= 70 ? "good" : s >= 50 ? "warn" : "bad" };
-  }
-  if (id === "competitors") {
-    const n = result.competitors?.length ?? 0;
-    if (!n) return null;
-    return { text: `${n}`, variant: "good" };
-  }
-  return null;
 }
 
 // ─── Tip generator ──────────────────────────────────────────────────────────────
@@ -137,28 +76,6 @@ function getSectionTip(id: string, result: AnalysisResult): Tip | null {
         };
       return null;
     }
-    case "ux": {
-      const flags = result.uxSignals?.accessibilityFlags;
-      if (flags?.length)
-        return { text: `Accessibility issue: ${flags[0]}. Fixing this broadens reach and satisfies WCAG standards.`, impact: "High" };
-      if (result.uxSignals?.visualHierarchy === "weak" || result.uxSignals?.visualHierarchy === "poor")
-        return { text: "Visual hierarchy is weak — users can't quickly identify what to do next. Increase heading contrast and tighten spacing.", impact: "Medium" };
-      return null;
-    }
-    case "cta": {
-      const hint = result.ctaTrust?.frictionReducers?.[0];
-      if (hint) return { text: `Quick win: add "${hint}" near your CTA to reduce conversion friction.`, impact: "High" };
-      return null;
-    }
-    case "readability": {
-      const grade = result.readability?.user?.fleschKincaidGrade;
-      if (grade != null && grade > 12)
-        return {
-          text: `Reading grade ${grade.toFixed(1)} — too complex. Aim for grade 7-9 to maximise comprehension across your audience.`,
-          impact: "Medium",
-        };
-      return null;
-    }
     case "competitors": {
       const comp = result.competitors?.[0];
       if (!comp) return null;
@@ -174,26 +91,6 @@ function getSectionTip(id: string, result: AnalysisResult): Tip | null {
           text: `Quick win vs ${result.competitiveEdge![0].competitor}: ${edge.stealThis}`,
           impact: edge.effort === "Low" ? "High" : "Medium",
         };
-      return null;
-    }
-    case "practices": {
-      const fail = result.bestPractices?.find((p) => !p.pass && p.impact === "High");
-      if (fail) return { text: `Missing high-impact practice: "${fail.label}". ${fail.note ?? ""}`, impact: "High" };
-      return null;
-    }
-    case "journey": {
-      const missing = result.journeyMap?.find((s) => s.status === "missing");
-      if (missing)
-        return {
-          text: `Journey stage "${missing.stage}" is not addressed. Users drop off here — add dedicated content for this phase.`,
-          impact: "High",
-        };
-      return null;
-    }
-    case "patterns": {
-      const absent = result.designPatterns?.find((p) => !p.present);
-      if (absent)
-        return { text: `Pattern "${absent.label}" is not implemented. ${absent.note ?? "Consider adding it."}`, impact: "Medium" };
       return null;
     }
     case "actions": {
@@ -436,6 +333,16 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
   );
 }
 
+function MovedToCompareMessage() {
+  return (
+    <div className="rounded-2xl border border-dashed border-border p-10 text-center max-w-lg mx-auto">
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        This analysis detail now lives in <span className="font-semibold text-foreground">Compare</span> — use the right panel tabs (Overview, Insight, Plan, Impact, Compete, Scores).
+      </p>
+    </div>
+  );
+}
+
 function SectionContent({
   id,
   result,
@@ -468,23 +375,12 @@ function SectionContent({
         <EmptyState label="Performance data not available." />
       );
     case "ux":
-      return result.uxSignals ? (
-        <UxSignalsPanel signals={result.uxSignals} />
-      ) : (
-        <EmptyState label="UX signals not available for this analysis." />
-      );
     case "cta":
-      return result.ctaTrust ? (
-        <CtaTrustPanel data={result.ctaTrust} />
-      ) : (
-        <EmptyState label="CTA & trust data not available." />
-      );
     case "readability":
-      return result.readability ? (
-        <ReadabilityPanel data={result.readability} />
-      ) : (
-        <EmptyState label="Readability data not available." />
-      );
+    case "practices":
+    case "journey":
+    case "patterns":
+      return <MovedToCompareMessage />;
     case "competitors":
       return result.competitors?.length ? (
         <div className="space-y-6">
@@ -503,24 +399,6 @@ function SectionContent({
         <CompetitiveEdgePanel entries={result.competitiveEdge!} />
       ) : (
         <EmptyState label="Competitive edge data not available." />
-      );
-    case "practices":
-      return (result.bestPractices?.length ?? 0) > 0 ? (
-        <BestPracticesChecklist items={result.bestPractices!} />
-      ) : (
-        <EmptyState label="Best practices data not available." />
-      );
-    case "journey":
-      return (result.journeyMap?.length ?? 0) > 0 ? (
-        <CustomerJourneyMap stages={result.journeyMap!} />
-      ) : (
-        <EmptyState label="Customer journey data not available." />
-      );
-    case "patterns":
-      return (result.designPatterns?.length ?? 0) > 0 ? (
-        <DesignPatterns patterns={result.designPatterns!} />
-      ) : (
-        <EmptyState label="Design patterns data not available." />
       );
     case "actions":
       return (result.actionPlan?.length ?? 0) > 0 ? (
@@ -557,208 +435,35 @@ const SECTION_LABELS: Record<string, string> = {
   overview: "Overview",
   compare: "Compare",
   performance: "Performance",
-  ux: "UX Quality",
-  cta: "CTA & Trust",
-  readability: "Readability",
   competitors: "Competitors",
   beat: "Beat Competitors",
-  practices: "Best Practices",
-  journey: "Customer Journey",
-  patterns: "Design Patterns",
+  monitor: "Monitor",
   actions: "Action Plan",
   hints: "UX Hints",
   copy: "Copy Ideas",
+  history: "History",
 };
-
-// ─── Sidebar ────────────────────────────────────────────────────────────────────
-
-interface SidebarProps {
-  active: string;
-  onSelect: (id: string) => void;
-  collapsed: boolean;
-  onToggle: () => void;
-  result: AnalysisResult;
-  url: string;
-  overallScore: number;
-}
-
-function Sidebar({ active, onSelect, collapsed, onToggle, result, url, overallScore }: SidebarProps) {
-  const domain = getDomain(url);
-  const scoreColor =
-    overallScore >= 7.5 ? "text-emerald-500" : overallScore >= 5 ? "text-amber-500" : "text-red-500";
-
-  return (
-    <aside
-      className={cn(
-        "flex flex-col flex-shrink-0 h-full border-r border-border bg-card transition-all duration-200 overflow-hidden",
-        collapsed ? "w-14" : "w-52"
-      )}
-    >
-      {/* Logo + collapse */}
-      <div className={cn("flex h-14 shrink-0 items-center border-b border-border px-3 gap-2", !collapsed && "justify-between")}>
-        {!collapsed && (
-          <Link to="/" className="font-bold text-sm text-primary tracking-tight truncate">
-            LandingLens
-          </Link>
-        )}
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </button>
-      </div>
-
-      {/* Domain + score pill */}
-      {!collapsed && (
-        <div className="px-3 py-3 border-b border-border shrink-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Analysing</p>
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-foreground truncate">{domain}</p>
-            <span className={cn("text-sm font-bold tabular-nums shrink-0", scoreColor)}>
-              {overallScore.toFixed(1)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-2 scrollbar-hide" aria-label="Dashboard sections">
-        {/* Compare & Overview (primary) */}
-        {NAV_ITEMS.filter((n) => !n.group).map((item) => (
-          <NavButton key={item.id} item={item} active={active} collapsed={collapsed} onSelect={onSelect} badge={getNavBadge(item.id, result)} />
-        ))}
-
-        {NAV_GROUPS.map((group) => {
-          const items = NAV_ITEMS.filter((n) => n.group === group);
-          if (!items.length) return null;
-          return (
-            <div key={group}>
-              {!collapsed && (
-                <p className="px-3 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
-                  {group}
-                </p>
-              )}
-              {collapsed && <div className="my-1 mx-3 h-px bg-border/50" />}
-              {items.map((item) => (
-                <NavButton key={item.id} item={item} active={active} collapsed={collapsed} onSelect={onSelect} badge={getNavBadge(item.id, result)} />
-              ))}
-            </div>
-          );
-        })}
-      </nav>
-
-      {/* Bottom actions */}
-      <div className="shrink-0 border-t border-border py-2">
-        <SidebarAction
-          icon={Bell}
-          label="Monitor"
-          collapsed={collapsed}
-          onClick={() => window.open("/monitor", "_self")}
-        />
-        <SidebarAction
-          icon={Home}
-          label="New Analysis"
-          collapsed={collapsed}
-          onClick={() => window.open("/", "_self")}
-        />
-      </div>
-    </aside>
-  );
-}
-
-function NavButton({
-  item,
-  active,
-  collapsed,
-  onSelect,
-  badge,
-}: {
-  item: NavItem;
-  active: string;
-  collapsed: boolean;
-  onSelect: (id: string) => void;
-  badge: { text: string; variant: "good" | "warn" | "bad" } | null;
-}) {
-  const Icon = item.icon;
-  const isActive = active === item.id;
-  const badgeColor = badge
-    ? badge.variant === "good"
-      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-      : badge.variant === "warn"
-      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-      : "bg-red-500/15 text-red-600 dark:text-red-400"
-    : "";
-
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(item.id)}
-      title={collapsed ? item.label : undefined}
-      className={cn(
-        "w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors",
-        isActive
-          ? "bg-primary/10 text-primary font-semibold"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-        collapsed && "justify-center px-0"
-      )}
-    >
-      <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      {!collapsed && (
-        <>
-          <span className="flex-1 text-left truncate">{item.label}</span>
-          {badge && (
-            <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold", badgeColor)}>
-              {badge.text}
-            </span>
-          )}
-        </>
-      )}
-    </button>
-  );
-}
-
-function SidebarAction({
-  icon: Icon,
-  label,
-  collapsed,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  collapsed: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={collapsed ? label : undefined}
-      className={cn(
-        "w-full flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors",
-        collapsed && "justify-center px-0"
-      )}
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      {!collapsed && <span className="truncate">{label}</span>}
-    </button>
-  );
-}
 
 // ─── Main export ────────────────────────────────────────────────────────────────
 
 export default function AuditDashboard() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isSharedView = searchParams.get("shared") === "true";
   const payload = readFullInsightsPayload();
-  const [activeSection, setActiveSection] = useState("compare");
+  const [activeSection, setActiveSection] = useState(() => {
+    const s = new URLSearchParams(window.location.search).get("section");
+    return s && FULL_INSIGHTS_SECTION_IDS.has(s) ? s : "compare";
+  });
   const [compareSiteIdx, setCompareSiteIdx] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const historyCount = getHistoryCount();
+
+  useEffect(() => {
+    const s = searchParams.get("section");
+    if (s && FULL_INSIGHTS_SECTION_IDS.has(s)) setActiveSection(s);
+  }, [searchParams]);
 
   useEffect(() => {
     if (activeSection !== "compare") setCompareSiteIdx(0);
@@ -786,6 +491,26 @@ export default function AuditDashboard() {
   }
 
   const { url, result, planName, paidAt } = payload;
+
+  const handleSidebarSelect = (id: string) => {
+    if (id === "history") {
+      navigate("/history");
+      return;
+    }
+    if (id === "monitor") {
+      navigate("/monitor");
+      return;
+    }
+    setActiveSection(id);
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.set("section", id);
+        return p;
+      },
+      { replace: true }
+    );
+  };
 
   const overallScore = useMemo(() => {
     const s = result.synthesis?.overall_score;
@@ -825,14 +550,15 @@ export default function AuditDashboard() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar
-        active={activeSection}
-        onSelect={setActiveSection}
+      <DashboardNavSidebar
+        activeNavId={activeSection}
+        onSelect={handleSidebarSelect}
         collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
+        onToggleCollapse={() => setCollapsed((c) => !c)}
+        reportContext={{ url, overallScore }}
         result={result}
-        url={url}
-        overallScore={overallScore}
+        historyCount={historyCount}
+        onNewAnalysis={() => navigate("/")}
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -864,18 +590,6 @@ export default function AuditDashboard() {
             Created {new Date(paidAt).toLocaleDateString()}
           </span>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => navigate("/", { state: { openHistory: true } })}
-              className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-            >
-              History
-              {historyCount > 0 && (
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
-                  {historyCount}
-                </span>
-              )}
-            </button>
             <ThemeToggle className="shrink-0" />
             <button
               type="button"

@@ -225,7 +225,7 @@ export default function FullInsightsReport() {
           >
             <button
               type="button"
-              onClick={() => navigate("/", { state: { openHistory: true } })}
+              onClick={() => navigate("/history")}
               className="touch-target inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2.5 text-sm font-semibold text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground sm:px-4"
               aria-label={historyCount > 0 ? `History, ${historyCount} analyses` : "Open history"}
             >

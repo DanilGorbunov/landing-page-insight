@@ -22,7 +22,6 @@ import {
   Minus,
   BarChart3,
   Sparkles,
-  ScanEye,
   MousePointer2,
   Type,
   Flame,
@@ -32,7 +31,15 @@ import {
   Smartphone,
   Timer,
   Target,
+  ChevronDown,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DecisionActionPanel,
@@ -57,6 +64,14 @@ import {
   type SectionOrderKey,
 } from "@/lib/compareDecisionMetrics";
 import type { SectionDeepDivePayload } from "@/components/CompareDecisionPanels";
+import {
+  type ToolbarContext,
+  type ToolbarViewMode,
+  getRightPanelHeader,
+  formatToolbarContextForEmpty,
+  sectionPassesToolbarFilters,
+  countHotSections,
+} from "@/lib/compareToolbarContext";
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +108,20 @@ interface SiteEntry {
   analysis: Record<string, string>;
   annotations: Annotation[];
   overallScore: number | null;
+}
+
+/** Default split opponent: overall #1 in the report if that site is a competitor; otherwise the highest-scoring competitor. */
+function defaultVsSiteIndex(sites: SiteEntry[]): number {
+  if (sites.length < 2) return 1;
+  const ranked = sites
+    .map((s, i) => ({ i, s, score: s.overallScore }))
+    .filter((x): x is { i: number; s: SiteEntry; score: number } => x.score != null)
+    .sort((a, b) => b.score - a.score);
+  if (ranked.length === 0) return 1;
+  const top = ranked[0];
+  if (!top.s.isUser) return top.i;
+  const bestComp = ranked.find((x) => !x.s.isUser);
+  return bestComp?.i ?? 1;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
@@ -253,6 +282,7 @@ function SectionZones({
   competitorScores,
   siteIsUser,
   deltaLensTint,
+  compareDiffMode,
 }: {
   annotations: Annotation[];
   show: boolean;
@@ -265,6 +295,8 @@ function SectionZones({
   siteIsUser?: boolean;
   /** Competitor-only: green/red full-zone tint for Δ vs You. */
   deltaLensTint?: boolean;
+  /** VIEW Compare: green = competitor does better, red = you do better (uses comp−user delta). */
+  compareDiffMode?: boolean;
 }) {
   if (!show) return null;
   return (
@@ -284,20 +316,31 @@ function SectionZones({
           Boolean(siteIsUser) && sc != null && compSc != null && compSc - sc >= 1.5;
         const dTint =
           deltaLensTint && deltaByKey && deltaByKey[a.sectionKey] != null ? deltaByKey[a.sectionKey]! : null;
+        const cd = compareDiffMode && deltaByKey && deltaByKey[a.sectionKey] != null ? deltaByKey[a.sectionKey]! : null;
+        const compareDiffClass =
+          compareDiffMode && cd != null
+            ? cd > 0.08
+              ? "border-emerald-500/50 bg-emerald-500/20 z-[2]"
+              : cd < -0.08
+                ? "border-red-500/50 bg-red-500/20 z-[2]"
+                : "border-border/60 bg-muted/20 z-[1]"
+            : null;
         return (
           <div
             key={a.sectionKey}
             className={cn(
               "absolute left-0 right-0 pointer-events-none transition-colors rounded-lg",
-              !lowScoreProblem && "border-t border-b",
-              sc != null && sc >= 7.5
-                ? "border-emerald-500/25 bg-emerald-500/[0.08]"
-                : sc != null && sc >= 5
-                  ? "border-amber-500/25 bg-amber-500/[0.08]"
-                  : sc != null
-                    ? "border-red-500/30 bg-red-500/[0.1]"
-                    : "border-muted-foreground/10 bg-muted/5",
-              lowScoreProblem && "z-[4] border-2 border-dashed border-red-500 dark:border-red-400",
+              !compareDiffMode && !lowScoreProblem && "border-t border-b",
+              compareDiffMode && compareDiffClass,
+              !compareDiffMode &&
+                (sc != null && sc >= 7.5
+                  ? "border-emerald-500/25 bg-emerald-500/[0.08]"
+                  : sc != null && sc >= 5
+                    ? "border-amber-500/25 bg-amber-500/[0.08]"
+                    : sc != null
+                      ? "border-red-500/30 bg-red-500/[0.1]"
+                      : "border-muted-foreground/10 bg-muted/5"),
+              !compareDiffMode && lowScoreProblem && "z-[4] border-2 border-dashed border-red-500 dark:border-red-400",
               isHot && "ring-2 ring-red-500/40 ring-inset animate-pulse z-[1]"
             )}
             style={{ top: `${a.top}%`, height: `${a.height}%` }}
@@ -363,6 +406,9 @@ function ScreenshotFrame({
   eyeOrderByKey,
   competitorScores,
   deltaLensTint,
+  compareDiffMode,
+  heatmapGapPairByKey,
+  heatmapGapOnCompetitorOnly,
 }: {
   site: SiteEntry;
   showZones: boolean;
@@ -380,6 +426,9 @@ function ScreenshotFrame({
   eyeOrderByKey?: Record<string, number>;
   competitorScores?: Record<string, number | null>;
   deltaLensTint?: boolean;
+  compareDiffMode?: boolean;
+  heatmapGapPairByKey?: Record<string, { user: number | null; comp: number | null }>;
+  heatmapGapOnCompetitorOnly?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [first5sFoldPct, setFirst5sFoldPct] = useState<number | null>(null);
@@ -446,11 +495,21 @@ function ScreenshotFrame({
           competitorScores={competitorScores}
           siteIsUser={site.isUser}
           deltaLensTint={deltaLensTint}
+          compareDiffMode={compareDiffMode}
         />
         <CompareOverlayLayer
           mode={layerMode}
-          annotations={site.annotations.map((a) => ({ top: a.top, height: a.height, score: a.score, label: a.label }))}
+          annotations={site.annotations.map((a) => ({
+            top: a.top,
+            height: a.height,
+            score: a.score,
+            label: a.label,
+            sectionKey: a.sectionKey,
+          }))}
           first5sTopPct={layerMode === "first5s" ? first5sFoldPct : null}
+          heatmapGapPairByKey={heatmapGapPairByKey}
+          heatmapGapOnCompetitorOnly={heatmapGapOnCompetitorOnly}
+          siteIsUser={site.isUser}
         />
         {showPins &&
           site.annotations.map((ann) => (
@@ -563,15 +622,35 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
   const [showPins, setShowPins] = useState(true);
   const [showZones, setShowZones] = useState(true);
   const [fullWidth, setFullWidth] = useState(false);
-  const [viewMode, setViewMode] = useState<"single" | "split" | "slider">("single");
+  const [viewMode, setViewMode] = useState<ToolbarViewMode>("split");
   const [vsIdx, setVsIdx] = useState(1);
+  const vsIdxInitRef = useRef(false);
   const [zoomIdx, setZoomIdx] = useState(0);
-  const [overlayMode, setOverlayMode] = useState<ToolbarOverlayMode>("compare");
+  /** Null = neutral (no analyze mode selected); layer behaves as baseline "compare" (no tint). */
+  const [analyzeMode, setAnalyzeMode] = useState<ToolbarOverlayMode | null>(null);
+  const effectiveOverlay: ToolbarOverlayMode = analyzeMode ?? "compare";
+
   const [fixMode, setFixMode] = useState(false);
   const [simplifyCEO, setSimplifyCEO] = useState(false);
   const [planFocusTick, setPlanFocusTick] = useState(0);
   const [quickWinDismissed, setQuickWinDismissed] = useState(false);
+  const [narrowViewport, setNarrowViewport] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const fn = () => setNarrowViewport(mq.matches);
+    mq.addEventListener("change", fn);
+    return () => mq.removeEventListener("change", fn);
+  }, []);
   const zoom = ZOOM_LEVELS[zoomIdx] ?? 1;
+
+  const moreMenuLooksActive = Boolean(
+    analyzeMode &&
+      (analyzeMode === "trust" ||
+        analyzeMode === "readability" ||
+        (narrowViewport && ["attention", "copy", "mobile", "first5s"].includes(analyzeMode)))
+  );
 
   const sites: SiteEntry[] = useMemo(() => {
     const list: SiteEntry[] = [];
@@ -592,6 +671,44 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
   const activeSite = sites[activeIdx] ?? sites[0];
   const safeVs = sites.length > 1 ? Math.min(Math.max(1, vsIdx), sites.length - 1) : 0;
   const vsSite = sites.length > 1 ? sites[safeVs] : null;
+
+  const toolbarContext: ToolbarContext = useMemo(
+    () => ({
+      viewMode,
+      analyzeMode: analyzeMode as ToolbarContext["analyzeMode"],
+      zoneLens,
+    }),
+    [viewMode, analyzeMode, zoneLens]
+  );
+  const toolbarContextKey = `${viewMode}|${analyzeMode ?? ""}|${zoneLens}`;
+
+  const heatmapGapPairByKey = useMemo(() => {
+    const o: Record<string, { user: number | null; comp: number | null }> = {};
+    if (!userSite || !vsSite) return o;
+    for (const key of SECTION_KEYS) {
+      const u = userSite.annotations.find((a) => a.sectionKey === key)?.score ?? null;
+      const c = vsSite.annotations.find((a) => a.sectionKey === key)?.score ?? null;
+      o[key] = { user: u, comp: c };
+    }
+    return o;
+  }, [userSite, vsSite]);
+
+  const hideCompetitorRefs = viewMode === "single" && activeSite.isUser;
+
+  const sitesKey = useMemo(() => sites.map((s) => s.url).join("|"), [sites]);
+  const defaultVsIdx = useMemo(() => defaultVsSiteIndex(sites), [sites]);
+
+  useEffect(() => {
+    vsIdxInitRef.current = false;
+  }, [sitesKey]);
+
+  useEffect(() => {
+    if (sites.length < 2) return;
+    if (!vsIdxInitRef.current) {
+      setVsIdx(defaultVsIdx);
+      vsIdxInitRef.current = true;
+    }
+  }, [sites.length, defaultVsIdx, sitesKey]);
 
   useEffect(() => { if (sites.length < 2 && viewMode !== "single") setViewMode("single"); }, [sites.length, viewMode]);
   useEffect(() => { if (vsIdx > sites.length - 1 && sites.length > 1) setVsIdx(sites.length - 1); }, [sites.length, vsIdx]);
@@ -691,8 +808,9 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
   }, [userSite, vsSite]);
 
   const showProblemIndicators =
-    (viewMode === "split" && (overlayMode === "compare" || overlayMode === "mobile")) ||
-    (viewMode === "single" && overlayMode === "compare");
+    ((viewMode === "split" || viewMode === "compare") &&
+      (effectiveOverlay === "compare" || effectiveOverlay === "mobile")) ||
+    (viewMode === "single" && effectiveOverlay === "compare");
 
   const eyeOrderByKey = useMemo(() => {
     const sorted = [...userSite.annotations].sort((a, b) => a.top - b.top);
@@ -715,9 +833,14 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
   const tooltipCompareDomain = vsSite?.domain ?? (!activeSite.isUser ? activeSite.domain : null);
 
   const splitOverallDelta =
-    viewMode === "split" && userSite.overallScore != null && vsSite?.overallScore != null
+    (viewMode === "split" || viewMode === "compare") && userSite.overallScore != null && vsSite?.overallScore != null
       ? Math.round((userSite.overallScore - vsSite.overallScore) * 10) / 10
       : null;
+
+  const hotSectionCount = useMemo(
+    () => countHotSections(userSite.annotations.map((a) => a.score)),
+    [userSite.annotations]
+  );
 
   const quickWin = useMemo(() => {
     if (!vsSite || quickWinDismissed) return null;
@@ -746,6 +869,16 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
       impact,
     };
   }, [vsSite, quickWinDismissed, result.gaps, userSite]);
+
+  const toolbarFilteredSectionCount = useMemo(() => {
+    let n = 0;
+    for (const key of SECTION_KEYS) {
+      const u = userSite.annotations.find((a) => a.sectionKey === key)?.score ?? null;
+      const c = vsSite?.annotations.find((a) => a.sectionKey === key)?.score ?? null;
+      if (sectionPassesToolbarFilters(toolbarContext, key, u, c)) n++;
+    }
+    return n;
+  }, [toolbarContext, userSite, vsSite]);
 
   const openSectionMore = useCallback((ann: Annotation) => {
     setSectionDeepDive({
@@ -824,12 +957,40 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
               conversion: decisionBundle.conversion,
               mainIssue: decisionBundle.conversion.mainIssue,
             }
-          : null
+          : {
+              userScore: userSite.overallScore,
+              rank: decisionBundle.rank?.rank ?? null,
+              totalRanked: decisionBundle.rank?.total ?? 0,
+              losing: decisionBundle.losing,
+              conversion: decisionBundle.conversion,
+              mainIssue: decisionBundle.conversion.mainIssue,
+            }
       }
+      quickWin={quickWin}
+      onQuickWinDismiss={() => setQuickWinDismissed(true)}
+      onQuickWinPlan={() => setPlanFocusTick((n) => n + 1)}
       threeSecondInsight={centerInsight}
       sectionDeepDive={sectionDeepDive}
       onCloseSectionDeepDive={() => setSectionDeepDive(null)}
       focusPlanTick={planFocusTick}
+      toolbarContext={toolbarContext}
+      toolbarContextKey={toolbarContextKey}
+      hideCompetitorRefs={hideCompetitorRefs}
+      toolbarFilteredSectionCount={toolbarFilteredSectionCount}
+      sectionDeltaVsCompetitor={sectionDeltaVsCompetitor}
+      vsDomain={vsSite?.domain ?? null}
+      hotSectionCount={hotSectionCount}
+      lensAnnotations={userSite.annotations}
+      lensVs={
+        vsSite
+          ? {
+              domain: vsSite.domain,
+              bySection: Object.fromEntries(
+                SECTION_KEYS.map((k) => [k, vsSite.annotations.find((a) => a.sectionKey === k)?.score ?? null])
+              ),
+            }
+          : null
+      }
     />
   );
 
@@ -858,55 +1019,168 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
         </div>
       )}
 
-      {/* Single → Split → Slider → Compare → Attention → Gap heat → Copy | tools */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          {([
-            { id: "single" as const, icon: LayoutGrid, label: "Single", np: false },
-            { id: "split" as const, icon: Columns2, label: "Split", np: true },
-            { id: "slider" as const, icon: Blend, label: "Slider", np: true },
-          ] as const).map(({ id, icon: I, label, np }) => (
-            <button key={id} type="button" disabled={np && sites.length < 2} onClick={() => setViewMode(id)} className={cn("inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors", viewMode === id ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground", np && sites.length < 2 && "opacity-40 cursor-not-allowed")}><I className="h-3.5 w-3.5" />{label}</button>
-          ))}
-          {([
-            { id: "compare" as const, label: "Compare", icon: ScanEye },
-            { id: "attention" as const, label: "Attention", icon: MousePointer2 },
-            { id: "heatmap" as const, label: "Gap heat", icon: BarChart3 },
-            { id: "copy" as const, label: "Copy", icon: Type },
-            { id: "trust" as const, label: "Trust", icon: Shield },
-            { id: "readability" as const, label: "Read", icon: BookOpen },
-            { id: "mobile" as const, label: "Mobile", icon: Smartphone },
-            { id: "first5s" as const, label: "First 5s", icon: Timer },
-            { id: "conversion" as const, label: "Conversion", icon: Target },
-          ] as const).map(({ id, label, icon: I }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setOverlayMode(id)}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                overlayMode === id ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400" : "border-border text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <I className="h-3.5 w-3.5" />
-              {label}
-            </button>
-          ))}
-          {(viewMode === "split" || viewMode === "slider") && vsSite && (
-            <div className="flex items-center gap-1.5 pl-2 border-l border-border">
-              <span className="text-[10px] text-muted-foreground">vs</span>
-              <select value={safeVs} onChange={(e) => setVsIdx(Number(e.target.value))} className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium">{sites.slice(1).map((s, i) => <option key={s.url} value={i + 1}>{s.domain}</option>)}</select>
+      {/* VIEW + ANALYZE + tools */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+          <div className="flex flex-wrap items-end gap-4 min-w-0 flex-1">
+            {/* VIEW */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">View</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("single")}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                    viewMode === "single" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  Single
+                </button>
+                <button
+                  type="button"
+                  disabled={sites.length < 2}
+                  onClick={() => setViewMode("split")}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                    viewMode === "split" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+                    sites.length < 2 && "opacity-40 cursor-not-allowed"
+                  )}
+                >
+                  <Columns2 className="h-3.5 w-3.5" />
+                  Split
+                </button>
+                <button
+                  type="button"
+                  disabled={sites.length < 2}
+                  onClick={() => setViewMode("compare")}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                    viewMode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+                    sites.length < 2 && "opacity-40 cursor-not-allowed"
+                  )}
+                  title="Side-by-side with green/red gap highlights"
+                >
+                  <Blend className="h-3.5 w-3.5" />
+                  Compare
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 justify-end shrink-0">
-          <button type="button" onClick={() => setShowPins((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showPins ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{showPins ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}Pins</button>
-          <button type="button" onClick={() => setShowZones((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showZones ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>Zones</button>
-          <button type="button" onClick={() => setFullWidth((v) => !v)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">{fullWidth ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}{fullWidth ? "Normal" : "Wide"}</button>
-          <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5">
-            <button type="button" onClick={() => setZoomIdx((i) => Math.max(0, i - 1))} disabled={zoomIdx === 0} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomOut className="h-3 w-3" /></button>
-            <span className="text-[10px] font-mono font-bold w-10 text-center text-muted-foreground">{Math.round(zoom * 100)}%</span>
-            <button type="button" onClick={() => setZoomIdx((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1))} disabled={zoomIdx >= ZOOM_LEVELS.length - 1} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomIn className="h-3 w-3" /></button>
+
+            {/* ANALYZE */}
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Analyze</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    { id: "attention" as const, label: "Attention", icon: MousePointer2, narrow: true },
+                    { id: "heatmap" as const, label: "Gap heat", icon: BarChart3, narrow: false },
+                    { id: "copy" as const, label: "Copy", icon: Type, narrow: true },
+                    { id: "conversion" as const, label: "Conversion", icon: Target, narrow: false },
+                    { id: "mobile" as const, label: "Mobile", icon: Smartphone, narrow: true },
+                    { id: "first5s" as const, label: "First 5s", icon: Timer, narrow: true },
+                  ] as const
+                ).map(({ id, label, icon: I, narrow }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setAnalyzeMode((prev) => (prev === id ? null : id))}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                      analyzeMode === id
+                        ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                        : "border-border text-muted-foreground hover:text-foreground",
+                      narrow && "max-md:hidden"
+                    )}
+                  >
+                    <I className="h-3.5 w-3.5" />
+                    {label}
+                  </button>
+                ))}
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                        moreMenuLooksActive && "border-amber-500/50 bg-amber-500/5 text-amber-800 dark:text-amber-300"
+                      )}
+                    >
+                      More
+                      <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <div className="md:hidden">
+                      <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "attention" ? null : "attention"))}>
+                        <MousePointer2 className="h-3.5 w-3.5 mr-2" />
+                        Attention
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "copy" ? null : "copy"))}>
+                        <Type className="h-3.5 w-3.5 mr-2" />
+                        Copy
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "mobile" ? null : "mobile"))}>
+                        <Smartphone className="h-3.5 w-3.5 mr-2" />
+                        Mobile
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "first5s" ? null : "first5s"))}>
+                        <Timer className="h-3.5 w-3.5 mr-2" />
+                        First 5s
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </div>
+                    <DropdownMenuItem
+                      disabled={sites.length < 2}
+                      onClick={() => {
+                        setViewMode("slider");
+                      }}
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5 mr-2" />
+                      Slider
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "trust" ? null : "trust"))}>
+                      <Shield className="h-3.5 w-3.5 mr-2" />
+                      Trust
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "readability" ? null : "readability"))}>
+                      <BookOpen className="h-3.5 w-3.5 mr-2" />
+                      Read
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {(viewMode === "split" || viewMode === "compare" || viewMode === "slider") && vsSite && (
+                  <div className="flex items-center gap-1.5 pl-2 border-l border-border max-md:w-full max-md:mt-1">
+                    <span className="text-[10px] text-muted-foreground">vs</span>
+                    <select
+                      value={safeVs}
+                      onChange={(e) => setVsIdx(Number(e.target.value))}
+                      className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium min-w-0 max-w-[160px]"
+                    >
+                      {sites.slice(1).map((s, i) => (
+                        <option key={s.url} value={i + 1}>
+                          {s.domain}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 justify-end shrink-0">
+            <button type="button" onClick={() => setShowPins((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showPins ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{showPins ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}Pins</button>
+            <button type="button" onClick={() => setShowZones((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showZones ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>Zones</button>
+            <button type="button" onClick={() => setFullWidth((v) => !v)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">{fullWidth ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}{fullWidth ? "Normal" : "Wide"}</button>
+            <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5">
+              <button type="button" onClick={() => setZoomIdx((i) => Math.max(0, i - 1))} disabled={zoomIdx === 0} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomOut className="h-3 w-3" /></button>
+              <span className="text-[10px] font-mono font-bold w-10 text-center text-muted-foreground">{Math.round(zoom * 100)}%</span>
+              <button type="button" onClick={() => setZoomIdx((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1))} disabled={zoomIdx >= ZOOM_LEVELS.length - 1} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomIn className="h-3 w-3" /></button>
+            </div>
           </div>
         </div>
       </div>
@@ -925,7 +1199,11 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
               [
                 { id: "balanced" as const, label: "Balanced", icon: Sparkles },
                 { id: "rich" as const, label: "Visual+", icon: BarChart3 },
-                { id: "hot" as const, label: "Hot", icon: Flame },
+                {
+                  id: "hot" as const,
+                  label: hotSectionCount > 0 ? `Hot (${hotSectionCount})` : "Hot",
+                  icon: Flame,
+                },
                 { id: "delta" as const, label: "Δ vs you", icon: ArrowLeftRight },
               ] as const
             ).map(({ id, label, icon: I }) => {
@@ -961,6 +1239,13 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
               const insightLine =
                 userSite.annotations.find((a) => a.sectionKey === key)?.summary ?? "—";
               const chipUser = chipUnderlineClass(uSc);
+              const greySectionChip =
+                (zoneLens === "hot" && uSc != null && uSc >= 7) ||
+                (zoneLens === "rich" && uSc != null && uSc >= 8) ||
+                (zoneLens === "delta" &&
+                  uSc != null &&
+                  compSc != null &&
+                  !(compSc > uSc));
               return (
                 <Tooltip key={key} delayDuration={200}>
                   <TooltipTrigger asChild>
@@ -972,7 +1257,8 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                       }}
                       className={cn(
                         "group relative rounded-full border px-2.5 pb-1.5 pt-1 text-[10px] font-semibold transition-colors",
-                        expandedPin === key ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"
+                        expandedPin === key ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+                        greySectionChip && "opacity-45 grayscale"
                       )}
                     >
                       <span className="block">
@@ -1028,31 +1314,6 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
             })}
           </div>
 
-          {quickWin && sites.length > 1 && (
-            <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-[11px] text-amber-950 shadow-sm dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-50">
-              <span className="min-w-0 flex-1 leading-snug">
-                <span className="font-bold">⚡ Quick Win:</span>{" "}
-                <span className="font-semibold">{quickWin.label}</span> — {quickWin.fixOne} → est.{" "}
-                <span className="font-bold tabular-nums">+{quickWin.impact}%</span> impact
-              </span>
-              <button
-                type="button"
-                onClick={() => setPlanFocusTick((n) => n + 1)}
-                className="shrink-0 rounded-full border border-amber-600/40 bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-950 hover:bg-amber-200 dark:border-amber-400/50 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-900/80"
-              >
-                Fix this →
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickWinDismissed(true)}
-                className="shrink-0 rounded-md p-1 text-amber-800 hover:bg-amber-200/80 dark:text-amber-200 dark:hover:bg-amber-900/60"
-                aria-label="Dismiss quick win"
-              >
-                ×
-              </button>
-            </div>
-          )}
-
           {viewMode === "single" &&
             (activeSite.screenshotUrl ? (
               <ScreenshotFrame
@@ -1062,7 +1323,7 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                 expandedPin={expandedPin}
                 setExpandedPin={setExpandedPin}
                 zoom={zoom}
-                overlayMode={overlayMode}
+                overlayMode={effectiveOverlay}
                 sectionNavTick={sectionNavTick}
                 zoneLens={zoneLens}
                 deltaByKey={activeSite.isUser ? undefined : sectionDeltaByKey}
@@ -1073,12 +1334,14 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                   showProblemIndicators && activeSite.isUser && vsSite ? competitorScoresForUser : undefined
                 }
                 deltaLensTint={zoneLens === "delta" && !activeSite.isUser}
+                heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
               />
             ) : (
               <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No screenshot.</div>
             ))}
 
-          {viewMode === "split" && userSite && vsSite && (
+          {(viewMode === "split" || viewMode === "compare") && userSite && vsSite && (
             <div className="flex flex-col gap-2 md:flex-row md:items-stretch">
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-[10px] font-bold text-center text-muted-foreground uppercase tracking-wide">You</p>
@@ -1089,15 +1352,18 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                   expandedPin={expandedPin}
                   setExpandedPin={setExpandedPin}
                   zoom={zoom}
-                  overlayMode={overlayMode}
+                  overlayMode={effectiveOverlay}
                   sectionNavTick={sectionNavTick}
                   zoneLens={zoneLens}
-                  deltaByKey={undefined}
+                  deltaByKey={viewMode === "compare" ? sectionDeltaVsCompetitor : undefined}
                   onSectionMore={openSectionMore}
                   problemIndicators={showProblemIndicators}
                   eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
                   competitorScores={showProblemIndicators ? competitorScoresForUser : undefined}
                   deltaLensTint={false}
+                  compareDiffMode={viewMode === "compare"}
+                  heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                  heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
                 />
               </div>
               <div className="relative flex w-full shrink-0 flex-col items-center justify-center border-y border-border/80 py-2 md:w-11 md:border-x md:border-y-0 md:py-0">
@@ -1128,7 +1394,7 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                   expandedPin={expandedPin}
                   setExpandedPin={setExpandedPin}
                   zoom={zoom}
-                  overlayMode={overlayMode}
+                  overlayMode={effectiveOverlay}
                   sectionNavTick={sectionNavTick}
                   zoneLens={zoneLens}
                   deltaByKey={sectionDeltaVsCompetitor}
@@ -1137,12 +1403,15 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                   eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
                   competitorScores={undefined}
                   deltaLensTint={zoneLens === "delta"}
+                  compareDiffMode={viewMode === "compare"}
+                  heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                  heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
                 />
               </div>
             </div>
           )}
 
-          {zoneLens === "delta" && (viewMode === "split" || !activeSite.isUser) && vsSite && (
+          {zoneLens === "delta" && (viewMode === "split" || viewMode === "compare" || !activeSite.isUser) && vsSite && (
             <p className="text-center text-[10px] text-muted-foreground dark:text-muted-foreground/90">
               🟢 Competitor advantage · 🔴 Your advantage
             </p>

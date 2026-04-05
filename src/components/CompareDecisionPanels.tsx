@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { Fragment, useMemo, useState, useEffect, useRef } from "react";
 import { cn, getDomain } from "@/lib/utils";
 import {
   type HeroSubMetrics,
@@ -19,8 +19,20 @@ import {
   type SectionOrderKey,
 } from "@/lib/compareDecisionMetrics";
 import type { AnalysisResult } from "@/types/api";
+import {
+  type ToolbarContext,
+  getRightPanelHeader,
+  formatToolbarContextForEmpty,
+} from "@/lib/compareToolbarContext";
 import { buildSectionScoreBreakdown } from "@/lib/scoreBreakdown";
 import { insightConfidenceFromResult } from "@/lib/insightConfidence";
+import {
+  buildVisualLensSections,
+  buildHotLensIssues,
+  buildDeltaLensItems,
+  type DeltaLensItem,
+} from "@/lib/lensPanelContent";
+import { VisualLensCollapsible, HotLensPanel, DeltaLensPanel } from "@/components/LensInsightPanels";
 import { ScoreBreakdownPopover } from "@/components/ScoreBreakdownPopover";
 import { CopyGeneratorBlock } from "@/components/CopyGeneratorBlock";
 import { BusinessImpactEstimate } from "@/components/BusinessImpactEstimate";
@@ -32,6 +44,8 @@ import {
   ClipboardCopy,
   Crown,
   Flame,
+  LayoutDashboard,
+  Lightbulb,
   Rocket,
   ScanEye,
   Sparkles,
@@ -72,10 +86,55 @@ export function CompareHeaderStatus({
   losing: boolean;
   conversion: ConversionLayer;
   mainIssue: string;
-  variant?: "header" | "card";
+  variant?: "header" | "card" | "overview";
 }) {
   const isHeader = variant === "header";
+  const isOverview = variant === "overview";
   const tier = businessImpactTier(conversion);
+  const showBusinessImpact = variant === "card";
+
+  if (isOverview) {
+    return (
+      <div className="flex flex-col gap-2 w-full min-w-0 px-3 py-3 rounded-xl border border-border bg-card/80">
+        <p className="text-sm font-semibold text-foreground tabular-nums">
+          {rank != null && totalRanked > 0 ? (
+            <>
+              Rank #{rank} of {totalRanked} · Overall {userScore != null ? userScore.toFixed(1) : "—"}/10
+            </>
+          ) : (
+            <>Overall {userScore != null ? userScore.toFixed(1) : "—"}/10</>
+          )}
+        </p>
+        <div className="flex flex-wrap items-start gap-2">
+          {losing ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400 shrink-0">
+              Behind on rank
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400 shrink-0">
+              <CheckCircle2 className="h-3 w-3" />
+              Leading / tied
+            </span>
+          )}
+          <p className="text-[11px] text-foreground/90 leading-snug min-w-0 flex-1">{headerUnifiedLine(losing, conversion)}</p>
+        </div>
+        <div className="flex flex-wrap items-start gap-2 min-w-0">
+          <span
+            className={cn(
+              "text-[10px] font-bold uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0",
+              riskBadge(conversion.risk)
+            )}
+          >
+            Risk: {conversion.risk}
+          </span>
+          <p className="text-[10px] sm:text-[11px] text-muted-foreground min-w-0 flex-1 leading-snug break-words">
+            <span className="font-semibold text-foreground">Main issue:</span> {mainIssue}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -112,16 +171,21 @@ export function CompareHeaderStatus({
             <span className="font-bold text-red-500 tabular-nums">(−{conversion.lossLowPct}–{conversion.lossHighPct}%)</span>
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          <span className={cn("text-[10px] font-bold uppercase tracking-wide rounded-full border px-2 py-0.5", riskBadge(conversion.risk))}>
+        <div className="flex flex-wrap items-start gap-2 min-w-0 flex-1 basis-full sm:basis-auto">
+          <span
+            className={cn(
+              "text-[10px] font-bold uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0",
+              riskBadge(conversion.risk)
+            )}
+          >
             Risk: {conversion.risk}
           </span>
-          <span className="text-[10px] sm:text-[11px] text-muted-foreground max-w-[220px] sm:max-w-md truncate" title={mainIssue}>
+          <p className="text-[10px] sm:text-[11px] text-muted-foreground min-w-0 flex-1 leading-snug break-words">
             <span className="font-semibold text-foreground">Main issue:</span> {mainIssue}
-          </span>
+          </p>
         </div>
       </div>
-      {!isHeader && <BusinessImpactEstimate conversion={conversion} />}
+      {showBusinessImpact && <BusinessImpactEstimate conversion={conversion} />}
     </div>
   );
 }
@@ -253,9 +317,10 @@ export type SectionDeepDivePayload = {
   watchPoints: string[];
 };
 
-type DecisionPanelTab = "insight" | "plan" | "impact" | "compete" | "scores";
+type DecisionPanelTab = "overview" | "insight" | "plan" | "impact" | "compete" | "scores";
 
 const DECISION_PANEL_TABS: { id: DecisionPanelTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
   { id: "insight", label: "Insight" },
   { id: "plan", label: "Plan" },
   { id: "impact", label: "Impact" },
@@ -292,6 +357,18 @@ export function DecisionActionPanel({
   sectionDeepDive,
   onCloseSectionDeepDive,
   focusPlanTick,
+  toolbarContext,
+  toolbarContextKey,
+  hideCompetitorRefs,
+  toolbarFilteredSectionCount,
+  sectionDeltaVsCompetitor,
+  vsDomain,
+  hotSectionCount = 0,
+  quickWin,
+  onQuickWinDismiss,
+  onQuickWinPlan,
+  lensAnnotations = [],
+  lensVs = null,
 }: {
   result: AnalysisResult;
   activeSite: SiteLite;
@@ -331,16 +408,66 @@ export function DecisionActionPanel({
   sectionDeepDive?: SectionDeepDivePayload | null;
   onCloseSectionDeepDive?: () => void;
   focusPlanTick?: number;
+  toolbarContext: ToolbarContext;
+  toolbarContextKey: string;
+  /** Single view on your site — hide competitive copy in the panel. */
+  hideCompetitorRefs?: boolean;
+  /** Sections that pass current lens ∩ analyze filters (for empty state). */
+  toolbarFilteredSectionCount: number;
+  sectionDeltaVsCompetitor?: Record<string, number | null> | null;
+  vsDomain?: string | null;
+  hotSectionCount?: number;
+  quickWin?: { label: string; fixOne: string; impact: number; sectionKey: string } | null;
+  onQuickWinDismiss?: () => void;
+  onQuickWinPlan?: () => void;
+  /** Per-section rows for HOT / Δ lenses (your site annotations). */
+  lensAnnotations?: Array<{
+    sectionKey: string;
+    label: string;
+    score: number | null;
+    summary: string;
+    fullText?: string;
+  }>;
+  /** Active competitor for Δ lens (scores + domain). */
+  lensVs?: { domain: string; bySection: Record<string, number | null> } | null;
 }) {
-  const [panelTab, setPanelTab] = useState<DecisionPanelTab>("insight");
+  const [panelTab, setPanelTab] = useState<DecisionPanelTab>("overview");
   const [heroOpen, setHeroOpen] = useState(true);
   const [behaviorOpen, setBehaviorOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const lastPlanTickRef = useRef<number | null>(null);
+  const prevFocusedKeyRef = useRef<string | null | undefined>(undefined);
+  const panelScrollRef = useRef<HTMLDivElement>(null);
+
+  const panelHeader = useMemo(
+    () => getRightPanelHeader(toolbarContext, { hotSectionCount }),
+    [toolbarContext, hotSectionCount]
+  );
+  const showFilterEmpty =
+    toolbarFilteredSectionCount === 0 &&
+    (toolbarContext.analyzeMode != null || toolbarContext.zoneLens !== "balanced");
 
   useEffect(() => {
-    if (sectionDeepDive) setPanelTab("scores");
+    panelScrollRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [toolbarContextKey]);
+
+  useEffect(() => {
+    if (sectionDeepDive) setPanelTab("insight");
   }, [sectionDeepDive?.sectionKey]);
+
+  useEffect(() => {
+    if (prevFocusedKeyRef.current === undefined) {
+      prevFocusedKeyRef.current = focusedKey;
+      return;
+    }
+    if (focusedKey != null && focusedKey !== prevFocusedKeyRef.current) {
+      setPanelTab("insight");
+      requestAnimationFrame(() => {
+        document.getElementById("compare-scroll-insight")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    }
+    prevFocusedKeyRef.current = focusedKey;
+  }, [focusedKey]);
 
   useEffect(() => {
     if (focusPlanTick === undefined) return;
@@ -373,6 +500,23 @@ export function DecisionActionPanel({
   const topPlan = useMemo(() => topActionPlanRows(result), [result]);
   const riskWhyBut = useMemo(() => conversionRiskWhyBut(conversion, result), [conversion, result]);
   const insightConf = useMemo(() => insightConfidenceFromResult(result), [result]);
+
+  const visualLensSections = useMemo(
+    () => buildVisualLensSections(result, { heroScore, behavioral }),
+    [result, heroScore, behavioral]
+  );
+
+  const hotLensIssues = useMemo(() => buildHotLensIssues(result, lensAnnotations), [result, lensAnnotations]);
+
+  const deltaLensPack = useMemo(() => {
+    if (!lensVs) return { summary: null as string | null, items: [] as DeltaLensItem[] };
+    const userBy = Object.fromEntries(lensAnnotations.map((a) => [a.sectionKey, a.score])) as Record<string, number | null>;
+    return buildDeltaLensItems(result, userBy, lensVs.bySection, lensVs.domain);
+  }, [result, lensAnnotations, lensVs]);
+
+  /** Balanced lens (or Analyze overlay): show standard problem + 3s insight. Visual/Hot/Delta replace with filtered views. */
+  const defaultInsightProblemCard =
+    toolbarContext.analyzeMode !== null || toolbarContext.zoneLens === "balanced";
 
   const verdictLine = useMemo(() => {
     if (focusedKey === "hero") {
@@ -411,107 +555,6 @@ export function DecisionActionPanel({
         fixMode ? "border-primary/50 shadow-md shadow-primary/10" : "border-primary/25 shadow-lg shadow-black/15"
       )}
     >
-      {statusBanner && (
-        <CompareHeaderStatus
-          variant="card"
-          userScore={statusBanner.userScore}
-          rank={statusBanner.rank}
-          totalRanked={statusBanner.totalRanked}
-          losing={statusBanner.losing}
-          conversion={statusBanner.conversion}
-          mainIssue={statusBanner.mainIssue}
-        />
-      )}
-      {sectionDeepDive && (
-        <div className="shrink-0 border-b border-amber-500/25 bg-gradient-to-b from-amber-500/[0.08] to-transparent px-3 py-3 space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Section analysis</p>
-              <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                <span className="text-sm font-semibold text-foreground">{sectionDeepDive.label}</span>
-                {sectionDeepDive.score != null && (
-                  <ScoreBreakdownPopover
-                    sectionTitle={sectionDeepDive.label}
-                    breakdown={buildSectionScoreBreakdown(
-                      (sectionDeepDive.sectionKey as SectionOrderKey) || "hero",
-                      sectionDeepDive.score,
-                      result
-                    )}
-                  >
-                    <span className={cn("text-xs font-bold tabular-nums", sColor(sectionDeepDive.score))}>
-                      {sectionDeepDive.score.toFixed(1)}/10
-                    </span>
-                  </ScoreBreakdownPopover>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => onCloseSectionDeepDive?.()}
-              className="shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Close section detail"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          {sectionDeepDive.watchPoints.length > 0 && (
-            <div>
-              <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Watch</p>
-              <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-foreground leading-snug">
-                {sectionDeepDive.watchPoints.map((w, i) => (
-                  <li key={i}>{w}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <div className="rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
-            <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
-              {annotationDisplayBody(sectionDeepDive.fullText) || "—"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => copyLine(annotationDisplayBody(sectionDeepDive.fullText))}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-          >
-            <ClipboardCopy className="h-3 w-3" />
-            Copy full text
-          </button>
-        </div>
-      )}
-      <div className="flex items-center justify-between border-b border-primary/15 bg-primary/5 px-3 py-2.5 gap-2 shrink-0 flex-wrap">
-        <div className="flex items-center gap-2 min-w-0">
-          <Rocket className="h-4 w-4 text-primary shrink-0" aria-hidden />
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-primary leading-tight">Compare</p>
-            <p className="text-[10px] text-muted-foreground truncate">Insight · plan · impact · compete · scores</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setFixMode(!fixMode)}
-            className={cn(
-              "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase flex items-center gap-1",
-              fixMode ? "bg-primary text-primary-foreground ring-2 ring-primary/60" : "bg-muted text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Wrench className="h-3 w-3" />
-            {fixMode ? "Fix mode on" : "Fix mode"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSimplifyCEO(!simplifyCEO)}
-            className={cn(
-              "rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-              simplifyCEO ? "bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-muted text-muted-foreground hover:text-foreground"
-            )}
-          >
-            CEO view
-          </button>
-        </div>
-      </div>
-
       <div className="flex shrink-0 border-b border-border bg-muted/20 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Compare sections">
         {DECISION_PANEL_TABS.map(({ id, label }) => (
           <button
@@ -521,30 +564,197 @@ export function DecisionActionPanel({
             aria-selected={panelTab === id}
             onClick={() => setPanelTab(id)}
             className={cn(
-              "shrink-0 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide border-b-2 transition-colors",
+              "inline-flex items-center gap-1 shrink-0 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide border-b-2 transition-colors",
               panelTab === id
                 ? "border-primary text-primary bg-background/80"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
           >
+            {id === "overview" ? <LayoutDashboard className="h-3.5 w-3.5 opacity-60 shrink-0" aria-hidden /> : null}
+            {id === "insight" ? <Lightbulb className="h-3.5 w-3.5 opacity-60 shrink-0" aria-hidden /> : null}
             {label}
           </button>
         ))}
       </div>
 
-      <div className="p-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0">
+      <div ref={panelScrollRef} className="p-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0">
+        {(panelHeader.title || panelHeader.subtitle) && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 transition-opacity duration-150">
+            {panelHeader.title && <p className="text-[11px] font-bold text-primary">{panelHeader.title}</p>}
+            {panelHeader.subtitle && (
+              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{panelHeader.subtitle}</p>
+            )}
+          </div>
+        )}
+        {showFilterEmpty && (
+          <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2 text-[11px] text-emerald-950 dark:text-emerald-100">
+            No {formatToolbarContextForEmpty(toolbarContext)} issues found in this section — that&apos;s a good sign ✓
+          </div>
+        )}
+        <Fragment key={toolbarContextKey}>
+        {panelTab === "overview" && (
+          <div className="space-y-3 transition-opacity duration-150">
+            {hideCompetitorRefs && (
+              <div className="rounded-xl border border-border bg-muted/30 px-3 py-2.5">
+                <p className="text-[11px] font-semibold text-foreground">Your site only</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                  Single view — competitor comparison is hidden. Use Split, Compare, or Slider to see vs{" "}
+                  {vsDomain ?? "a competitor"}.
+                </p>
+              </div>
+            )}
+            {!hideCompetitorRefs && statusBanner && (
+              <CompareHeaderStatus
+                variant="overview"
+                userScore={statusBanner.userScore}
+                rank={statusBanner.rank}
+                totalRanked={statusBanner.totalRanked}
+                losing={statusBanner.losing}
+                conversion={statusBanner.conversion}
+                mainIssue={statusBanner.mainIssue}
+              />
+            )}
+            {quickWin && !hideCompetitorRefs && onQuickWinDismiss && onQuickWinPlan && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-950 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-50">
+                <span className="min-w-0 flex-1 leading-snug">
+                  <span className="font-bold">Quick Win:</span>{" "}
+                  <span className="font-semibold">{quickWin.label}</span> — {quickWin.fixOne} → est.{" "}
+                  <span className="font-bold tabular-nums">+{quickWin.impact}%</span> impact
+                </span>
+                <button
+                  type="button"
+                  onClick={onQuickWinPlan}
+                  className="shrink-0 rounded-full border border-amber-600/40 bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-950 hover:bg-amber-200 dark:border-amber-400/50 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-900/80"
+                >
+                  Fix this →
+                </button>
+                <button
+                  type="button"
+                  onClick={onQuickWinDismiss}
+                  className="shrink-0 rounded-md p-1 text-amber-800 hover:bg-amber-200/80 dark:text-amber-200 dark:hover:bg-amber-900/60"
+                  aria-label="Dismiss quick win"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {panelTab === "insight" && (
-          <div className="rounded-xl border border-red-500/40 bg-card/80 px-3 py-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(248,113,113,0.12)]">
-            <div className="flex flex-wrap items-center gap-2">
-              <InsightConfidenceBadge level={insightConf} />
-              <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-muted/50 px-1.5 py-0.5 text-muted-foreground">
-                Data coverage {dataCoveragePct}%
-              </span>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Insight</p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setFixMode(!fixMode)}
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase flex items-center gap-1",
+                    fixMode ? "bg-primary text-primary-foreground ring-2 ring-primary/60" : "bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Wrench className="h-3 w-3" />
+                  {fixMode ? "Fix mode on" : "Fix mode"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSimplifyCEO(!simplifyCEO)}
+                  className={cn(
+                    "rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                    simplifyCEO ? "bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  CEO view
+                </button>
+              </div>
             </div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-red-500 dark:text-red-400">Problem</p>
-            <p className="text-sm text-foreground leading-snug">{threeSecondInsight.problem}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground pt-1">In 3 seconds</p>
-            <p className="text-xs text-muted-foreground leading-relaxed">{threeSecondInsight.result}</p>
+            {sectionDeepDive && (
+              <div className="shrink-0 border border-amber-500/25 rounded-xl bg-gradient-to-b from-amber-500/[0.08] to-transparent px-3 py-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Section analysis</p>
+                    <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                      <span className="text-sm font-semibold text-foreground">{sectionDeepDive.label}</span>
+                      {sectionDeepDive.score != null && (
+                        <ScoreBreakdownPopover
+                          sectionTitle={sectionDeepDive.label}
+                          breakdown={buildSectionScoreBreakdown(
+                            (sectionDeepDive.sectionKey as SectionOrderKey) || "hero",
+                            sectionDeepDive.score,
+                            result
+                          )}
+                        >
+                          <span className={cn("text-xs font-bold tabular-nums", sColor(sectionDeepDive.score))}>
+                            {sectionDeepDive.score.toFixed(1)}/10
+                          </span>
+                        </ScoreBreakdownPopover>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onCloseSectionDeepDive?.()}
+                    className="shrink-0 rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Close section detail"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                {sectionDeepDive.watchPoints.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1">Watch</p>
+                    <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-foreground leading-snug">
+                      {sectionDeepDive.watchPoints.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
+                  <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
+                    {annotationDisplayBody(sectionDeepDive.fullText) || "—"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyLine(annotationDisplayBody(sectionDeepDive.fullText))}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                >
+                  <ClipboardCopy className="h-3 w-3" />
+                  Copy full text
+                </button>
+              </div>
+            )}
+            {toolbarContext.analyzeMode === null && toolbarContext.zoneLens === "rich" && (
+              <VisualLensCollapsible sections={visualLensSections} />
+            )}
+            {toolbarContext.analyzeMode === null && toolbarContext.zoneLens === "hot" && (
+              <HotLensPanel issues={hotLensIssues} />
+            )}
+            {toolbarContext.analyzeMode === null && toolbarContext.zoneLens === "delta" && (
+              <DeltaLensPanel summary={deltaLensPack.summary} items={deltaLensPack.items} />
+            )}
+            {defaultInsightProblemCard && (
+            <div
+              id="compare-scroll-insight"
+              className={cn(
+                "rounded-xl border border-red-500/35 bg-card/80 px-3 py-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(248,113,113,0.1)] scroll-mt-3",
+                toolbarContext.zoneLens === "hot" && "border-l-4 border-l-red-500"
+              )}
+            >
+              <p className="text-sm font-semibold text-foreground">{sectionLabel}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <InsightConfidenceBadge level={insightConf} />
+                <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-muted/50 px-1.5 py-0.5 text-muted-foreground">
+                  Data coverage {dataCoveragePct}%
+                </span>
+              </div>
+              <p className="text-sm text-foreground leading-snug">{threeSecondInsight.problem}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground pt-1">In 3 seconds</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{threeSecondInsight.result}</p>
+            </div>
+            )}
           </div>
         )}
 
@@ -644,7 +854,11 @@ export function DecisionActionPanel({
         )}
 
         {panelTab === "impact" && (
-          <div className="rounded-xl border border-border p-3 space-y-2">
+          <div className="space-y-3">
+            <div className="rounded-xl border border-border bg-muted/15 px-2 py-2">
+              <BusinessImpactEstimate conversion={conversion} />
+            </div>
+            <div className="rounded-xl border border-border p-3 space-y-2">
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <InsightConfidenceBadge level={insightConf} />
               <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
@@ -678,11 +892,18 @@ export function DecisionActionPanel({
               <p className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 pt-1">But</p>
               <p className="text-foreground leading-relaxed">{riskWhyBut.but}</p>
             </div>
+            </div>
           </div>
         )}
 
         {panelTab === "compete" && (
           <div className="space-y-3">
+            {hideCompetitorRefs ? (
+              <p className="text-[11px] text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-3 leading-relaxed">
+                Competitive steal lists and win narratives are hidden in Single view. Use Split, Compare, or Slider to compare against a competitor.
+              </p>
+            ) : (
+              <>
             {winNarrative && (!activeSite.isUser || stealThree.length > 0) && (
               <div className="rounded-xl border border-primary/30 bg-gradient-to-b from-primary/8 to-transparent p-3 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -825,6 +1046,8 @@ export function DecisionActionPanel({
 
             {!winNarrative && stealThree.length === 0 && abVariants.length === 0 && (
               <p className="text-muted-foreground text-center py-6">No competitive headline or steal list in this report.</p>
+            )}
+              </>
             )}
           </div>
         )}
@@ -988,6 +1211,7 @@ export function DecisionActionPanel({
             )}
           </>
         )}
+        </Fragment>
       </div>
     </div>
   );
@@ -1009,29 +1233,70 @@ export function CompareOverlayLayer({
   mode,
   annotations,
   first5sTopPct,
+  heatmapGapPairByKey,
+  heatmapGapOnCompetitorOnly,
+  siteIsUser,
 }: {
   mode: CompareOverlayLayerMode;
-  annotations: Array<{ top: number; height: number; score: number | null; label: string }>;
+  annotations: Array<{ top: number; height: number; score: number | null; label: string; sectionKey?: string }>;
   /** Percent from top of screenshot where the “below fold” darkening starts (from ~600px / image height). */
   first5sTopPct?: number | null;
+  /** Gap heat: user vs competitor score per section (for competitor screenshot tri-color). */
+  heatmapGapPairByKey?: Record<string, { user: number | null; comp: number | null }>;
+  /** When true, hide heatmap on user screenshot (Gap heat shows zones on competitor only). */
+  heatmapGapOnCompetitorOnly?: boolean;
+  siteIsUser?: boolean;
 }) {
   if (mode === "compare") return null;
+
+  if (mode === "heatmap" && heatmapGapOnCompetitorOnly && siteIsUser) return null;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-[5]">
       {mode === "attention" && (
         <>
           <div
-            className="absolute inset-0 opacity-30"
+            className="absolute inset-0 opacity-35"
             style={{
-              background: "radial-gradient(ellipse 55% 35% at 50% 18%, rgba(250,204,21,0.45), transparent 70%)",
+              background:
+                "radial-gradient(ellipse 50% 32% at 48% 16%, rgba(239,68,68,0.42), transparent 65%), radial-gradient(ellipse 40% 28% at 72% 55%, rgba(59,130,246,0.35), transparent 60%), radial-gradient(ellipse 45% 30% at 28% 70%, rgba(147,197,253,0.4), transparent 55%)",
             }}
           />
-          <div className="absolute left-[42%] top-[22%] w-px h-[38%] bg-gradient-to-b from-amber-400/80 to-transparent" />
-          <div className="absolute bottom-[28%] right-[38%] rounded-full w-2 h-2 bg-primary shadow-[0_0_12px_rgba(59,130,246,0.9)]" />
+          <div className="absolute left-[40%] top-[18%] w-px h-[40%] bg-gradient-to-b from-orange-400/90 to-amber-200/40" />
+          <div className="absolute bottom-[26%] right-[36%] rounded-full w-2 h-2 bg-orange-500 shadow-[0_0_14px_rgba(249,115,22,0.95)]" />
         </>
       )}
       {mode === "heatmap" &&
+        heatmapGapPairByKey &&
+        !siteIsUser &&
+        annotations.map((a) => {
+          const key = a.sectionKey ?? a.label;
+          const pair = heatmapGapPairByKey[key];
+          const u = pair?.user ?? null;
+          const c = pair?.comp ?? null;
+          const gap = u != null && c != null ? c - u : null;
+          const bg =
+            gap == null
+              ? "rgba(148,163,184,0.2)"
+              : gap > 0.35
+                ? "rgba(239,68,68,0.38)"
+                : gap < -0.35
+                  ? "rgba(34,197,94,0.32)"
+                  : "rgba(148,163,184,0.22)";
+          return (
+            <div
+              key={a.label}
+              className="absolute left-0 right-0 border-y border-white/10"
+              style={{
+                top: `${a.top}%`,
+                height: `${a.height}%`,
+                background: `linear-gradient(90deg, ${bg}, transparent 92%)`,
+              }}
+            />
+          );
+        })}
+      {mode === "heatmap" &&
+        !heatmapGapPairByKey &&
         annotations.map((a) => {
           const intensity = a.score == null ? 0.2 : Math.max(0, (10 - a.score) / 10) * 0.85;
           return (
@@ -1046,12 +1311,22 @@ export function CompareOverlayLayer({
             />
           );
         })}
-      {mode === "copy" && (
-        <div
-          className="absolute left-0 right-0 bg-slate-900/25 backdrop-blur-[0.5px] border-y border-cyan-500/20"
-          style={{ top: "0%", height: "22%" }}
-        />
-      )}
+      {mode === "copy" &&
+        annotations.map((a) => {
+          const sk = (a as { sectionKey?: string }).sectionKey ?? "";
+          const primary =
+            /hero|cta/i.test(a.label) || sk === "hero" || sk === "CTA" || sk === "value proposition";
+          return (
+            <div
+              key={`copy-${a.label}`}
+              className={cn(
+                "absolute left-0 right-0 border-y backdrop-blur-[0.5px]",
+                primary ? "bg-amber-400/18 border-amber-400/40" : "bg-sky-500/14 border-sky-400/30"
+              )}
+              style={{ top: `${a.top}%`, height: `${a.height}%` }}
+            />
+          );
+        })}
       {mode === "trust" && (
         <>
           <div

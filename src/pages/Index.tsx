@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import InputScreen from "@/components/InputScreen";
 import ProgressiveReportView from "@/components/ProgressiveReportView";
-import Dashboard from "@/components/Dashboard";
 import { startAnalysis, fetchRecentComparisonsFromApi, type JobLiveState } from "@/lib/api";
 import { saveToHistory, getHistory, getHistoryCount, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
 import { getDefaultRecentComparisons } from "@/lib/demoRecentComparisons";
@@ -74,9 +73,7 @@ const Index = () => {
 
   useEffect(() => {
     if (location.pathname !== "/" || (location.state as { openHistory?: boolean })?.openHistory !== true) return;
-    setHistoryCount(getHistoryCount());
-    setScreen("dashboard");
-    navigate(".", { state: {}, replace: true });
+    navigate("/history", { replace: true, state: {} });
   }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
@@ -127,8 +124,8 @@ const Index = () => {
 
   const handleOpenHistory = useCallback(() => {
     setHistoryCount(getHistoryCount());
-    setScreen("dashboard");
-  }, []);
+    navigate("/history");
+  }, [navigate]);
 
   const handleViewReport = useCallback(
     (entry: HistoryEntry) => {
@@ -136,11 +133,6 @@ const Index = () => {
     },
     [openAnalysisDashboard]
   );
-
-  const handleBackFromDashboard = useCallback(() => {
-    setHistoryCount(getHistoryCount());
-    setScreen("input");
-  }, []);
 
   const handleBackFromProgress = useCallback(() => {
     setJobId(null);
@@ -172,14 +164,6 @@ const Index = () => {
           analyzeError={analyzeError}
           recentAnalyses={recentAnalysesForHome}
           onSelectRecent={handleViewReport}
-        />
-      )}
-      {screen === "dashboard" && (
-        <Dashboard
-          onBack={handleBackFromDashboard}
-          onGoHome={handleGoHome}
-          onViewReport={handleViewReport}
-          historyCount={historyCount}
         />
       )}
       {screen === "progress" && jobId && (
