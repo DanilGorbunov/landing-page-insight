@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -49,6 +49,8 @@ import { BeforeAfterScoresChart } from "@/components/BeforeAfterScoresChart";
 import { StructuredSynthesis } from "@/components/StructuredSynthesis";
 import { parseSectionScores, ensureScore } from "@/lib/utils";
 import { weightedOverallFromSections, projectRatings } from "@/lib/insightsProjection";
+import { compareSitesList } from "@/lib/compareDecisionMetrics";
+import { CompareHeaderSiteTabs } from "@/components/CompareDecisionPanels";
 import type { AnalysisResult } from "@/types/api";
 
 // ─── Nav config ────────────────────────────────────────────────────────────────
@@ -117,15 +119,8 @@ function getSectionTip(id: string, result: AnalysisResult): Tip | null {
       if (p1) return { text: `Critical gap: ${p1.problem} — ${p1.recommendation}`, impact: "High" };
       return null;
     }
-    case "compare": {
-      const nComp = result.competitors?.length ?? 0;
-      if (nComp > 0)
-        return {
-          text: `Click any section badge on the screenshot to see score & summary. Switch between ${nComp + 1} sites to spot visual differences instantly.`,
-          impact: "Low",
-        };
-      return { text: "Toggle zones and annotations to see how each page section performs at a glance.", impact: "Low" };
-    }
+    case "compare":
+      return null;
     case "performance": {
       const s = perfScore(result);
       if (s != null && s < 50)
@@ -439,12 +434,31 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
   );
 }
 
-function SectionContent({ id, result, url }: { id: string; result: AnalysisResult; url: string }) {
+function SectionContent({
+  id,
+  result,
+  url,
+  compareSiteIdx,
+  onCompareSiteIdxChange,
+}: {
+  id: string;
+  result: AnalysisResult;
+  url: string;
+  compareSiteIdx?: number;
+  onCompareSiteIdxChange?: (idx: number) => void;
+}) {
   switch (id) {
     case "overview":
       return <OverviewSection result={result} url={url} />;
     case "compare":
-      return <ScreenshotCompare result={result} url={url} />;
+      return (
+        <ScreenshotCompare
+          result={result}
+          url={url}
+          compareSiteIdx={compareSiteIdx}
+          onCompareSiteIdxChange={onCompareSiteIdxChange}
+        />
+      );
     case "performance":
       return result.performance ? (
         <PerformanceGauges data={result.performance} />
@@ -737,9 +751,14 @@ export default function AuditDashboard() {
   const navigate = useNavigate();
   const payload = readFullInsightsPayload();
   const [activeSection, setActiveSection] = useState("compare");
+  const [compareSiteIdx, setCompareSiteIdx] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const historyCount = getHistoryCount();
+
+  useEffect(() => {
+    if (activeSection !== "compare") setCompareSiteIdx(0);
+  }, [activeSection]);
 
   if (!payload?.result) {
     return (
@@ -771,6 +790,11 @@ export default function AuditDashboard() {
     return weightedOverallFromSections(userScores) ?? 7.0;
   }, [result]);
 
+  const compareTabSites = useMemo(
+    () => (activeSection === "compare" ? compareSitesList(result, url) : []),
+    [activeSection, result, url]
+  );
+
   const tip = getSectionTip(activeSection, result);
 
   const handlePdf = async () => {
@@ -797,14 +821,33 @@ export default function AuditDashboard() {
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Top bar */}
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/90 backdrop-blur px-4 md:px-6">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
-            <span className="text-foreground font-semibold truncate">{getDomain(url)}</span>
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" />
-            <span className="truncate">{SECTION_LABELS[activeSection] ?? activeSection}</span>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
+        {/* Top bar — Compare shows competitive status instead of domain breadcrumb */}
+        <header
+          className={cn(
+            "flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2 md:px-6 min-h-14",
+            activeSection === "compare" && "items-center bg-background/90 backdrop-blur border-border",
+            activeSection !== "compare" && "h-14 items-center bg-background/90 backdrop-blur border-border"
+          )}
+        >
+          {activeSection === "compare" && compareTabSites.length > 0 ? (
+            <div className="flex-1 min-w-0 flex items-center">
+              <CompareHeaderSiteTabs
+                sites={compareTabSites}
+                activeIdx={Math.min(compareSiteIdx, Math.max(0, compareTabSites.length - 1))}
+                onSelect={setCompareSiteIdx}
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 flex-1">
+              <span className="text-foreground font-semibold truncate">{getDomain(url)}</span>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" />
+              <span className="truncate">{SECTION_LABELS[activeSection] ?? activeSection}</span>
+            </div>
+          )}
+          <span className="hidden sm:inline text-[11px] text-muted-foreground shrink-0 tabular-nums" title="Report created">
+            Created {new Date(paidAt).toLocaleDateString()}
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => navigate("/", { state: { openHistory: true } })}
@@ -830,17 +873,31 @@ export default function AuditDashboard() {
           </div>
         </header>
 
-        {/* Section content */}
+        {/* Section content — Compare uses full main width so screenshot + insights can sit side-by-side */}
         <main className="flex-1 overflow-y-auto p-5 md:p-7">
-          <div className="max-w-5xl mx-auto">
-            <h1 className="text-lg font-bold text-foreground mb-1">
-              {SECTION_LABELS[activeSection] ?? activeSection}
-            </h1>
-            <p className="text-xs text-muted-foreground mb-5">
-              {getDomain(url)} · {planName} · {new Date(paidAt).toLocaleDateString()}
-            </p>
+          <div
+            className={cn(
+              activeSection === "compare" ? "w-full max-w-none" : "max-w-5xl mx-auto"
+            )}
+          >
+            {activeSection !== "compare" && (
+              <>
+                <h1 className="text-lg font-bold text-foreground mb-1">
+                  {SECTION_LABELS[activeSection] ?? activeSection}
+                </h1>
+                <p className="text-xs text-muted-foreground mb-5">
+                  {getDomain(url)} · {planName}
+                </p>
+              </>
+            )}
             {tip && <TipCard tip={tip} />}
-            <SectionContent id={activeSection} result={result} url={url} />
+            <SectionContent
+              id={activeSection}
+              result={result}
+              url={url}
+              compareSiteIdx={activeSection === "compare" ? compareSiteIdx : undefined}
+              onCompareSiteIdxChange={activeSection === "compare" ? setCompareSiteIdx : undefined}
+            />
           </div>
         </main>
       </div>
