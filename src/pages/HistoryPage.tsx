@@ -8,17 +8,7 @@ import { getHistoryCount, type HistoryEntry } from "@/lib/analysisHistory";
 import { ensureScore, parseSectionScores } from "@/lib/utils";
 import { weightedOverallFromSections } from "@/lib/insightsProjection";
 import type { AnalysisResult } from "@/types/api";
-
-const FULL_INSIGHTS_SECTIONS = new Set([
-  "overview",
-  "compare",
-  "performance",
-  "actions",
-  "copy",
-  "hints",
-  "competitors",
-  "beat",
-]);
+import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
 
 export default function HistoryPage() {
   const navigate = useNavigate();
@@ -50,7 +40,7 @@ export default function HistoryPage() {
       navigate("/monitor");
       return;
     }
-    if (FULL_INSIGHTS_SECTIONS.has(id)) {
+    if (FULL_INSIGHTS_SECTION_IDS.has(id)) {
       navigate(`/full-insights?section=${encodeURIComponent(id)}`);
     }
   };

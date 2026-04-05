@@ -7,6 +7,8 @@ export default defineConfig({
   server: {
     host: "::",
     port: 3001,
+    /** Fail fast if 3001 is taken instead of picking another port. */
+    strictPort: true,
     hmr: {
       overlay: false,
     },

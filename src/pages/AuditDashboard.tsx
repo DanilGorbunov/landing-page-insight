@@ -22,19 +22,8 @@ import { weightedOverallFromSections, projectRatings } from "@/lib/insightsProje
 import { compareSitesList } from "@/lib/compareDecisionMetrics";
 import { CompareHeaderSiteTabs } from "@/components/CompareDecisionPanels";
 import { DashboardNavSidebar } from "@/components/DashboardNavSidebar";
+import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
 import type { AnalysisResult } from "@/types/api";
-
-/** Section ids valid for /full-insights (?section=) — excludes `history` and `monitor` (separate routes). */
-const FULL_INSIGHTS_SECTION_IDS = new Set([
-  "overview",
-  "compare",
-  "performance",
-  "actions",
-  "copy",
-  "hints",
-  "competitors",
-  "beat",
-]);
 
 // ─── Score helpers ──────────────────────────────────────────────────────────────
 
