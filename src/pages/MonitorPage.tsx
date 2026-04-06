@@ -146,7 +146,7 @@ export default function MonitorPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground truncate">{c.domain}</span>
                         {watching[c.domain] && (
-                          <span className="text-[10px] font-bold uppercase rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">
+                          <span className="text-[10px] font-bold uppercase rounded-full border border-primary/40 bg-primary/15 px-2 py-0.5 text-primary">
                             Watching
                           </span>
                         )}
@@ -165,14 +165,14 @@ export default function MonitorPage() {
               </ul>
             )}
 
-            <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-600/90 via-emerald-600 to-teal-700 p-6 text-white shadow-lg">
+            <div className="rounded-2xl border border-primary/35 bg-gradient-to-br from-[hsl(0,0%,4%)] via-[hsl(0,0%,8%)] to-[hsl(205,35%,20%)] p-6 text-[hsl(210,25%,96%)] shadow-lg">
               <h2 className="text-lg font-bold">Get weekly digest emails</h2>
-              <p className="text-sm text-emerald-50/95 mt-1 leading-relaxed">
+              <p className="text-sm text-[hsl(215,20%,78%)] mt-1 leading-relaxed">
                 We&apos;ll notify you when any competitor changes their hero, pricing, or CTA
               </p>
               <div className="mt-4 flex flex-col sm:flex-row gap-2">
                 <div className="relative flex-1">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-900/50" aria-hidden />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
                   <Input
                     type="email"
                     placeholder="you@company.com"
@@ -184,12 +184,12 @@ export default function MonitorPage() {
                 <Button
                   type="button"
                   onClick={handleEnableDigest}
-                  className="shrink-0 bg-white text-emerald-800 hover:bg-emerald-50 font-semibold"
+                  className="shrink-0 bg-primary text-primary-foreground hover:brightness-110 font-semibold"
                 >
                   Enable Monitor
                 </Button>
               </div>
-              <p className="text-[11px] text-emerald-100/90 mt-3">Free during beta · No credit card required</p>
+              <p className="text-[11px] text-[hsl(215,20%,65%)] mt-3">Free during beta · No credit card required</p>
             </div>
           </div>
         </main>

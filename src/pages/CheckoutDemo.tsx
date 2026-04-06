@@ -14,9 +14,13 @@ import {
 import { enableFullInsightsHistoryPersistence } from "@/lib/analysisHistory";
 
 const PLANS: Record<string, string> = {
+  free: "Free",
+  pro: "Pro",
+  "pro-unlimited": "Pro Unlimited",
+  agency: "Agency",
+  /** Legacy query params */
   "one-time": "One-time",
   monthly: "Monthly",
-  pro: "Pro",
 };
 
 /** Stripe test card & billing — demo only. */
@@ -37,7 +41,7 @@ export default function CheckoutDemo() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const planId = searchParams.get("plan") || (location.state as { planId?: string })?.planId || "monthly";
+  const planId = searchParams.get("plan") || (location.state as { planId?: string })?.planId || "pro";
   const fromReport = (location.state as { fromReport?: boolean })?.fromReport === true;
 
   const [email, setEmail] = useState(DEMO.email);
@@ -99,7 +103,7 @@ export default function CheckoutDemo() {
             Back
           </TouchTargetButton>
           <div className="flex items-center gap-2 text-sm font-medium text-zinc-300">
-            <Lock className="w-3.5 h-3.5 text-emerald-500" />
+            <Lock className="w-3.5 h-3.5 text-primary" />
             Secure demo checkout
           </div>
           <Link to="/" className={`${TOUCH_TARGET_CLASS} text-sm text-primary`}>

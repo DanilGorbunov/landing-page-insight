@@ -19,6 +19,10 @@ import { recordRecentComparison, getRecentComparisons } from "../services/recent
 import { fetchPageSpeedMetrics, fetchPageSpeedBatch } from "../services/performanceService.js";
 import { analyzeReadability } from "../services/readabilityService.js";
 import { generateCopyAlternatives } from "../services/generateCopyService.js";
+import {
+  generateHeatmapFromBase64,
+  generateAttentionComparison,
+} from "../services/attentionService.js";
 
 export const analyzeRouter = Router();
 
@@ -550,6 +554,51 @@ analyzeRouter.post("/generate-copy", async (req, res, next) => {
     res.json({ variants });
   } catch (err) {
     next(err);
+  }
+});
+
+analyzeRouter.post("/attention-heatmap", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const yourB64 =
+      typeof body.yourScreenshotBase64 === "string" ? body.yourScreenshotBase64.trim() : "";
+    const compB64 =
+      typeof body.competitorScreenshotBase64 === "string" ? body.competitorScreenshotBase64.trim() : "";
+    const yourMediaType =
+      typeof body.yourMediaType === "string" && body.yourMediaType.startsWith("image/")
+        ? body.yourMediaType.split(";")[0].trim()
+        : "image/png";
+    const compMediaType =
+      typeof body.competitorMediaType === "string" && body.competitorMediaType.startsWith("image/")
+        ? body.competitorMediaType.split(";")[0].trim()
+        : "image/png";
+    const competitorName =
+      typeof body.competitorName === "string" && body.competitorName.trim()
+        ? body.competitorName.trim().slice(0, 200)
+        : "Competitor";
+
+    if (!yourB64 || !compB64) {
+      return res.status(400).json({ error: "Missing yourScreenshotBase64 or competitorScreenshotBase64" });
+    }
+
+    const [yourHeatmap, competitorHeatmap] = await Promise.all([
+      generateHeatmapFromBase64(yourB64, yourMediaType),
+      generateHeatmapFromBase64(compB64, compMediaType),
+    ]);
+
+    const comparison = await generateAttentionComparison(yourHeatmap, competitorHeatmap, competitorName);
+
+    res.json({
+      your: yourHeatmap,
+      competitor: competitorHeatmap,
+      comparison,
+    });
+  } catch (error) {
+    console.error("[attention-heatmap]", error?.message || error);
+    res.status(500).json({
+      error: "Heatmap generation failed",
+      fallback: true,
+    });
   }
 });
 

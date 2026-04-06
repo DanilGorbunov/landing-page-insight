@@ -13,6 +13,8 @@ import {
   ChevronRight,
   Plus,
   History,
+  Sparkles,
+  Calendar,
   type LucideIcon,
 } from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
@@ -76,7 +78,9 @@ export interface DashboardNavSidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
   /** When set, shows domain + score in the sidebar; otherwise a short hint. */
-  reportContext: { url: string; overallScore: number } | null;
+  reportContext: { url: string; overallScore: number; createdAt?: string } | null;
+  /** When true with `reportContext`, show Upgrade in the sidebar (moved from report header). Default true. */
+  showUpgrade?: boolean;
   /** Full report for section badges (performance, competitors). Null on /history if no session. */
   result: AnalysisResult | null;
   historyCount: number;
@@ -89,16 +93,22 @@ export function DashboardNavSidebar({
   collapsed,
   onToggleCollapse,
   reportContext,
+  showUpgrade = true,
   result,
   historyCount,
   onNewAnalysis,
 }: DashboardNavSidebarProps) {
   const domain = reportContext ? getDomain(reportContext.url) : null;
   const overallScore = reportContext?.overallScore ?? null;
+  const createdAt = reportContext?.createdAt;
+  const createdLabel =
+    createdAt != null && createdAt !== ""
+      ? new Date(createdAt).toLocaleDateString(undefined, { dateStyle: "medium" })
+      : null;
   const scoreColor =
     overallScore != null
       ? overallScore >= 7.5
-        ? "text-emerald-500"
+        ? "text-primary"
         : overallScore >= 5
           ? "text-amber-500"
           : "text-red-500"
@@ -192,7 +202,7 @@ function NavButton({
   const isActive = active === item.id;
   const badgeColor = badge
     ? badge.variant === "good"
-      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+      ? "bg-primary/15 text-primary"
       : badge.variant === "warn"
         ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
         : "bg-red-500/15 text-red-600 dark:text-red-400"

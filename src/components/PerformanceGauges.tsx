@@ -1,5 +1,6 @@
 import type { PerformanceData } from "@/types/api";
 import { cn } from "@/lib/utils";
+import { PerformanceLineChart } from "@/components/PerformanceLineChart";
 
 function ScoreGauge({ label, score }: { label: string; score: number | null }) {
   if (score === null) {
@@ -17,7 +18,7 @@ function ScoreGauge({ label, score }: { label: string; score: number | null }) {
   }
 
   const color =
-    score >= 90 ? "text-emerald-500" :
+    score >= 90 ? "text-primary" :
     score >= 50 ? "text-amber-500 dark:text-amber-400" :
     "text-destructive";
 
@@ -68,7 +69,7 @@ function formatMetric(key: MetricKey, value: number | null) {
 function metricColor(key: MetricKey, value: number | null) {
   if (value === null) return "text-muted-foreground";
   const t = CWV_THRESHOLDS[key];
-  if (value <= t.good) return "text-emerald-500";
+  if (value <= t.good) return "text-primary";
   if (value <= t.poor) return "text-amber-500 dark:text-amber-400";
   return "text-destructive";
 }
@@ -79,16 +80,42 @@ function getDomain(url: string) {
 }
 
 export function PerformanceGauges({ data }: { data: PerformanceData }) {
-  if (!data?.user?.scores) return null;
+  const userRow =
+    data.user?.url != null
+      ? [{ label: getDomain(data.user.url), isUser: true as const, ...data.user }]
+      : [];
 
-  const sites = [
-    { label: getDomain(data.user.url), isUser: true, ...data.user },
-    ...data.competitors.filter((c) => c.scores).map((c) => ({ label: getDomain(c.url), isUser: false, ...c })),
-  ];
+  const competitorRows = (data.competitors ?? [])
+    .filter((c) => c?.url)
+    .map((c) => ({ label: getDomain(c.url), isUser: false as const, ...c }));
+
+  const sites = [...userRow, ...competitorRows];
+
+  if (sites.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          No PageSpeed / Lighthouse snapshot is attached to this report. Run a new analysis to capture performance
+          scores and Core Web Vitals.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Score gauges */}
+      <p className="text-xs text-muted-foreground leading-relaxed max-w-2xl">
+        Scores are Lighthouse categories (0–100). Lab metrics (LCP, INP, CLS, …) are shown when the audit recorded them.
+      </p>
+
+      <PerformanceLineChart
+        sites={sites.map((s) => ({
+          label: s.label,
+          isUser: s.isUser,
+          scores: s.scores ?? null,
+        }))}
+      />
+
       {sites.map((site) => (
         <div key={site.url} className="rounded-lg border border-border bg-card/25 p-4">
           <div className="flex items-center gap-2 mb-4">
@@ -107,7 +134,7 @@ export function PerformanceGauges({ data }: { data: PerformanceData }) {
             <ScoreGauge label="Best Practices" score={site.scores?.bestPractices ?? null} />
           </div>
 
-          {site.metrics && (
+          {site.metrics ? (
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
               {(Object.keys(CWV_THRESHOLDS) as MetricKey[]).map((key) => (
                 <div key={key} className="text-center">
@@ -118,6 +145,8 @@ export function PerformanceGauges({ data }: { data: PerformanceData }) {
                 </div>
               ))}
             </div>
+          ) : (
+            <p className="text-center text-[11px] text-muted-foreground py-2">Detailed lab metrics were not captured for this URL.</p>
           )}
         </div>
       ))}

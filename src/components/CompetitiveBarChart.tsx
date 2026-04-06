@@ -9,8 +9,8 @@ const SECTION_LABELS = ["Hero", "Value Prop", "Features", "Social Proof", "CTA"]
 const RADAR_KEYS = ["hero", "value_prop", "features", "social_proof", "cta"] as const;
 
 function getPrimaryHex(): string {
-  if (typeof document === "undefined") return "#2ed67a";
-  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#2ed67a";
+  if (typeof document === "undefined") return "#7096b8";
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#7096b8";
 }
 const COMPETITOR_COLORS = ["#4B9EFF", "#FF6B6B", "#FFB347"];
 

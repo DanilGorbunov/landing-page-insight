@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 function gradeColor(grade: number | null): string {
   if (grade === null) return "text-muted-foreground";
-  if (grade <= 7) return "text-emerald-500";
+  if (grade <= 7) return "text-primary";
   if (grade <= 10) return "text-amber-500 dark:text-amber-400";
   return "text-destructive";
 }

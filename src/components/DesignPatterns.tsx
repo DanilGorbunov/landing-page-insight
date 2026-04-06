@@ -23,13 +23,13 @@ export function DesignPatterns({ patterns }: { patterns: DesignPattern[] }) {
             className={cn(
               "flex items-start gap-3 rounded-lg border px-4 py-3",
               p.present
-                ? "border-emerald-500/30 bg-emerald-500/5"
+                ? "border-primary/30 bg-primary/5"
                 : "border-border bg-card/25"
             )}
           >
             <div className="mt-0.5 shrink-0">
               {p.present ? (
-                <Check className="h-4 w-4 text-emerald-500" />
+                <Check className="h-4 w-4 text-primary" />
               ) : (
                 <X className="h-4 w-4 text-muted-foreground/50" />
               )}

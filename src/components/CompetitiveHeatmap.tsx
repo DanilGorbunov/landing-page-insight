@@ -19,7 +19,7 @@ function parseScore(text: string | undefined): number | null {
 
 function scoreColor(score: number | null): string {
   if (score === null) return "bg-muted text-muted-foreground";
-  if (score >= 8) return "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400";
+  if (score >= 8) return "bg-primary/20 text-primary";
   if (score >= 6) return "bg-amber-400/20 text-amber-600 dark:text-amber-400";
   if (score >= 4) return "bg-orange-400/20 text-orange-600 dark:text-orange-400";
   return "bg-destructive/20 text-destructive";

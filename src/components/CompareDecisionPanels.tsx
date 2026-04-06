@@ -1,5 +1,7 @@
 import { Fragment, useMemo, useState, useEffect, useRef } from "react";
 import { cn, getDomain } from "@/lib/utils";
+import { HeatmapOverlay } from "@/components/HeatmapOverlay";
+import type { AttentionZone } from "@/types/attention";
 import {
   type HeroSubMetrics,
   type ConversionLayer,
@@ -35,6 +37,8 @@ import {
 import { VisualLensCollapsible, HotLensPanel, DeltaLensPanel } from "@/components/LensInsightPanels";
 import { ScoreBreakdownPopover } from "@/components/ScoreBreakdownPopover";
 import { CopyGeneratorBlock } from "@/components/CopyGeneratorBlock";
+import { AttentionAnalysisPanel } from "@/components/AttentionAnalysisPanel";
+import type { AttentionComparison, HeatmapAnalysis } from "@/types/attention";
 import { BusinessImpactEstimate } from "@/components/BusinessImpactEstimate";
 import { InsightConfidenceBadge } from "@/components/InsightConfidenceBadge";
 import {
@@ -56,14 +60,14 @@ import {
 } from "lucide-react";
 
 function sColor(s: number) {
-  if (s >= 7.5) return "text-emerald-500";
+  if (s >= 7.5) return "text-primary";
   if (s >= 5) return "text-amber-500";
   return "text-red-500";
 }
 
 function riskBadge(r: ConversionLayer["risk"]) {
   const map = {
-    LOW: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+    LOW: "bg-primary/15 text-primary border-primary/30",
     MEDIUM: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30",
     HIGH: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
   };
@@ -111,7 +115,7 @@ export function CompareHeaderStatus({
               Behind on rank
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400 shrink-0">
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary shrink-0">
               <CheckCircle2 className="h-3 w-3" />
               Leading / tied
             </span>
@@ -140,7 +144,7 @@ export function CompareHeaderStatus({
       className={cn(
         "flex flex-col gap-1.5 sm:gap-2 w-full min-w-0",
         !isHeader && "px-4 py-3 border-b",
-        !isHeader && (losing ? "border-red-500/20 bg-red-500/[0.06]" : "border-emerald-500/15 bg-emerald-500/[0.04]")
+        !isHeader && (losing ? "border-red-500/20 bg-red-500/[0.06]" : "border-primary/15 bg-primary/[0.04]")
       )}
     >
       <p className={cn("text-[11px] sm:text-xs text-foreground/95 leading-snug", isHeader && "line-clamp-2 sm:line-clamp-none")}>
@@ -153,7 +157,7 @@ export function CompareHeaderStatus({
               Behind on rank
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400 shrink-0">
+            <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary shrink-0">
               <CheckCircle2 className="h-3 w-3" />
               Leading / tied
             </span>
@@ -282,7 +286,7 @@ export function CompareHeaderSiteTabs({
                     className={cn(
                       "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums border",
                       delta > 0
-                        ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        ? "border-primary/50 bg-primary/15 text-primary"
                         : delta < 0
                           ? "border-red-500/50 bg-red-500/15 text-red-600 dark:text-red-400"
                           : "border-border bg-muted text-muted-foreground"
@@ -369,6 +373,7 @@ export function DecisionActionPanel({
   onQuickWinPlan,
   lensAnnotations = [],
   lensVs = null,
+  attentionInsight = null,
 }: {
   result: AnalysisResult;
   activeSite: SiteLite;
@@ -430,6 +435,17 @@ export function DecisionActionPanel({
   }>;
   /** Active competitor for Δ lens (scores + domain). */
   lensVs?: { domain: string; bySection: Record<string, number | null> } | null;
+  /** Claude Vision attention heatmap + comparison (Analyze → Attention). */
+  attentionInsight?: {
+    loading: boolean;
+    error: boolean;
+    comparison: AttentionComparison | null;
+    your: HeatmapAnalysis | null;
+    competitor: HeatmapAnalysis | null;
+    competitorName: string;
+    showUpgradePrompt: boolean;
+    onDismissUpgrade: () => void;
+  } | null;
 }) {
   const [panelTab, setPanelTab] = useState<DecisionPanelTab>("overview");
   const [heroOpen, setHeroOpen] = useState(true);
@@ -586,8 +602,20 @@ export function DecisionActionPanel({
             )}
           </div>
         )}
+        {attentionInsight && toolbarContext.analyzeMode === "attention" && (
+          <AttentionAnalysisPanel
+            loading={attentionInsight.loading}
+            error={attentionInsight.error}
+            your={attentionInsight.your}
+            competitor={attentionInsight.competitor}
+            comparison={attentionInsight.comparison}
+            competitorName={attentionInsight.competitorName}
+            showUpgradePrompt={attentionInsight.showUpgradePrompt}
+            onDismissUpgrade={attentionInsight.onDismissUpgrade}
+          />
+        )}
         {showFilterEmpty && (
-          <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2 text-[11px] text-emerald-950 dark:text-emerald-100">
+          <div className="rounded-lg border border-primary/25 bg-primary/[0.07] px-3 py-2 text-[11px] text-foreground">
             No {formatToolbarContextForEmpty(toolbarContext)} issues found in this section — that&apos;s a good sign ✓
           </div>
         )}
@@ -837,7 +865,7 @@ export function DecisionActionPanel({
                         {g.priority}
                       </span>
                       <p className="text-foreground mt-1">{g.problem}</p>
-                      <p className="text-emerald-600 dark:text-emerald-400 text-[11px] mt-0.5">{g.recommendation}</p>
+                      <p className="text-primary text-[11px] mt-0.5">{g.recommendation}</p>
                       {g.recommendation?.trim() ? (
                         <CopyGeneratorBlock
                           result={result}
@@ -883,7 +911,7 @@ export function DecisionActionPanel({
               </span>
             </p>
             <div className="pt-2 border-t border-border/80 space-y-1.5">
-              <p className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Why risk is {conversion.risk}</p>
+              <p className="text-[10px] font-bold uppercase text-primary">Why risk is {conversion.risk}</p>
               <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
                 {riskWhyBut.why.map((line, i) => (
                   <li key={i}>{line}</li>
@@ -917,11 +945,11 @@ export function DecisionActionPanel({
                   {winNarrative.competitorLabel} wins
                 </p>
                 <div className="grid grid-cols-1 gap-3">
-                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 space-y-1.5">
-                    <p className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Their edge</p>
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-2.5 space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase text-primary">Their edge</p>
                     {winNarrative.winsBecause.slice(0, 4).map((line, i) => (
                       <p key={i} className="flex gap-1.5 text-foreground text-[11px] leading-snug">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
                         <span>{line}</span>
                       </p>
                     ))}
@@ -1236,6 +1264,7 @@ export function CompareOverlayLayer({
   heatmapGapPairByKey,
   heatmapGapOnCompetitorOnly,
   siteIsUser,
+  attention,
 }: {
   mode: CompareOverlayLayerMode;
   annotations: Array<{ top: number; height: number; score: number | null; label: string; sectionKey?: string }>;
@@ -1246,14 +1275,28 @@ export function CompareOverlayLayer({
   /** When true, hide heatmap on user screenshot (Gap heat shows zones on competitor only). */
   heatmapGapOnCompetitorOnly?: boolean;
   siteIsUser?: boolean;
+  /** AI attention heatmap zones (Analyze → Attention). */
+  attention?: {
+    zones: AttentionZone[] | null;
+    visible: boolean;
+    showPlaceholder: boolean;
+  } | null;
 }) {
   if (mode === "compare") return null;
 
   if (mode === "heatmap" && heatmapGapOnCompetitorOnly && siteIsUser) return null;
 
+  const attentionResolved =
+    mode === "attention"
+      ? attention ?? { zones: null as AttentionZone[] | null, visible: true, showPlaceholder: true }
+      : null;
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-[5]">
-      {mode === "attention" && (
+    <div className="pointer-events-none absolute inset-0 z-[15]">
+      {mode === "attention" && attentionResolved?.visible && attentionResolved.zones && attentionResolved.zones.length > 0 && (
+        <HeatmapOverlay zones={attentionResolved.zones} />
+      )}
+      {mode === "attention" && attentionResolved?.visible && (!attentionResolved.zones || !attentionResolved.zones.length) && attentionResolved.showPlaceholder && (
         <>
           <div
             className="absolute inset-0 opacity-35"
@@ -1342,7 +1385,7 @@ export function CompareOverlayLayer({
       {mode === "readability" && (
         <>
           <div
-            className="absolute left-0 right-0 border-y border-emerald-500/25 bg-emerald-500/[0.1]"
+            className="absolute left-0 right-0 border-y border-primary/25 bg-primary/[0.1]"
             style={{ top: "0%", height: "22%" }}
           />
           <div
@@ -1367,7 +1410,7 @@ export function CompareOverlayLayer({
               sc == null
                 ? "border-muted-foreground/50 shadow-[inset_0_0_0_2px_rgba(148,163,184,0.5)]"
                 : sc >= 8
-                  ? "border-emerald-500 shadow-[inset_0_0_0_2px_rgba(16,185,129,0.65)]"
+                  ? "border-primary shadow-[inset_0_0_0_2px_hsl(var(--primary)_/_0.65)]"
                   : sc >= 6
                     ? "border-amber-400 shadow-[inset_0_0_0_2px_rgba(251,191,36,0.55)]"
                     : "border-red-500 shadow-[inset_0_0_0_2px_rgba(239,68,68,0.6)]";

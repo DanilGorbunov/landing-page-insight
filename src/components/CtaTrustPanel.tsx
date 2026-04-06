@@ -60,12 +60,12 @@ export function CtaTrustPanel({ data }: { data: CtaTrustData }) {
             <span>{primaryCtas.length} primary</span>
             <span>{aboveFold.length} above fold</span>
             {stickyCta !== null && (
-              <span className={stickyCta ? "text-emerald-500" : "text-destructive"}>
+              <span className={stickyCta ? "text-primary" : "text-destructive"}>
                 Sticky CTA: {stickyCta ? "Yes" : "No"}
               </span>
             )}
             {formFieldCount !== null && (
-              <span className={formFieldCount <= 3 ? "text-emerald-500" : formFieldCount <= 5 ? "text-amber-500" : "text-destructive"}>
+              <span className={formFieldCount <= 3 ? "text-primary" : formFieldCount <= 5 ? "text-amber-500" : "text-destructive"}>
                 Form fields: {formFieldCount}
               </span>
             )}
@@ -81,7 +81,7 @@ export function CtaTrustPanel({ data }: { data: CtaTrustData }) {
             {frictionReducers.map((fr, i) => (
               <span
                 key={i}
-                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary"
               >
                 <Sparkles className="h-3 w-3" />
                 {fr}
@@ -98,15 +98,15 @@ export function CtaTrustPanel({ data }: { data: CtaTrustData }) {
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             <StatBox icon={Shield} label="Logo/Trust Badges" value={trustSignals.logoBadgeCount ?? 0} color="text-primary" />
             <StatBox icon={MessageSquareQuote} label="Testimonials" value={trustSignals.testimonialCount ?? 0} color="text-amber-500" />
-            <StatBox icon={FileText} label="Case Studies" value={trustSignals.caseStudyCount ?? 0} color="text-emerald-500" />
+            <StatBox icon={FileText} label="Case Studies" value={trustSignals.caseStudyCount ?? 0} color="text-primary" />
             <StatBox icon={Newspaper} label="Press Mentions" value={trustSignals.pressMentions ?? 0} />
             {trustSignals.ratingScore && (
               <StatBox icon={Star} label="Rating" value={trustSignals.ratingScore} color="text-amber-400" />
             )}
             {trustSignals.namedTestimonials && (
-              <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 col-span-2">
-                <MessageSquareQuote className="h-4 w-4 text-emerald-500" />
-                <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Named testimonials (names + companies)</span>
+              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 col-span-2">
+                <MessageSquareQuote className="h-4 w-4 text-primary" />
+                <span className="text-xs font-medium text-primary">Named testimonials (names + companies)</span>
               </div>
             )}
           </div>

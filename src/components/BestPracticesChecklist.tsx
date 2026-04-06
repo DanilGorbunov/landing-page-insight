@@ -21,7 +21,7 @@ export function BestPracticesChecklist({ checks }: { checks: BestPracticeCheck[]
           {passed}/{total} checks passed
         </p>
         <div className="flex gap-3 text-[11px] text-muted-foreground">
-          <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-emerald-500" /> Pass</span>
+          <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-primary" /> Pass</span>
           <span className="flex items-center gap-1"><XCircle className="h-3 w-3 text-destructive" /> Fail</span>
           <span className="flex items-center gap-1"><HelpCircle className="h-3 w-3 text-muted-foreground" /> Unknown</span>
         </div>
@@ -33,12 +33,12 @@ export function BestPracticesChecklist({ checks }: { checks: BestPracticeCheck[]
             key={check.id}
             className={cn(
               "flex items-start gap-3 px-4 py-3 text-sm",
-              check.pass === true && "bg-emerald-500/5",
+              check.pass === true && "bg-primary/5",
               check.pass === false && "bg-destructive/5"
             )}
           >
             <div className="mt-0.5 shrink-0">
-              {check.pass === true && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+              {check.pass === true && <CheckCircle2 className="h-4 w-4 text-primary" />}
               {check.pass === false && <XCircle className="h-4 w-4 text-destructive" />}
               {check.pass === null && <HelpCircle className="h-4 w-4 text-muted-foreground" />}
             </div>

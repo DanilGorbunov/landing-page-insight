@@ -6,7 +6,7 @@ function qualityColor(value: string | null): string {
   if (!value) return "bg-muted text-muted-foreground";
   const good: QualityLevel[] = ["strong", "good", "optimized", "spacious", "balanced", "cohesive", "dominant", "visible", "minimal", "professional"];
   const mid: QualityLevel[] = ["moderate", "mostly_consistent", "adequate", "stock", "needs_improvement"];
-  if (good.includes(value as QualityLevel)) return "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300";
+  if (good.includes(value as QualityLevel)) return "bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary";
   if (mid.includes(value as QualityLevel)) return "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300";
   return "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300";
 }

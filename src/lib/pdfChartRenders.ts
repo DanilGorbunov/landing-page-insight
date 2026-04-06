@@ -16,8 +16,8 @@ const PDF_TICK = "#444444";
 const PDF_LEGEND = "#333333";
 
 function getPrimaryHexPdf(): string {
-  if (typeof document === "undefined") return "#16a34a";
-  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#16a34a";
+  if (typeof document === "undefined") return "#7096b8";
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#7096b8";
 }
 
 function hexToRgba(hex: string, alpha: number): string {

@@ -5,8 +5,8 @@ import { buildRadarSites, CompetitiveRadarChart } from "./CompetitiveRadarChart"
 import { CompetitiveBarChart } from "./CompetitiveBarChart";
 
 function getPrimaryHex(): string {
-  if (typeof document === "undefined") return "#2ed67a";
-  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#2ed67a";
+  if (typeof document === "undefined") return "#7096b8";
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#7096b8";
 }
 const COMPETITOR_COLOR_HEX = ["#4B9EFF", "#FF6B6B", "#FFB347"];
 

@@ -10,8 +10,8 @@ const RADAR_LABELS: readonly string[] = ["Hero", "Value Prop", "Features", "Soci
 const RADAR_KEYS: SectionScoreKey[] = ["hero", "value_prop", "features", "social_proof", "cta"];
 
 function getPrimaryHex(): string {
-  if (typeof document === "undefined") return "#2ed67a";
-  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#2ed67a";
+  if (typeof document === "undefined") return "#7096b8";
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#7096b8";
 }
 function hexToRgba(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1), 16);

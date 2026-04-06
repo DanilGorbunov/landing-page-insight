@@ -41,11 +41,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HintTooltip } from "@/components/HintTooltip";
+import {
+  HINT_VIEW,
+  HINT_VIEW_SLIDER,
+  HINT_ANALYZE,
+  HINT_LENS,
+  HINT_CONTROLS,
+  hintSiteTab,
+} from "@/lib/compareUiHints";
 import {
   DecisionActionPanel,
   CompareOverlayLayer,
   type CompareOverlayLayerMode,
 } from "@/components/CompareDecisionPanels";
+import type { AttentionHeatmapResponse, AttentionZone } from "@/types/attention";
+import { fetchAttentionHeatmap } from "@/lib/api";
+import { normalizeAttentionResponse } from "@/lib/attentionNormalize";
+import { ATTENTION_DEMO_ZONES } from "@/lib/attentionDemoZones";
+import { screenshotUrlToImageBase64 } from "@/lib/screenshotToBase64";
 import type { CriticalGap } from "@/types/api";
 import {
   deriveHeroSubMetrics,
@@ -151,28 +165,28 @@ function buildAnnotations(analysis: Record<string, string>): Annotation[] {
 
 function sColor(s: number | null) {
   if (s == null) return "text-muted-foreground";
-  if (s >= 7.5) return "text-emerald-500";
+  if (s >= 7.5) return "text-primary";
   if (s >= 5) return "text-amber-500";
   return "text-red-500";
 }
 
 function sBg(s: number | null) {
   if (s == null) return "bg-muted";
-  if (s >= 7.5) return "bg-emerald-500";
+  if (s >= 7.5) return "bg-primary";
   if (s >= 5) return "bg-amber-500";
   return "bg-red-500";
 }
 
 function sBorder(s: number | null) {
   if (s == null) return "border-muted-foreground/40 bg-muted/60";
-  if (s >= 7.5) return "border-emerald-500/60 bg-emerald-500/10";
+  if (s >= 7.5) return "border-primary/60 bg-primary/10";
   if (s >= 5) return "border-amber-500/60 bg-amber-500/10";
   return "border-red-500/60 bg-red-500/10";
 }
 
 function ScoreIcon({ score }: { score: number | null }) {
   if (score == null) return null;
-  if (score >= 7.5) return <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />;
+  if (score >= 7.5) return <CheckCircle2 className="h-3 w-3 text-primary shrink-0" />;
   if (score >= 5) return <Lightbulb className="h-3 w-3 text-amber-500 shrink-0" />;
   return <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />;
 }
@@ -186,7 +200,7 @@ function chipUnderlineClass(score: number | null) {
   if (score == null) return "bg-muted-foreground/40 dark:bg-muted-foreground/50";
   if (score < 7) return "bg-red-500";
   if (score < 8) return "bg-amber-500";
-  return "bg-emerald-500";
+  return "bg-primary";
 }
 
 function matchesSectionKey(lbl: string, key: string): boolean {
@@ -212,6 +226,10 @@ function sectionPriorityFromGap(
   return "P3";
 }
 
+function gapDetailForSection(sectionKey: string, gaps: CriticalGap[] | undefined): CriticalGap | undefined {
+  return gaps?.find((gap) => matchesSectionKey(gap.area, sectionKey));
+}
+
 // ─── AnnotationPin ──────────────────────────────────────────────────────────────
 
 function AnnotationPin({
@@ -228,13 +246,27 @@ function AnnotationPin({
   onMore?: () => void;
 }) {
   const bullets = annotationBulletPoints(ann.fullText, 3);
+  const pinSummary =
+    ann.summary.length > 200 ? `${ann.summary.slice(0, 200).trim()}…` : ann.summary;
+  const pinAction =
+    ann.score != null && ann.score < 7
+      ? "Натисніть, щоб розгорнути текст; «More» відкриє дії в правій панелі."
+      : "Сильніша секція — порівняйте з відповідною зоною на скріні конкурента.";
   return (
-    <div className="absolute z-10 pointer-events-auto" style={{ top: `${ann.top + ann.height / 2}%`, [side]: "6px", transform: "translateY(-50%)", maxWidth: "min(320px,44vw)" }}>
-      <button type="button" onClick={onToggle} className={cn("flex items-center gap-1 rounded-xl border px-2 py-1 text-[11px] font-semibold backdrop-blur-md shadow-lg transition-all cursor-pointer select-none", sBorder(ann.score), expanded && "ring-2 ring-primary/40")}>
-        <ScoreIcon score={ann.score} />
-        <span className="text-foreground">{ann.label}</span>
-        {ann.score != null && <span className={cn("tabular-nums font-bold", sColor(ann.score))}>{ann.score.toFixed(1)}</span>}
-      </button>
+    <div className="absolute z-[25] pointer-events-auto" style={{ top: `${ann.top + ann.height / 2}%`, [side]: "6px", transform: "translateY(-50%)", maxWidth: "min(320px,44vw)" }}>
+      <HintTooltip
+        disabled={expanded}
+        side={side === "left" ? "right" : "left"}
+        title={`${ann.label} — ${ann.score != null ? ann.score.toFixed(1) : "—"}/10`}
+        description={pinSummary}
+        action={pinAction}
+      >
+        <button type="button" onClick={onToggle} className={cn("flex items-center gap-1 rounded-xl border px-2 py-1 text-[11px] font-semibold backdrop-blur-md shadow-lg transition-all cursor-pointer select-none", sBorder(ann.score), expanded && "ring-2 ring-primary/40")}>
+          <ScoreIcon score={ann.score} />
+          <span className="text-foreground">{ann.label}</span>
+          {ann.score != null && <span className={cn("tabular-nums font-bold", sColor(ann.score))}>{ann.score.toFixed(1)}</span>}
+        </button>
+      </HintTooltip>
       {expanded && (
         <div className="mt-1 rounded-xl border border-border bg-card/95 backdrop-blur-md p-2.5 shadow-xl text-[11px] leading-relaxed text-foreground max-w-[min(300px,44vw)]">
           {ann.preview ? <p className="text-foreground/95">{ann.preview}</p> : <p>{ann.summary}</p>}
@@ -320,7 +352,7 @@ function SectionZones({
         const compareDiffClass =
           compareDiffMode && cd != null
             ? cd > 0.08
-              ? "border-emerald-500/50 bg-emerald-500/20 z-[2]"
+              ? "border-primary/50 bg-primary/20 z-[2]"
               : cd < -0.08
                 ? "border-red-500/50 bg-red-500/20 z-[2]"
                 : "border-border/60 bg-muted/20 z-[1]"
@@ -334,7 +366,7 @@ function SectionZones({
               compareDiffMode && compareDiffClass,
               !compareDiffMode &&
                 (sc != null && sc >= 7.5
-                  ? "border-emerald-500/25 bg-emerald-500/[0.08]"
+                  ? "border-primary/25 bg-primary/[0.08]"
                   : sc != null && sc >= 5
                     ? "border-amber-500/25 bg-amber-500/[0.08]"
                     : sc != null
@@ -349,7 +381,7 @@ function SectionZones({
               <div
                 className={cn(
                   "absolute inset-0 rounded-lg z-[3]",
-                  dTint > 0 ? "bg-emerald-500/20 dark:bg-emerald-500/25" : "bg-red-500/20 dark:bg-red-500/25"
+                  dTint > 0 ? "bg-primary/20 dark:bg-primary/25" : "bg-red-500/20 dark:bg-red-500/25"
                 )}
               />
             )}
@@ -360,7 +392,7 @@ function SectionZones({
             )}
             {delta != null && (
               <div className="absolute right-1.5 bottom-1.5 pointer-events-none rounded-md px-1.5 py-0.5 text-[9px] font-bold bg-background/95 border border-border shadow-sm backdrop-blur-sm z-[5]">
-                <span className={delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
+                <span className={delta > 0 ? "text-primary" : delta < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
                   {delta > 0 ? "+" : ""}
                   {delta.toFixed(1)} vs you
                 </span>
@@ -372,7 +404,7 @@ function SectionZones({
               </div>
             )}
             {theyBetter && (
-              <div className="absolute right-1 top-1 z-[6] max-w-[min(100%,140px)] rounded-md border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[8px] font-bold leading-tight text-emerald-700 shadow-sm backdrop-blur-sm dark:text-emerald-300">
+              <div className="absolute right-1 top-1 z-[6] max-w-[min(100%,140px)] rounded-md border border-primary/40 bg-primary/15 px-1.5 py-0.5 text-[8px] font-bold leading-tight text-primary shadow-sm backdrop-blur-sm dark:text-primary">
                 ↑ They do this better
               </div>
             )}
@@ -409,6 +441,7 @@ function ScreenshotFrame({
   compareDiffMode,
   heatmapGapPairByKey,
   heatmapGapOnCompetitorOnly,
+  attentionOverlay,
 }: {
   site: SiteEntry;
   showZones: boolean;
@@ -429,12 +462,28 @@ function ScreenshotFrame({
   compareDiffMode?: boolean;
   heatmapGapPairByKey?: Record<string, { user: number | null; comp: number | null }>;
   heatmapGapOnCompetitorOnly?: boolean;
+  /** Analyze → Attention: Claude Vision heatmap + toggle. */
+  attentionOverlay?: {
+    zones: AttentionZone[] | null;
+    layerVisible: boolean;
+    onLayerVisibleChange: (v: boolean) => void;
+    loading: boolean;
+    showPlaceholder: boolean;
+  } | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [first5sFoldPct, setFirst5sFoldPct] = useState<number | null>(null);
 
   const layerMode: CompareOverlayLayerMode = overlayMode === "mobile" ? "compare" : overlayMode;
   const mobileFrame = overlayMode === "mobile";
+  const attForLayer =
+    layerMode === "attention" && attentionOverlay
+      ? {
+          zones: attentionOverlay.zones,
+          visible: attentionOverlay.layerVisible,
+          showPlaceholder: attentionOverlay.showPlaceholder,
+        }
+      : null;
 
   const scrollToExpandedSection = useCallback(() => {
     const key = expandedPin;
@@ -465,15 +514,40 @@ function ScreenshotFrame({
 
   if (!site.screenshotUrl) return <div className="flex items-center justify-center min-h-[200px] text-sm text-muted-foreground bg-muted/20 rounded-xl">No screenshot for {site.domain}</div>;
   return (
-    <div
-      ref={scrollRef}
-      className="relative overflow-auto rounded-xl border border-border bg-muted/20 max-h-[min(82vh,1200px)]"
-      style={{ cursor: zoom > 1 ? "grab" : undefined }}
-    >
+    <div className="flex min-w-0 flex-col gap-1.5">
+      {attentionOverlay && overlayMode === "attention" && !attentionOverlay.loading && (
+        <div className="flex shrink-0 flex-wrap items-center justify-center gap-1 rounded-lg border border-border/80 bg-muted/40 px-1.5 py-1">
+          <button
+            type="button"
+            onClick={() => attentionOverlay.onLayerVisibleChange(false)}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors",
+              !attentionOverlay.layerVisible ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            📸 Original
+          </button>
+          <button
+            type="button"
+            onClick={() => attentionOverlay.onLayerVisibleChange(true)}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors",
+              attentionOverlay.layerVisible ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            🧠 Heatmap
+          </button>
+        </div>
+      )}
+      <div
+        ref={scrollRef}
+        className="relative overflow-auto rounded-xl border border-border bg-muted/20 max-h-[min(82vh,1200px)]"
+        style={{ cursor: zoom > 1 ? "grab" : undefined }}
+      >
       <div
         className={cn(
-          "relative inline-block min-w-full origin-top transition-transform duration-150 ease-out",
-          mobileFrame && "mx-auto block max-w-[390px] shadow-2xl ring-2 ring-border/80 dark:ring-border/60 rounded-xl overflow-hidden"
+          "relative overflow-hidden inline-block min-w-full origin-top transition-transform duration-150 ease-out",
+          mobileFrame && "mx-auto block max-w-[390px] shadow-2xl ring-2 ring-border/80 dark:ring-border/60 rounded-xl"
         )}
         style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
       >
@@ -510,7 +584,17 @@ function ScreenshotFrame({
           heatmapGapPairByKey={heatmapGapPairByKey}
           heatmapGapOnCompetitorOnly={heatmapGapOnCompetitorOnly}
           siteIsUser={site.isUser}
+          attention={attForLayer}
         />
+        {attentionOverlay?.loading && overlayMode === "attention" && (
+          <div className="pointer-events-none absolute inset-0 z-[24] flex flex-col items-center justify-center gap-2 rounded-xl bg-background/75 backdrop-blur-sm px-4 text-center transition-opacity duration-300">
+            <span className="text-2xl" aria-hidden>
+              🧠
+            </span>
+            <p className="text-xs font-semibold text-foreground">Analyzing attention patterns…</p>
+            <p className="text-[10px] text-muted-foreground max-w-[240px] leading-snug">Claude Vision is scoring visual hierarchy. This can take up to a minute.</p>
+          </div>
+        )}
         {showPins &&
           site.annotations.map((ann) => (
             <AnnotationPin
@@ -523,11 +607,32 @@ function ScreenshotFrame({
             />
           ))}
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full bg-background/85 backdrop-blur-md border border-border px-3 py-1.5 shadow-lg max-w-[90%]">
-          {site.isUser && <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary shrink-0">You</span>}
-          <span className="text-xs font-semibold text-foreground truncate">{site.domain}</span>
-          {site.overallScore != null && <span className={cn("text-xs font-bold tabular-nums shrink-0", sColor(site.overallScore))}>{site.overallScore.toFixed(1)}/10</span>}
-          <a href={site.url} target="_blank" rel="noopener noreferrer" className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10" title="Open live site" onClick={(e) => e.stopPropagation()}><ExternalLink className="h-3.5 w-3.5" /></a>
+          {site.isUser && (
+            <HintTooltip side="bottom" title="Ваш сайт" description="Цей знімок і бали стосуються вашого домену в цьому звіті." action="Перемкніть вкладку конкурента, щоб побачити їхній скрін.">
+              <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary shrink-0 cursor-default">You</span>
+            </HintTooltip>
+          )}
+          <HintTooltip side="bottom" title="Домен" description={`Повний знімок сторінки для ${site.domain}.`}>
+            <span className="text-xs font-semibold text-foreground truncate max-w-[min(200px,40vw)] cursor-default">{site.domain}</span>
+          </HintTooltip>
+          {site.overallScore != null && (
+            <HintTooltip side="bottom" title="Загальний бал" description="Агрегована оцінка з аналізу секцій (шкала до 10)." action="Нижні чіпи та піни показують бали по зонах сторінки.">
+              <span className={cn("text-xs font-bold tabular-nums shrink-0 cursor-default", sColor(site.overallScore))}>{site.overallScore.toFixed(1)}/10</span>
+            </HintTooltip>
+          )}
+          <HintTooltip side="bottom" title="Живий сайт" description="Відкриває поточну сторінку в новій вкладці (як у браузері)." action="Перевірте реальну швидкість, форми та мобільний вигляд.">
+            <a
+              href={site.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </HintTooltip>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -540,7 +645,22 @@ function SliderCompare({ left, right, leftLabel, rightLabel }: { left: SiteEntry
   if (!left.screenshotUrl || !right.screenshotUrl) return null;
   return (
     <div className="space-y-2">
-      <input type="range" min={5} max={95} value={pct} onChange={(e) => setPct(Number(e.target.value))} className="w-full h-1.5 accent-primary cursor-ew-resize rounded-full" aria-label="Compare drag" />
+      <HintTooltip
+        side="top"
+        title={HINT_CONTROLS.slider.title}
+        description={HINT_CONTROLS.slider.description}
+        action={HINT_CONTROLS.slider.action}
+      >
+        <input
+          type="range"
+          min={5}
+          max={95}
+          value={pct}
+          onChange={(e) => setPct(Number(e.target.value))}
+          className="w-full h-1.5 accent-primary cursor-ew-resize rounded-full"
+          aria-label="Порівняння: перетягніть межу між скрінами"
+        />
+      </HintTooltip>
       <div className="relative rounded-xl border border-border overflow-hidden bg-muted/30 select-none">
         <img src={right.screenshotUrl} alt={rightLabel} className="w-full h-auto block" draggable={false} />
         <img src={left.screenshotUrl} alt={leftLabel} className="absolute top-0 left-0 w-full h-auto pointer-events-none" style={{ clipPath: `inset(0 ${100 - pct}% 0 0)` }} draggable={false} />
@@ -555,41 +675,35 @@ function SliderCompare({ left, right, leftLabel, rightLabel }: { left: SiteEntry
 // ─── Site tab ───────────────────────────────────────────────────────────────────
 
 function SiteTab({ site, active, onClick, delta }: { site: SiteEntry; active: boolean; onClick: () => void; delta?: number | null }) {
-  const why =
-    delta == null
-      ? undefined
-      : delta > 0
-        ? `Ahead of your overall score by ${delta.toFixed(1)}`
-        : delta < 0
-          ? `Trails your overall score by ${Math.abs(delta).toFixed(1)}`
-          : "Tied on overall score";
+  const h = hintSiteTab(site.isUser, site.domain, delta);
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={why}
-      className={cn("flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap", active ? "bg-primary text-primary-foreground shadow-sm" : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/30")}
-    >
-      {site.isUser && <span className="shrink-0 rounded bg-primary-foreground/20 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider">You</span>}
-      <span className="truncate max-w-[100px]">{site.domain}</span>
-      {site.overallScore != null && <span className={cn("tabular-nums font-bold shrink-0", active ? "text-primary-foreground/80" : sColor(site.overallScore))}>{site.overallScore.toFixed(1)}</span>}
-      {!site.isUser && delta != null && !active && (
-        <span
-          className={cn(
-            "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-bold tabular-nums shrink-0",
-            delta > 0
-              ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-              : delta < 0
-                ? "border-red-500/50 bg-red-500/15 text-red-600 dark:text-red-400"
-                : "border-border bg-muted text-muted-foreground"
-          )}
-        >
-          {delta > 0 ? <TrendingUp className="h-3 w-3 shrink-0" /> : delta < 0 ? <TrendingDown className="h-3 w-3 shrink-0" /> : <Minus className="h-2.5 w-2.5 shrink-0" />}
-          {delta > 0 ? "+" : ""}
-          {delta.toFixed(1)}
-        </span>
-      )}
-    </button>
+    <HintTooltip title={h.title} description={h.description} action={h.action} side="bottom">
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn("flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap", active ? "bg-primary text-primary-foreground shadow-sm" : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/30")}
+      >
+        {site.isUser && <span className="shrink-0 rounded bg-primary-foreground/20 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider">You</span>}
+        <span className="truncate max-w-[100px]">{site.domain}</span>
+        {site.overallScore != null && <span className={cn("tabular-nums font-bold shrink-0", active ? "text-primary-foreground/80" : sColor(site.overallScore))}>{site.overallScore.toFixed(1)}</span>}
+        {!site.isUser && delta != null && !active && (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-bold tabular-nums shrink-0",
+              delta > 0
+                ? "border-primary/50 bg-primary/15 text-primary"
+                : delta < 0
+                  ? "border-red-500/50 bg-red-500/15 text-red-600 dark:text-red-400"
+                  : "border-border bg-muted text-muted-foreground"
+            )}
+          >
+            {delta > 0 ? <TrendingUp className="h-3 w-3 shrink-0" /> : delta < 0 ? <TrendingDown className="h-3 w-3 shrink-0" /> : <Minus className="h-2.5 w-2.5 shrink-0" />}
+            {delta > 0 ? "+" : ""}
+            {delta.toFixed(1)}
+          </span>
+        )}
+      </button>
+    </HintTooltip>
   );
 }
 
@@ -671,6 +785,134 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
   const activeSite = sites[activeIdx] ?? sites[0];
   const safeVs = sites.length > 1 ? Math.min(Math.max(1, vsIdx), sites.length - 1) : 0;
   const vsSite = sites.length > 1 ? sites[safeVs] : null;
+
+  const attentionCacheRef = useRef<Map<string, AttentionHeatmapResponse>>(new Map());
+  const [attentionState, setAttentionState] = useState<{
+    key: string | null;
+    loading: boolean;
+    error: boolean;
+    data: AttentionHeatmapResponse | null;
+  }>({ key: null, loading: false, error: false, data: null });
+  const [attentionLayerVisible, setAttentionLayerVisible] = useState<Record<string, boolean>>({});
+  const [attentionUpgradeDismissed, setAttentionUpgradeDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem("ll_attention_upgrade_dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (analyzeMode !== "attention") return;
+    if (!userSite?.screenshotUrl || !vsSite?.screenshotUrl) {
+      setAttentionState({ key: null, loading: false, error: true, data: null });
+      return;
+    }
+    const cacheKey = `${userSite.screenshotUrl}|${vsSite.screenshotUrl}`;
+    const cached = attentionCacheRef.current.get(cacheKey);
+    if (cached) {
+      setAttentionState({ key: cacheKey, loading: false, error: false, data: cached });
+      return;
+    }
+    let cancelled = false;
+    setAttentionState({ key: cacheKey, loading: true, error: false, data: null });
+    (async () => {
+      try {
+        const [yEnc, cEnc] = await Promise.all([
+          screenshotUrlToImageBase64(userSite.screenshotUrl),
+          screenshotUrlToImageBase64(vsSite.screenshotUrl),
+        ]);
+        if (cancelled) return;
+        const raw = await fetchAttentionHeatmap({
+          yourScreenshotBase64: yEnc.base64,
+          competitorScreenshotBase64: cEnc.base64,
+          yourMediaType: yEnc.mediaType,
+          competitorMediaType: cEnc.mediaType,
+          competitorName: vsSite.domain,
+        });
+        if (cancelled) return;
+        const data = normalizeAttentionResponse(raw);
+        attentionCacheRef.current.set(cacheKey, data);
+        setAttentionState({ key: cacheKey, loading: false, error: false, data });
+      } catch {
+        if (cancelled) return;
+        setAttentionState({ key: cacheKey, loading: false, error: true, data: null });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [analyzeMode, userSite?.screenshotUrl, vsSite?.screenshotUrl, vsSite?.domain]);
+
+  /** When Attention is turned on, switch from Single → Split so both heatmaps are visible side by side. */
+  const attentionViewBootRef = useRef(false);
+  useEffect(() => {
+    if (analyzeMode !== "attention") {
+      attentionViewBootRef.current = false;
+      return;
+    }
+    if (sites.length < 2 || viewMode !== "single") return;
+    if (!attentionViewBootRef.current) {
+      attentionViewBootRef.current = true;
+      setViewMode("split");
+    }
+  }, [analyzeMode, sites.length, viewMode]);
+
+  const getAttentionOverlay = useCallback(
+    (site: SiteEntry) => {
+      if (effectiveOverlay !== "attention") return undefined;
+      if (viewMode === "slider") return undefined;
+      const data = attentionState.data;
+      const loading = attentionState.loading;
+      const err = attentionState.error;
+      const realZones = site.isUser ? data?.your?.zones ?? null : data?.competitor?.zones ?? null;
+      const useDemo = loading || err || !realZones?.length;
+      const zones: typeof ATTENTION_DEMO_ZONES = useDemo ? ATTENTION_DEMO_ZONES : (realZones ?? ATTENTION_DEMO_ZONES);
+      return {
+        zones,
+        layerVisible: attentionLayerVisible[site.url] !== false,
+        onLayerVisibleChange: (v: boolean) => setAttentionLayerVisible((prev) => ({ ...prev, [site.url]: v })),
+        loading,
+        /** Demo + API zones always drive HeatmapOverlay; legacy gradient placeholder off. */
+        showPlaceholder: false,
+      };
+    },
+    [effectiveOverlay, viewMode, attentionState, attentionLayerVisible]
+  );
+
+  const attentionInsight = useMemo(() => {
+    if (analyzeMode !== "attention") return null;
+    if (!vsSite) {
+      return {
+        loading: false,
+        error: true,
+        comparison: null,
+        your: null,
+        competitor: null,
+        competitorName: "Competitor",
+        showUpgradePrompt: false,
+        onDismissUpgrade: () => {},
+      };
+    }
+    return {
+      loading: attentionState.loading,
+      error: attentionState.error,
+      comparison: attentionState.data?.comparison ?? null,
+      your: attentionState.data?.your ?? null,
+      competitor: attentionState.data?.competitor ?? null,
+      competitorName: vsSite.domain,
+      showUpgradePrompt:
+        !attentionUpgradeDismissed && !attentionState.loading && !attentionState.error && attentionState.data != null,
+      onDismissUpgrade: () => {
+        try {
+          sessionStorage.setItem("ll_attention_upgrade_dismissed", "1");
+        } catch {
+          /* ignore */
+        }
+        setAttentionUpgradeDismissed(true);
+      },
+    };
+  }, [analyzeMode, vsSite, attentionState, attentionUpgradeDismissed]);
 
   const toolbarContext: ToolbarContext = useMemo(
     () => ({
@@ -832,11 +1074,6 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
 
   const tooltipCompareDomain = vsSite?.domain ?? (!activeSite.isUser ? activeSite.domain : null);
 
-  const splitOverallDelta =
-    (viewMode === "split" || viewMode === "compare") && userSite.overallScore != null && vsSite?.overallScore != null
-      ? Math.round((userSite.overallScore - vsSite.overallScore) * 10) / 10
-      : null;
-
   const hotSectionCount = useMemo(
     () => countHotSections(userSite.annotations.map((a) => a.score)),
     [userSite.annotations]
@@ -991,6 +1228,7 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
             }
           : null
       }
+      attentionInsight={attentionInsight}
     />
   );
 
@@ -998,9 +1236,11 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
     <div className="space-y-3">
       {!controlled && (
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-          <button type="button" onClick={handlePrev} className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted">
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </button>
+          <HintTooltip side="bottom" title={HINT_CONTROLS.prevSite.title} description={HINT_CONTROLS.prevSite.description}>
+            <button type="button" onClick={handlePrev} className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted">
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+          </HintTooltip>
           {sites.map((s, i) => (
             <SiteTab
               key={s.url}
@@ -1013,9 +1253,11 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
               delta={deltaVsYou(s)}
             />
           ))}
-          <button type="button" onClick={handleNext} className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted">
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
+          <HintTooltip side="bottom" title={HINT_CONTROLS.nextSite.title} description={HINT_CONTROLS.nextSite.description}>
+            <button type="button" onClick={handleNext} className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted">
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </HintTooltip>
         </div>
       )}
 
@@ -1027,44 +1269,49 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
             <div className="flex flex-col gap-1">
               <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">View</span>
               <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("single")}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                    viewMode === "single" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  Single
-                </button>
-                <button
-                  type="button"
-                  disabled={sites.length < 2}
-                  onClick={() => setViewMode("split")}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                    viewMode === "split" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
-                    sites.length < 2 && "opacity-40 cursor-not-allowed"
-                  )}
-                >
-                  <Columns2 className="h-3.5 w-3.5" />
-                  Split
-                </button>
-                <button
-                  type="button"
-                  disabled={sites.length < 2}
-                  onClick={() => setViewMode("compare")}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                    viewMode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
-                    sites.length < 2 && "opacity-40 cursor-not-allowed"
-                  )}
-                  title="Side-by-side with green/red gap highlights"
-                >
-                  <Blend className="h-3.5 w-3.5" />
-                  Compare
-                </button>
+                <HintTooltip side="bottom" title={HINT_VIEW.single.title} description={HINT_VIEW.single.description} action={HINT_VIEW.single.action}>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("single")}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                      viewMode === "single" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Single
+                  </button>
+                </HintTooltip>
+                <HintTooltip side="bottom" title={HINT_VIEW.split.title} description={HINT_VIEW.split.description} action={HINT_VIEW.split.action} disabled={sites.length < 2}>
+                  <button
+                    type="button"
+                    disabled={sites.length < 2}
+                    onClick={() => setViewMode("split")}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                      viewMode === "split" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+                      sites.length < 2 && "opacity-40 cursor-not-allowed"
+                    )}
+                  >
+                    <Columns2 className="h-3.5 w-3.5" />
+                    Split
+                  </button>
+                </HintTooltip>
+                <HintTooltip side="bottom" title={HINT_VIEW.compare.title} description={HINT_VIEW.compare.description} action={HINT_VIEW.compare.action} disabled={sites.length < 2}>
+                  <button
+                    type="button"
+                    disabled={sites.length < 2}
+                    onClick={() => setViewMode("compare")}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                      viewMode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+                      sites.length < 2 && "opacity-40 cursor-not-allowed"
+                    )}
+                  >
+                    <Blend className="h-3.5 w-3.5" />
+                    Compare
+                  </button>
+                </HintTooltip>
               </div>
             </div>
 
@@ -1081,37 +1328,53 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                     { id: "mobile" as const, label: "Mobile", icon: Smartphone, narrow: true },
                     { id: "first5s" as const, label: "First 5s", icon: Timer, narrow: true },
                   ] as const
-                ).map(({ id, label, icon: I, narrow }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setAnalyzeMode((prev) => (prev === id ? null : id))}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                      analyzeMode === id
-                        ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                        : "border-border text-muted-foreground hover:text-foreground",
-                      narrow && "max-md:hidden"
-                    )}
-                  >
-                    <I className="h-3.5 w-3.5" />
-                    {label}
-                  </button>
-                ))}
+                ).map(({ id, label, icon: I, narrow }) => {
+                  const hint = HINT_ANALYZE[id];
+                  return (
+                    <HintTooltip key={id} side="bottom" title={hint.title} description={hint.description} action={hint.action}>
+                      <button
+                        type="button"
+                        onClick={() => setAnalyzeMode((prev) => (prev === id ? null : id))}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
+                          analyzeMode === id
+                            ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                            : "border-border text-muted-foreground hover:text-foreground",
+                          narrow && "max-md:hidden"
+                        )}
+                      >
+                        <I className="h-3.5 w-3.5" />
+                        {label}
+                      </button>
+                    </HintTooltip>
+                  );
+                })}
 
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={cn(
-                        "inline-flex items-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                        moreMenuLooksActive && "border-amber-500/50 bg-amber-500/5 text-amber-800 dark:text-amber-300"
-                      )}
-                    >
-                      More
-                      <ChevronDown className="h-3.5 w-3.5 opacity-70" />
-                    </button>
-                  </DropdownMenuTrigger>
+                  <Tooltip delayDuration={280}>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className={cn(
+                            "inline-flex items-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
+                            moreMenuLooksActive && "border-amber-500/50 bg-amber-500/5 text-amber-800 dark:text-amber-300"
+                          )}
+                        >
+                          More
+                          <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                        </button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[min(320px,calc(100vw-2rem))] space-y-1.5 p-3 text-left">
+                      <p className="text-xs font-semibold leading-snug text-foreground">{HINT_CONTROLS.moreMenu.title}</p>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">{HINT_CONTROLS.moreMenu.description}</p>
+                      <p className="mt-1 border-t border-border pt-2 text-[11px] leading-relaxed text-foreground/95">
+                        <span className="font-medium">Дія: </span>
+                        <span className="text-muted-foreground">{HINT_CONTROLS.moreMenu.action}</span>
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                   <DropdownMenuContent align="start" className="w-48">
                     <div className="md:hidden">
                       <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "attention" ? null : "attention"))}>
@@ -1134,6 +1397,7 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                     </div>
                     <DropdownMenuItem
                       disabled={sites.length < 2}
+                      title={`${HINT_VIEW_SLIDER.title}: ${HINT_VIEW_SLIDER.description} ${HINT_VIEW_SLIDER.action}`}
                       onClick={() => {
                         setViewMode("slider");
                       }}
@@ -1141,11 +1405,17 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                       <ArrowLeftRight className="h-3.5 w-3.5 mr-2" />
                       Slider
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "trust" ? null : "trust"))}>
+                    <DropdownMenuItem
+                      title={`${HINT_ANALYZE.trust.title}: ${HINT_ANALYZE.trust.description}`}
+                      onClick={() => setAnalyzeMode((p) => (p === "trust" ? null : "trust"))}
+                    >
                       <Shield className="h-3.5 w-3.5 mr-2" />
                       Trust
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "readability" ? null : "readability"))}>
+                    <DropdownMenuItem
+                      title={`${HINT_ANALYZE.readability.title}: ${HINT_ANALYZE.readability.description}`}
+                      onClick={() => setAnalyzeMode((p) => (p === "readability" ? null : "readability"))}
+                    >
                       <BookOpen className="h-3.5 w-3.5 mr-2" />
                       Read
                     </DropdownMenuItem>
@@ -1155,17 +1425,31 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                 {(viewMode === "split" || viewMode === "compare" || viewMode === "slider") && vsSite && (
                   <div className="flex items-center gap-1.5 pl-2 border-l border-border max-md:w-full max-md:mt-1">
                     <span className="text-[10px] text-muted-foreground">vs</span>
-                    <select
-                      value={safeVs}
-                      onChange={(e) => setVsIdx(Number(e.target.value))}
-                      className="rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium min-w-0 max-w-[160px]"
-                    >
-                      {sites.slice(1).map((s, i) => (
-                        <option key={s.url} value={i + 1}>
-                          {s.domain}
-                        </option>
-                      ))}
-                    </select>
+                    <Tooltip delayDuration={280}>
+                      <TooltipTrigger asChild>
+                        <div className="min-w-0 max-w-[160px]">
+                          <select
+                            value={safeVs}
+                            onChange={(e) => setVsIdx(Number(e.target.value))}
+                            className="w-full rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium"
+                          >
+                            {sites.slice(1).map((s, i) => (
+                              <option key={s.url} value={i + 1}>
+                                {s.domain}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[min(320px,calc(100vw-2rem))] space-y-1.5 p-3 text-left">
+                        <p className="text-xs font-semibold leading-snug text-foreground">{HINT_CONTROLS.vsSelect.title}</p>
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">{HINT_CONTROLS.vsSelect.description}</p>
+                        <p className="mt-1 border-t border-border pt-2 text-[11px] leading-relaxed text-foreground/95">
+                          <span className="font-medium">Дія: </span>
+                          <span className="text-muted-foreground">{HINT_CONTROLS.vsSelect.action}</span>
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 )}
               </div>
@@ -1173,13 +1457,23 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 justify-end shrink-0">
-            <button type="button" onClick={() => setShowPins((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showPins ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{showPins ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}Pins</button>
-            <button type="button" onClick={() => setShowZones((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showZones ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>Zones</button>
-            <button type="button" onClick={() => setFullWidth((v) => !v)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">{fullWidth ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}{fullWidth ? "Normal" : "Wide"}</button>
+            <HintTooltip side="bottom" title={HINT_CONTROLS.pins.title} description={HINT_CONTROLS.pins.description} action={HINT_CONTROLS.pins.action}>
+              <button type="button" onClick={() => setShowPins((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showPins ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>{showPins ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}Pins</button>
+            </HintTooltip>
+            <HintTooltip side="bottom" title={HINT_CONTROLS.zones.title} description={HINT_CONTROLS.zones.description} action={HINT_CONTROLS.zones.action}>
+              <button type="button" onClick={() => setShowZones((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showZones ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>Zones</button>
+            </HintTooltip>
+            <HintTooltip side="bottom" title={HINT_CONTROLS.wide.title} description={HINT_CONTROLS.wide.description} action={HINT_CONTROLS.wide.action}>
+              <button type="button" onClick={() => setFullWidth((v) => !v)} className="flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">{fullWidth ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}{fullWidth ? "Normal" : "Wide"}</button>
+            </HintTooltip>
             <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5">
-              <button type="button" onClick={() => setZoomIdx((i) => Math.max(0, i - 1))} disabled={zoomIdx === 0} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomOut className="h-3 w-3" /></button>
+              <HintTooltip side="bottom" title={HINT_CONTROLS.zoomOut.title} description={HINT_CONTROLS.zoomOut.description} action={HINT_CONTROLS.zoomOut.action} disabled={zoomIdx === 0}>
+                <button type="button" onClick={() => setZoomIdx((i) => Math.max(0, i - 1))} disabled={zoomIdx === 0} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomOut className="h-3 w-3" /></button>
+              </HintTooltip>
               <span className="text-[10px] font-mono font-bold w-10 text-center text-muted-foreground">{Math.round(zoom * 100)}%</span>
-              <button type="button" onClick={() => setZoomIdx((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1))} disabled={zoomIdx >= ZOOM_LEVELS.length - 1} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomIn className="h-3 w-3" /></button>
+              <HintTooltip side="bottom" title={HINT_CONTROLS.zoomIn.title} description={HINT_CONTROLS.zoomIn.description} action={HINT_CONTROLS.zoomIn.action} disabled={zoomIdx >= ZOOM_LEVELS.length - 1}>
+                <button type="button" onClick={() => setZoomIdx((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1))} disabled={zoomIdx >= ZOOM_LEVELS.length - 1} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomIn className="h-3 w-3" /></button>
+              </HintTooltip>
             </div>
           </div>
         </div>
@@ -1193,41 +1487,14 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
         )}
       >
         <div className="min-w-0 space-y-3">
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-muted/25 px-2 py-1.5">
-            <span className="text-[10px] font-bold uppercase text-muted-foreground shrink-0">Lens</span>
-            {(
-              [
-                { id: "balanced" as const, label: "Balanced", icon: Sparkles },
-                { id: "rich" as const, label: "Visual+", icon: BarChart3 },
-                {
-                  id: "hot" as const,
-                  label: hotSectionCount > 0 ? `Hot (${hotSectionCount})` : "Hot",
-                  icon: Flame,
-                },
-                { id: "delta" as const, label: "Δ vs you", icon: ArrowLeftRight },
-              ] as const
-            ).map(({ id, label, icon: I }) => {
-              const disabled = id === "delta" && activeSite.isUser;
-              return (
-              <button
-                key={id}
-                type="button"
-                disabled={disabled}
-                onClick={() => setZoneLens(id)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase transition-colors",
-                  zoneLens === id ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
-                  disabled && "opacity-40 cursor-not-allowed"
-                )}
-              >
-                <I className="h-3 w-3 shrink-0" />
-                {label}
-              </button>
-            );})}
-          </div>
-          <div className="flex flex-wrap gap-1.5 items-center">
-            <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" aria-hidden />
-            {sortedSectionKeys.map((key) => {
+          <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-muted/25 px-2 py-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-3 sm:gap-y-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              <HintTooltip side="top" title={HINT_CONTROLS.sparklesRow.title} description={HINT_CONTROLS.sparklesRow.description} action={HINT_CONTROLS.sparklesRow.action}>
+                <span className="inline-flex shrink-0 cursor-default text-primary" aria-hidden>
+                  <Sparkles className="h-3.5 w-3.5" />
+                </span>
+              </HintTooltip>
+              {sortedSectionKeys.map((key) => {
               const ann = activeSite.annotations.find((a) => a.sectionKey === key);
               const uSc = userSite.annotations.find((a) => a.sectionKey === key)?.score ?? null;
               const compSc =
@@ -1238,6 +1505,7 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
               const priority = sectionPriorityFromGap(key, result.gaps, uSc);
               const insightLine =
                 userSite.annotations.find((a) => a.sectionKey === key)?.summary ?? "—";
+              const gapRow = gapDetailForSection(key, result.gaps);
               const chipUser = chipUnderlineClass(uSc);
               const greySectionChip =
                 (zoneLens === "hot" && uSc != null && uSc >= 7) ||
@@ -1308,10 +1576,65 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                       </span>
                     </p>
                     <p className="mt-2 text-[10px] leading-snug text-gray-300">{insightLine}</p>
+                    {gapRow && (
+                      <div className="mt-2 border-t border-white/15 pt-2 space-y-1">
+                        <p className="text-[10px] leading-snug text-amber-100/95">
+                          <span className="font-bold">Проблема: </span>
+                          {gapRow.problem}
+                        </p>
+                        <p className="text-[10px] leading-snug text-emerald-100/95">
+                          <span className="font-bold">Рішення: </span>
+                          {gapRow.recommendation}
+                        </p>
+                      </div>
+                    )}
                   </TooltipContent>
                 </Tooltip>
               );
             })}
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/60 pt-2 sm:border-t-0 sm:pt-0">
+              <span className="text-[10px] font-bold uppercase text-muted-foreground shrink-0">Lens</span>
+              {(
+                [
+                  { id: "balanced" as const, label: "Balanced", icon: Sparkles },
+                  { id: "rich" as const, label: "Visual+", icon: BarChart3 },
+                  {
+                    id: "hot" as const,
+                    label: hotSectionCount > 0 ? `Hot (${hotSectionCount})` : "Hot",
+                    icon: Flame,
+                  },
+                  { id: "delta" as const, label: "Δ vs you", icon: ArrowLeftRight },
+                ] as const
+              ).map(({ id, label, icon: I }) => {
+                const disabled = id === "delta" && activeSite.isUser;
+                const lh = HINT_LENS[id];
+                return (
+                  <HintTooltip
+                    key={id}
+                    side="top"
+                    title={lh.title}
+                    description={lh.description}
+                    action={lh.action}
+                    disabled={disabled}
+                  >
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setZoneLens(id)}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase transition-colors",
+                        zoneLens === id ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
+                        disabled && "opacity-40 cursor-not-allowed"
+                      )}
+                    >
+                      <I className="h-3 w-3 shrink-0" />
+                      {label}
+                    </button>
+                  </HintTooltip>
+                );
+              })}
+            </div>
           </div>
 
           {viewMode === "single" &&
@@ -1336,13 +1659,14 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                 deltaLensTint={zoneLens === "delta" && !activeSite.isUser}
                 heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
                 heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                attentionOverlay={getAttentionOverlay(activeSite)}
               />
             ) : (
               <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No screenshot.</div>
             ))}
 
           {(viewMode === "split" || viewMode === "compare") && userSite && vsSite && (
-            <div className="flex flex-col gap-2 md:flex-row md:items-stretch">
+            <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-[10px] font-bold text-center text-muted-foreground uppercase tracking-wide">You</p>
                 <ScreenshotFrame
@@ -1364,26 +1688,8 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                   compareDiffMode={viewMode === "compare"}
                   heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
                   heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                  attentionOverlay={getAttentionOverlay(userSite)}
                 />
-              </div>
-              <div className="relative flex w-full shrink-0 flex-col items-center justify-center border-y border-border/80 py-2 md:w-11 md:border-x md:border-y-0 md:py-0">
-                {splitOverallDelta != null && (
-                  <div className="sticky top-[38vh] z-10 flex w-full flex-col items-center justify-center">
-                    <div
-                      className={cn(
-                        "rounded-full border px-2.5 py-1.5 text-[11px] font-bold tabular-nums shadow-md backdrop-blur-sm bg-background/95 dark:bg-card/95",
-                        splitOverallDelta > 0
-                          ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                          : splitOverallDelta < 0
-                            ? "border-red-500/50 bg-red-500/15 text-red-600 dark:text-red-400"
-                            : "border-border bg-muted/90 text-muted-foreground"
-                      )}
-                    >
-                      {splitOverallDelta > 0 ? "+" : ""}
-                      {splitOverallDelta.toFixed(1)}
-                    </div>
-                  </div>
-                )}
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-[10px] font-bold text-center text-muted-foreground uppercase tracking-wide">vs {vsSite.domain}</p>
@@ -1406,6 +1712,7 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                   compareDiffMode={viewMode === "compare"}
                   heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
                   heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                  attentionOverlay={getAttentionOverlay(vsSite)}
                 />
               </div>
             </div>
@@ -1418,7 +1725,31 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
           )}
 
           {viewMode === "slider" && userSite && vsSite && userSite.screenshotUrl && vsSite.screenshotUrl && (
-            <SliderCompare left={userSite} right={vsSite} leftLabel="You" rightLabel={vsSite.domain} />
+            <div className="space-y-2">
+              <SliderCompare left={userSite} right={vsSite} leftLabel="You" rightLabel={vsSite.domain} />
+              {effectiveOverlay === "attention" && (
+                <p className="text-[10px] text-center text-muted-foreground leading-snug px-2">
+                  Attention heatmap overlays work in Single, Split, or Compare. Switch view to see predicted attention on each full screenshot side by side.
+                </p>
+              )}
+            </div>
+          )}
+
+          {effectiveOverlay === "attention" && viewMode !== "slider" && (
+            <p className="text-[10px] text-center text-muted-foreground flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(255, 85, 20, 0.5)" }} />
+                High (red/orange)
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(255, 210, 40, 0.4)" }} />
+                Medium (yellow)
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(55, 125, 255, 0.3)" }} />
+                Low (blue)
+              </span>
+            </p>
           )}
 
           {!activeSite.isUser && userSite && (
@@ -1435,7 +1766,7 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
                       {d == null ? (
                         "—"
                       ) : (
-                        <span className={cn("font-bold", d > 0 ? "text-emerald-500" : d < 0 ? "text-red-500" : "text-muted-foreground")}>
+                        <span className={cn("font-bold", d > 0 ? "text-primary" : d < 0 ? "text-red-500" : "text-muted-foreground")}>
                           {d > 0 ? "+" : ""}
                           {d.toFixed(1)}
                         </span>
@@ -1455,36 +1786,40 @@ export function ScreenshotCompare({ result, url, compareSiteIdx: controlledIdx, 
 
       {!controlled && (
         <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(sites.length, 5)}, 1fr)` }}>
-          {sites.map((site, i) => (
-            <button
-              key={site.url}
-              type="button"
-              onClick={() => {
-                setActiveIdx(i);
-                setExpandedPin(null);
-              }}
-              className={cn("rounded-xl border p-2.5 text-left transition-all", i === activeIdx ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30")}
-            >
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <span className="text-[10px] font-semibold text-foreground truncate">{site.domain}</span>
-                {site.overallScore != null && (
-                  <span className={cn("text-[10px] font-bold tabular-nums shrink-0", sColor(site.overallScore))}>{site.overallScore.toFixed(1)}</span>
-                )}
-              </div>
-              <div className="flex gap-0.5">
-                {SECTION_KEYS.map((key) => {
-                  const s = site.annotations.find((a) => a.sectionKey === key)?.score;
-                  return (
-                    <div
-                      key={key}
-                      className={cn("flex-1 h-1 rounded-full", sBg(s))}
-                      title={`${SECTION_ZONES[key].short}: ${s?.toFixed(1) ?? "—"}`}
-                    />
-                  );
-                })}
-              </div>
-            </button>
-          ))}
+          {sites.map((site, i) => {
+            const h = hintSiteTab(site.isUser, site.domain, deltaVsYou(site));
+            return (
+              <HintTooltip key={site.url} side="top" title={h.title} description={h.description} action={h.action}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveIdx(i);
+                    setExpandedPin(null);
+                  }}
+                  className={cn("rounded-xl border p-2.5 text-left transition-all w-full", i === activeIdx ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30")}
+                >
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[10px] font-semibold text-foreground truncate">{site.domain}</span>
+                    {site.overallScore != null && (
+                      <span className={cn("text-[10px] font-bold tabular-nums shrink-0", sColor(site.overallScore))}>{site.overallScore.toFixed(1)}</span>
+                    )}
+                  </div>
+                  <div className="flex gap-0.5">
+                    {SECTION_KEYS.map((key) => {
+                      const s = site.annotations.find((a) => a.sectionKey === key)?.score;
+                      return (
+                        <div
+                          key={key}
+                          className={cn("flex-1 h-1 rounded-full", sBg(s))}
+                          title={`${SECTION_ZONES[key].label}: ${s?.toFixed(1) ?? "—"}`}
+                        />
+                      );
+                    })}
+                  </div>
+                </button>
+              </HintTooltip>
+            );
+          })}
         </div>
       )}
     </div>

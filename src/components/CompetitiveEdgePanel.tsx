@@ -1,7 +1,7 @@
 import type { CompetitiveEdgeEntry } from "@/types/api";
 
 const EFFORT_STYLE: Record<string, string> = {
-  "Quick Win": "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+  "Quick Win": "bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary",
   "Medium": "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
   "Strategic": "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
 };
@@ -30,9 +30,9 @@ export function CompetitiveEdgePanel({ data }: { data: CompetitiveEdgeEntry[] })
                 </div>
 
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                  <div className="rounded bg-green-50 dark:bg-green-950/20 px-2.5 py-1.5">
-                    <p className="text-[9px] font-medium text-green-700 dark:text-green-400 mb-0.5">Their approach</p>
-                    <p className="text-[11px] text-green-900 dark:text-green-200">{adv.theirApproach}</p>
+                  <div className="rounded bg-primary/5 dark:bg-primary/10 px-2.5 py-1.5">
+                    <p className="text-[9px] font-medium text-primary mb-0.5">Their approach</p>
+                    <p className="text-[11px] text-foreground">{adv.theirApproach}</p>
                   </div>
                   <div className="rounded bg-red-50 dark:bg-red-950/20 px-2.5 py-1.5">
                     <p className="text-[9px] font-medium text-red-700 dark:text-red-400 mb-0.5">Your weakness</p>

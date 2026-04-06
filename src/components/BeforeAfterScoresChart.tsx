@@ -9,8 +9,8 @@ const SECTION_LABELS = ["Hero", "Value Prop", "Features", "Social Proof", "CTA"]
 const KEYS: SectionScoreKey[] = ["hero", "value_prop", "features", "social_proof", "cta"];
 
 function getPrimaryHex(): string {
-  if (typeof document === "undefined") return "#2ed67a";
-  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#2ed67a";
+  if (typeof document === "undefined") return "#7096b8";
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary-hex").trim() || "#7096b8";
 }
 
 /** Second bar: lighter “target” green */

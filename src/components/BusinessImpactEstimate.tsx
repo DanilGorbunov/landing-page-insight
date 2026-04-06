@@ -15,7 +15,7 @@ export function BusinessImpactEstimate({ conversion }: { conversion: ConversionL
   return (
     <div className="mt-3 rounded-xl border border-border/80 bg-gray-950/90 dark:bg-gray-950/80 p-3 text-gray-100 shadow-inner">
       <p className="text-[11px] font-bold text-white flex items-center gap-1.5 mb-2">
-        <BarChart3 className="h-4 w-4 text-emerald-400 shrink-0" />
+        <BarChart3 className="h-4 w-4 text-primary shrink-0" />
         Business Impact Estimate
       </p>
       <div className="space-y-1.5 text-[11px] leading-relaxed">
@@ -35,7 +35,7 @@ export function BusinessImpactEstimate({ conversion }: { conversion: ConversionL
         <p className="pt-1 border-t border-gray-800">
           <span className="text-gray-400">If you fix top 3 issues:</span>
           <br />
-          <span className="font-bold text-emerald-400">Estimated uplift: +8–15%</span>
+          <span className="font-bold text-primary">Estimated uplift: +8–15%</span>
         </p>
       </div>
       <p className="text-[9px] text-gray-500 mt-2 leading-snug">

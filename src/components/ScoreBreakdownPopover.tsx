@@ -8,7 +8,7 @@ function Bar({ value }: { value: number }) {
   return (
     <div className="h-1.5 w-full rounded-full bg-gray-800 overflow-hidden">
       <div
-        className="h-full rounded-full bg-emerald-500/90 transition-all"
+        className="h-full rounded-full bg-primary/90 transition-all"
         style={{ width: `${pct}%` }}
       />
     </div>
@@ -63,7 +63,7 @@ export function ScoreBreakdownPopover({
             {overall != null && (
               <div className="pt-1 border-t border-gray-800 flex justify-between text-[11px]">
                 <span className="font-bold text-gray-200">Overall</span>
-                <span className="tabular-nums font-bold text-emerald-400">{overall.toFixed(1)}</span>
+                <span className="tabular-nums font-bold text-primary">{overall.toFixed(1)}</span>
               </div>
             )}
             {explanation && <p className="text-[10px] text-gray-400 leading-snug pt-1">{explanation}</p>}

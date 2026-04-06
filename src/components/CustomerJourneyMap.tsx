@@ -3,13 +3,13 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 const STATUS_COLORS = {
-  addressed: "bg-emerald-500 border-emerald-500",
+  addressed: "bg-primary border-primary",
   partial: "bg-amber-400 border-amber-400 dark:bg-amber-500 dark:border-amber-500",
   missing: "bg-destructive border-destructive",
 } as const;
 
 const STATUS_NODE_BG = {
-  addressed: "bg-emerald-500/10 border-emerald-500/40",
+  addressed: "bg-primary/10 border-primary/40",
   partial: "bg-amber-400/10 border-amber-400/40 dark:bg-amber-500/10 dark:border-amber-500/40",
   missing: "bg-destructive/10 border-destructive/40",
 } as const;
@@ -78,7 +78,7 @@ export function CustomerJourneyMap({ stages }: { stages: JourneyStage[] }) {
             <span className="text-sm font-semibold text-foreground">{stages[activeStage].stage}</span>
             <span className={cn(
               "ml-auto rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-              stages[activeStage].status === "addressed" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+              stages[activeStage].status === "addressed" && "bg-primary/15 text-primary",
               stages[activeStage].status === "partial" && "bg-amber-400/15 text-amber-600 dark:text-amber-400",
               stages[activeStage].status === "missing" && "bg-destructive/15 text-destructive",
             )}>

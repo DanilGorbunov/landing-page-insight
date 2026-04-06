@@ -4,7 +4,7 @@ import { CheckCircle2, AlertTriangle, ChevronDown, ChevronUp, MinusCircle } from
 import type { VisualLensSectionModel, VisualLensRow, HotLensIssue, DeltaLensItem, LensRowStatus } from "@/lib/lensPanelContent";
 
 function RowIcon({ status }: { status: LensRowStatus }) {
-  if (status === "ok") return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-hidden />;
+  if (status === "ok") return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />;
   if (status === "warn") return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />;
   if (status === "bad") return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />;
   return <MinusCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />;
@@ -58,7 +58,7 @@ export function VisualLensCollapsible({ sections }: { sections: VisualLensSectio
 export function HotLensPanel({ issues }: { issues: HotLensIssue[] }) {
   if (issues.length === 0) {
     return (
-      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-3 text-[11px] text-foreground leading-snug">
+      <div className="rounded-lg border border-primary/30 bg-primary/[0.06] px-3 py-3 text-[11px] text-foreground leading-snug">
         <span className="font-semibold">✅ No critical issues found</span> — all sections score 7.0 or above.
       </div>
     );
@@ -109,7 +109,7 @@ export function DeltaLensPanel({ summary, items }: { summary: string | null; ite
 
   if (items.length === 0) {
     return (
-      <p className="text-[11px] text-foreground rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-3 leading-relaxed">
+      <p className="text-[11px] text-foreground rounded-lg border border-primary/25 bg-primary/[0.06] px-3 py-3 leading-relaxed">
         {summary}
       </p>
     );
@@ -131,7 +131,7 @@ export function DeltaLensPanel({ summary, items }: { summary: string | null; ite
                 You <span className="font-bold text-foreground">{it.userScore.toFixed(1)}</span>
               </span>
               <span className="rounded border border-border bg-background/80 px-2 py-0.5">
-                Them <span className="font-bold text-emerald-600 dark:text-emerald-400">{it.compScore.toFixed(1)}</span>
+                Them <span className="font-bold text-primary">{it.compScore.toFixed(1)}</span>
               </span>
             </div>
             {it.narrative && <p className="text-[11px] text-muted-foreground leading-snug">{it.narrative}</p>}

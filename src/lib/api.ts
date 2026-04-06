@@ -2,6 +2,7 @@ import { VITE_API_BASE_URL } from "@/lib/env";
 import { API_TIMEOUT_MS, MAX_COMPETITORS } from "@/lib/constants";
 import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult, CriticalGap, JobProgressEntry, JobLiveState, JobStatus } from "@/types/api";
+import type { AttentionHeatmapResponse } from "@/types/attention";
 
 export type { AnalysisResult, CriticalGap, JobProgressEntry, JobLiveState, JobStatus } from "@/types/api";
 
@@ -82,6 +83,34 @@ export async function generateCopyAlternatives(body: {
   }
   const data = (await res.json()) as { variants?: GenerateCopyVariant[] };
   return Array.isArray(data.variants) ? data.variants : [];
+}
+
+const ATTENTION_TIMEOUT_MS = 180000;
+
+/** Claude Vision attention heatmap for two screenshots + comparison narrative (base64 images). */
+export async function fetchAttentionHeatmap(body: {
+  yourScreenshotBase64: string;
+  competitorScreenshotBase64: string;
+  competitorName: string;
+  yourMediaType?: string;
+  competitorMediaType?: string;
+}): Promise<AttentionHeatmapResponse> {
+  const urlToCall = `${API_BASE}/api/attention-heatmap`;
+  const res = await fetchWithTimeout(urlToCall, {
+    method: "POST",
+    ...DEFAULT_FETCH_OPTIONS,
+    body: JSON.stringify({
+      ...body,
+      yourMediaType: body.yourMediaType ?? "image/png",
+      competitorMediaType: body.competitorMediaType ?? "image/png",
+    }),
+    timeoutMs: ATTENTION_TIMEOUT_MS,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(typeof err.error === "string" ? err.error : "Attention analysis failed");
+  }
+  return res.json() as Promise<AttentionHeatmapResponse>;
 }
 
 export async function fetchRecentComparisonsFromApi(limit = 3): Promise<HistoryEntry[]> {

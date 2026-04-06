@@ -19,7 +19,7 @@ export function InsightConfidenceBadge({ level, className }: { level: InsightCon
         <span
           className={cn(
             "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide cursor-help",
-            level === "High" && "border-emerald-500/50 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+            level === "High" && "border-primary/50 bg-primary/15 text-primary",
             level === "Medium" && "border-amber-500/50 bg-amber-500/15 text-amber-800 dark:text-amber-200",
             level === "Low" && "border-border bg-muted text-muted-foreground",
             className

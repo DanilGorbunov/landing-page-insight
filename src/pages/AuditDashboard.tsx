@@ -1,7 +1,16 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, ChevronRight, FileDown, Share2, TrendingUp, AlertTriangle, CheckCircle2 } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronRight,
+  FileDown,
+  Share2,
+  Sparkles,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+} from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { readFullInsightsPayload } from "@/lib/reportSession";
@@ -201,7 +210,7 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
           <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-2">Lighthouse SEO</p>
           {lhSeo != null ? (
             <>
-              <p className={cn("text-2xl font-bold tabular-nums", lhSeo >= 90 ? "text-emerald-500" : lhSeo >= 50 ? "text-amber-500" : "text-red-500")}>
+              <p className={cn("text-2xl font-bold tabular-nums", lhSeo >= 90 ? "text-primary" : lhSeo >= 50 ? "text-amber-500" : "text-red-500")}>
                 {lhSeo}
               </p>
               <p className="text-xs text-muted-foreground mt-1">/ 100 (PageSpeed)</p>
@@ -216,7 +225,7 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
           <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-2">Performance</p>
           {perf != null ? (
             <>
-              <p className={cn("text-2xl font-bold tabular-nums", perf >= 90 ? "text-emerald-500" : perf >= 70 ? "text-amber-500" : "text-red-500")}>
+              <p className={cn("text-2xl font-bold tabular-nums", perf >= 90 ? "text-primary" : perf >= 70 ? "text-amber-500" : "text-red-500")}>
                 {perf}
               </p>
               <p className="text-xs text-muted-foreground mt-1">/ 100 (Lighthouse)</p>
@@ -245,7 +254,7 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
           {[
             { label: "Now", value: forecast.current, color: "text-foreground" },
             { label: "~30 days", value: forecast.days30, color: "text-primary" },
-            { label: "~90 days", value: forecast.days90, color: "text-emerald-500" },
+            { label: "~90 days", value: forecast.days90, color: "text-primary" },
           ].map((c) => (
             <div key={c.label} className="rounded-xl bg-muted/30 px-4 py-3 text-center">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{c.label}</p>
@@ -284,7 +293,7 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
         {/* Quick wins */}
         <div className="rounded-2xl border border-border bg-card p-5">
           <p className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <CheckCircle2 className="h-4 w-4 text-primary" />
             Week 1 Quick Wins
           </p>
           {quickWins.length === 0 ? (
@@ -293,7 +302,7 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
             <ul className="space-y-2">
               {quickWins.map((a, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm">
-                  <span className="mt-0.5 shrink-0 text-emerald-500 font-bold text-xs">→</span>
+                  <span className="mt-0.5 shrink-0 text-primary font-bold text-xs">→</span>
                   <span className="text-foreground">{a.action}</span>
                 </li>
               ))}
@@ -358,10 +367,10 @@ function SectionContent({
         />
       );
     case "performance":
-      return result.performance ? (
-        <PerformanceGauges data={result.performance} />
-      ) : (
-        <EmptyState label="Performance data not available." />
+      return (
+        <PerformanceGauges
+          data={result.performance ?? { user: null, competitors: [] }}
+        />
       );
     case "ux":
     case "cta":
@@ -579,6 +588,14 @@ export default function AuditDashboard() {
             Created {new Date(paidAt).toLocaleDateString()}
           </span>
           <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to="/pricing"
+              state={{ fromReport: true }}
+              className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-2 text-xs font-semibold text-amber-950 dark:text-amber-100 hover:bg-amber-500/20 transition-colors shrink-0"
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="hidden sm:inline">Upgrade</span>
+            </Link>
             <ThemeToggle className="shrink-0" />
             <button
               type="button"
