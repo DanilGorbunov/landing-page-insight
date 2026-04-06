@@ -172,6 +172,15 @@ function hashStr(s: string): string {
   return Math.abs(h).toString(36);
 }
 
+/** Diminishing returns on stacked improvements (overlap). Order = checklist order (impact-sorted list). */
+export function diminishingMultiplier(index: number): number {
+  if (index <= 0) return 1;
+  if (index === 1) return 0.85;
+  if (index === 2) return 0.7;
+  return 0.5;
+}
+
+/** Raw sum of stated points (no diminishing) — for reference only. */
 export function sumCheckedPoints(items: SimulateImprovementItem[], checked: Record<string, boolean>): number {
   let t = 0;
   for (const it of items) {
@@ -180,9 +189,56 @@ export function sumCheckedPoints(items: SimulateImprovementItem[], checked: Reco
   return Math.round(t * 10) / 10;
 }
 
+/** Effective gain with diminishing returns; preserves `items` order (first checked row = 100%). */
+export function sumCheckedPointsWithDiminishing(items: SimulateImprovementItem[], checked: Record<string, boolean>): number {
+  const checkedInOrder = items.filter((it) => checked[it.id]);
+  let t = 0;
+  checkedInOrder.forEach((it, i) => {
+    t += it.points * diminishingMultiplier(i);
+  });
+  return Math.round(t * 10) / 10;
+}
+
 export function projectOverallScore(base: number | null, gain: number): number {
   const b = base ?? 5;
   return Math.round(Math.min(10, b + gain) * 10) / 10;
+}
+
+/**
+ * Hard ceiling: never above best competitor + 1.0, and never above 9.5/10.
+ * When there are no competitors, only the 9.5 cap applies.
+ */
+export function applyProjectedCeiling(
+  rawProjected: number,
+  competitorScores: number[]
+): { projected: number; wasCapped: boolean } {
+  const comps = competitorScores.filter((n): n is number => n != null && !Number.isNaN(n));
+  const topComp = comps.length > 0 ? Math.max(...comps) : null;
+  const ceiling = topComp != null ? Math.min(topComp + 1.0, 9.5) : 9.5;
+  const projected = Math.round(Math.min(rawProjected, ceiling) * 10) / 10;
+  const wasCapped = projected + 1e-9 < rawProjected;
+  return { projected, wasCapped };
+}
+
+export function computeSimulateProjection(
+  base: number | null,
+  items: SimulateImprovementItem[],
+  checked: Record<string, boolean>,
+  competitorScores: number[]
+): {
+  projected: number;
+  /** Sum of stated × diminishing (before 10 / ceiling caps). */
+  diminishingGain: number;
+  wasCapped: boolean;
+  /** Actual lift shown as +X (after all caps). */
+  netLift: number;
+} {
+  const b = base ?? 5;
+  const diminishingGain = sumCheckedPointsWithDiminishing(items, checked);
+  const rawProjected = projectOverallScore(base, diminishingGain);
+  const { projected, wasCapped } = applyProjectedCeiling(rawProjected, competitorScores);
+  const netLift = Math.round((projected - b) * 10) / 10;
+  return { projected, diminishingGain, wasCapped, netLift };
 }
 
 /** Rank among you + competitors (higher score is better). `isTop` = no competitor strictly above you. */
@@ -197,19 +253,25 @@ export function simulateRankAfterScore(
   return { rank, total: all.length, isTop: strictlyGreater === 0 };
 }
 
-/** Low-effort rows: potential points if all applied, and rank after applying that bump */
+/** Low-effort rows: diminishing returns in list order among Low items only; same ceiling as main simulator. */
 export function quickWinsSummary(
   items: SimulateImprovementItem[],
   base: number | null,
   competitorScores: number[]
 ): { lowCount: number; lowSum: number; rankLine: string } {
   const lows = items.filter((i) => i.effort === "Low");
-  const lowSum = Math.round(lows.reduce((a, i) => a + i.points, 0) * 10) / 10;
-  const projected = projectOverallScore(base, lowSum);
+  let lowSumDim = 0;
+  lows.forEach((it, i) => {
+    lowSumDim += it.points * diminishingMultiplier(i);
+  });
+  lowSumDim = Math.round(lowSumDim * 10) / 10;
+  const rawProjected = projectOverallScore(base, lowSumDim);
+  const { projected } = applyProjectedCeiling(rawProjected, competitorScores);
   const { rank, isTop } = simulateRankAfterScore(projected, competitorScores);
+  const net = Math.round((projected - (base ?? 5)) * 10) / 10;
   const rankLine =
     lows.length === 0
       ? "No low-effort items in this list — toggle Med/High fixes to preview impact."
-      : `Low effort fixes: ${lows.length} item${lows.length === 1 ? "" : "s"} → +${lowSum.toFixed(1)} pts → Rank #${rank}${isTop ? " 🏆" : ""}`;
-  return { lowCount: lows.length, lowSum, rankLine };
+      : `Low effort fixes: ${lows.length} item${lows.length === 1 ? "" : "s"} → ~+${net.toFixed(1)} pts → Rank #${rank}${isTop ? " 🏆" : ""}`;
+  return { lowCount: lows.length, lowSum: lowSumDim, rankLine };
 }

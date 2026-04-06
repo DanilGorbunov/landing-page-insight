@@ -55,7 +55,7 @@ const PLANS: Plan[] = [
     features: [
       { text: "20 analyses per month", included: true },
       { text: "Up to 5 competitors per analysis", included: true },
-      { text: "Full report (all tabs: Insight / Plan / Impact / Compete / Scores)", included: true },
+      { text: "Full report (all tabs: Simulate / Insight / Scores)", included: true },
       { text: "History — all past analyses saved", included: true },
       { text: "Export PDF", included: true },
       { text: "Monitor — track 3 competitors", included: true },

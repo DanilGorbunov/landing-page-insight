@@ -29,6 +29,16 @@ import { parseSectionScores, ensureScore } from "@/lib/utils";
 import { weightedOverallFromSections, projectRatings } from "@/lib/insightsProjection";
 import { compareSitesList } from "@/lib/compareDecisionMetrics";
 import { DashboardNavSidebar } from "@/components/DashboardNavSidebar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
 import type { AnalysisResult } from "@/types/api";
 
@@ -360,7 +370,7 @@ function MovedToCompareMessage() {
   return (
     <div className="rounded-2xl border border-dashed border-border p-10 text-center max-w-lg mx-auto">
       <p className="text-sm text-muted-foreground leading-relaxed">
-        This analysis detail now lives in <span className="font-semibold text-foreground">Compare</span> — use the right panel tabs (Overview, Insight, Plan, Impact, Compete, Scores).
+        This analysis detail now lives in <span className="font-semibold text-foreground">Compare</span> — use the right panel tabs (Simulate, Insight, Scores).
       </p>
     </div>
   );
@@ -480,13 +490,14 @@ export default function AuditDashboard() {
   const payload = readFullInsightsPayload();
   const [activeSection, setActiveSection] = useState(() => {
     const s = new URLSearchParams(window.location.search).get("section");
-    return s && FULL_INSIGHTS_SECTION_IDS.has(s) ? s : "overview";
+    return s && FULL_INSIGHTS_SECTION_IDS.has(s) ? s : "compare";
   });
   const [compareSiteIdx, setCompareSiteIdx] = useState(0);
   const compareToolbarHostRef = useRef<HTMLDivElement | null>(null);
   const [compareToolbarHost, setCompareToolbarHost] = useState<HTMLDivElement | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [reauditDialogOpen, setReauditDialogOpen] = useState(false);
   const historyCount = getHistoryCount();
 
   useEffect(() => {
@@ -582,20 +593,30 @@ export default function AuditDashboard() {
     }
   };
 
-  const handleReaudit = () => {
-    if (
-      !window.confirm(
-        "Run a full new analysis from scratch? The site will be scraped again and competitors discovered fresh."
-      )
-    ) {
-      return;
-    }
+  const handleReaudit = () => setReauditDialogOpen(true);
+
+  const confirmReaudit = () => {
     toast.info("Starting full re-audit…");
     navigate("/", { state: { startFreshAnalysis: { url } } });
   };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <AlertDialog open={reauditDialogOpen} onOpenChange={setReauditDialogOpen}>
+        <AlertDialogContent className="border-border bg-card sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Re-audit</AlertDialogTitle>
+            <AlertDialogDescription className="text-balance">
+              Run a full new analysis from scratch? The site will be scraped again and competitors discovered fresh.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReaudit}>Continue</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <DashboardNavSidebar
         activeNavId={activeSection}
         onSelect={handleSidebarSelect}

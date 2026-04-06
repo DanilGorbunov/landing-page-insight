@@ -118,7 +118,7 @@ export const HINT_CONTROLS = {
   },
   wide: {
     title: "Wide layout",
-    description: "Stretches the screenshot column full width; the action panel may move below.",
+    description: "Hides the right action panel so screenshots use the full width. Turn off to show the panel again.",
     problem: "Narrow columns hide small UI details on large monitors.",
     action: "Useful for fine detail on large displays.",
   },
@@ -228,11 +228,11 @@ export const COMPARE_DEFAULT_PANEL_GUIDE = {
     },
     {
       focus: "You want story, trust, and readability side by side — to borrow ideas and double down on what already works.",
-      nextStep: "Copy, Trust, or Readability overlays; Insight for detail, Plan for priorities. Steal patterns; keep what already scores well.",
+      nextStep: "Copy, Trust, or Readability overlays; Simulate for priorities and impact; Insight for detail and competitor angles. Steal patterns; keep what already scores well.",
     },
     {
       focus: "Scores look decent but outcomes still feel soft — you want concrete levers, not blame.",
-      nextStep: "Conversion overlay, pins on forms and CTAs, then Impact and Plan. Tie metrics to specific blocks you can change.",
+      nextStep: "Conversion overlay, pins on forms and CTAs, then Simulate for impact and action steps. Tie metrics to specific blocks you can change.",
     },
   ],
 } as const;

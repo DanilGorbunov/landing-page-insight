@@ -1,7 +1,9 @@
 import { useMemo } from "react";
+import { useTheme } from "next-themes";
 import type { ChartOptions } from "chart.js";
 import "chart.js/auto";
 import { Bar } from "react-chartjs-2";
+import { colorFromCssVar } from "@/lib/chartTheme";
 import type { SectionScoreKey } from "@/lib/utils";
 import { projectSectionScore } from "@/lib/insightsProjection";
 
@@ -27,6 +29,8 @@ export function BeforeAfterScoresChart({
   userScores,
   improvementFactor = 0.65,
 }: BeforeAfterScoresChartProps) {
+  const { resolvedTheme } = useTheme();
+
   const chartData = useMemo(() => {
     const now = KEYS.map((k) => {
       const v = userScores?.[k];
@@ -63,8 +67,13 @@ export function BeforeAfterScoresChart({
     };
   }, [userScores, improvementFactor]);
 
-  const options: ChartOptions<"bar"> = useMemo(
-    () => ({
+  const options: ChartOptions<"bar"> = useMemo(() => {
+    const tick = colorFromCssVar("--muted-foreground", "hsl(215 16% 40%)");
+    const grid = colorFromCssVar("--border", "hsl(220 16% 88%)");
+    const popoverBg = colorFromCssVar("--popover", "hsl(0 0% 100%)");
+    const popoverFg = colorFromCssVar("--popover-foreground", "hsl(222 47% 11%)");
+
+    return {
       responsive: true,
       maintainAspectRatio: false,
       indexAxis: "x" as const,
@@ -72,12 +81,17 @@ export function BeforeAfterScoresChart({
         legend: {
           position: "bottom" as const,
           labels: {
-            color: "rgba(255,255,255,0.65)",
+            color: tick,
             boxWidth: 10,
             font: { size: 11 },
           },
         },
         tooltip: {
+          backgroundColor: popoverBg,
+          titleColor: popoverFg,
+          bodyColor: popoverFg,
+          borderColor: grid,
+          borderWidth: 1,
           callbacks: {
             label: (ctx) => {
               const raw = ctx.raw as number;
@@ -88,21 +102,20 @@ export function BeforeAfterScoresChart({
       },
       scales: {
         x: {
-          grid: { color: "rgba(255,255,255,0.06)" },
-          ticks: { color: "rgba(255,255,255,0.55)", maxRotation: 45, minRotation: 0, font: { size: 10 } },
+          grid: { color: grid },
+          ticks: { color: tick, maxRotation: 45, minRotation: 0, font: { size: 10 } },
           border: { display: false },
         },
         y: {
           min: 0,
           max: 10,
-          ticks: { stepSize: 2, color: "rgba(255,255,255,0.45)" },
-          grid: { color: "rgba(255,255,255,0.06)" },
+          ticks: { stepSize: 2, color: tick },
+          grid: { color: grid },
           border: { display: false },
         },
       },
-    }),
-    []
-  );
+    };
+  }, [resolvedTheme]);
 
   return (
     <div className="w-full h-[280px] min-h-[260px]">

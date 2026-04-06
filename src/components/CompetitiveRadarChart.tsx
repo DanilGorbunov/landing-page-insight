@@ -1,8 +1,10 @@
 import { useMemo, useState, useCallback } from "react";
+import { useTheme } from "next-themes";
 import type { ChartOptions } from "chart.js";
 import "chart.js/auto";
 import { Radar } from "react-chartjs-2";
 import { motion } from "framer-motion";
+import { colorFromCssVar } from "@/lib/chartTheme";
 import type { SectionScoreKey } from "@/lib/utils";
 import { getDomain, parseSectionScores, hasFullSectionScores } from "@/lib/utils";
 
@@ -88,6 +90,8 @@ function isControlled(props: CompetitiveRadarChartProps): props is CompetitiveRa
 }
 
 export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
+  const { resolvedTheme } = useTheme();
+
   const standaloneSites = useMemo(
     () =>
       !isControlled(props)
@@ -143,8 +147,13 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
     };
   }, [sites, hidden, axisReveal]);
 
-  const options: ChartOptions<"radar"> = useMemo(
-    () => ({
+  const options: ChartOptions<"radar"> = useMemo(() => {
+    const tick = colorFromCssVar("--muted-foreground", "hsl(215 16% 40%)");
+    const grid = colorFromCssVar("--border", "hsl(220 16% 88%)");
+    const popoverBg = colorFromCssVar("--popover", "hsl(0 0% 100%)");
+    const popoverFg = colorFromCssVar("--popover-foreground", "hsl(222 47% 11%)");
+
+    return {
       responsive: true,
       maintainAspectRatio: false,
       animation: {
@@ -159,15 +168,15 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
             callback(value) {
               return value === 10 ? "10" : value;
             },
-            color: "rgba(255,255,255,0.58)",
+            color: tick,
             font: { size: 11 },
             backdropColor: "transparent",
           },
           grid: {
-            color: "rgba(255,255,255,0.1)",
+            color: grid,
           },
           pointLabels: {
-            color: "rgba(255,255,255,0.58)",
+            color: tick,
             font: { size: 11 },
           },
         },
@@ -177,6 +186,11 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
           display: false,
         },
         tooltip: {
+          backgroundColor: popoverBg,
+          titleColor: popoverFg,
+          bodyColor: popoverFg,
+          borderColor: grid,
+          borderWidth: 1,
           callbacks: {
             label(ctx) {
               const site = visibleSites[ctx.datasetIndex];
@@ -189,9 +203,8 @@ export function CompetitiveRadarChart(props: CompetitiveRadarChartProps) {
           },
         },
       },
-    }),
-    [visibleSites]
-  );
+    };
+  }, [visibleSites, resolvedTheme]);
 
   if (sites.length === 0) return null;
 

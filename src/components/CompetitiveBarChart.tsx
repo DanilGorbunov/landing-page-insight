@@ -1,7 +1,9 @@
 import { useMemo } from "react";
+import { useTheme } from "next-themes";
 import type { ChartOptions } from "chart.js";
 import "chart.js/auto";
 import { Bar } from "react-chartjs-2";
+import { colorFromCssVar } from "@/lib/chartTheme";
 import type { RadarSite } from "./CompetitiveRadarChart";
 import { getDomain } from "@/lib/utils";
 
@@ -23,6 +25,8 @@ interface CompetitiveBarChartProps {
 }
 
 export function CompetitiveBarChart({ sites, hidden, visibleSites, progressiveAxisCount }: CompetitiveBarChartProps) {
+  const { resolvedTheme } = useTheme();
+
   const axisReveal =
     progressiveAxisCount != null ? Math.min(5, Math.max(0, progressiveAxisCount)) : 5;
 
@@ -51,8 +55,13 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites, progressiveAx
     };
   }, [sites, hidden, axisReveal]);
 
-  const options: ChartOptions<"bar"> = useMemo(
-    () => ({
+  const options: ChartOptions<"bar"> = useMemo(() => {
+    const tick = colorFromCssVar("--muted-foreground", "hsl(215 16% 40%)");
+    const grid = colorFromCssVar("--border", "hsl(220 16% 88%)");
+    const popoverBg = colorFromCssVar("--popover", "hsl(0 0% 100%)");
+    const popoverFg = colorFromCssVar("--popover-foreground", "hsl(222 47% 11%)");
+
+    return {
       indexAxis: "y" as const,
       responsive: true,
       maintainAspectRatio: false,
@@ -71,7 +80,7 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites, progressiveAx
             display: false,
           },
           grid: {
-            color: "rgba(255,255,255,0.06)",
+            color: grid,
           },
           border: { display: false },
         },
@@ -80,7 +89,7 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites, progressiveAx
             display: false,
           },
           ticks: {
-            color: "rgba(255,255,255,0.62)",
+            color: tick,
             font: { size: 11 },
             crossAlign: "far",
             padding: 8,
@@ -92,8 +101,10 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites, progressiveAx
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: "#1a1a1a",
-          borderColor: "rgba(255,255,255,0.1)",
+          backgroundColor: popoverBg,
+          titleColor: popoverFg,
+          bodyColor: popoverFg,
+          borderColor: grid,
           borderWidth: 1,
           titleFont: { size: 12 },
           bodyFont: { size: 11 },
@@ -109,9 +120,8 @@ export function CompetitiveBarChart({ sites, hidden, visibleSites, progressiveAx
           },
         },
       },
-    }),
-    [visibleSites]
-  );
+    };
+  }, [visibleSites, resolvedTheme]);
 
   if (sites.length === 0) return null;
 

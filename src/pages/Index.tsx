@@ -30,7 +30,7 @@ const Index = () => {
       planName: meta?.planName ?? "Analysis",
       paidAt: paidAtOverride ?? meta?.paidAt ?? new Date().toISOString(),
     });
-    navigate("/full-insights");
+    navigate("/full-insights?section=compare");
   }, [navigate]);
 
   // Auto-start analysis when navigated here with ?url= param (e.g. from Monitor "Re-check")
@@ -63,7 +63,7 @@ const Index = () => {
             paidAt: meta?.paidAt ?? data.savedEntry?.analyzedAt ?? new Date().toISOString(),
           });
           sessionStorage.removeItem(REPORT_RETURN_KEY);
-          navigate("/full-insights", { replace: true });
+          navigate("/full-insights?section=compare", { replace: true });
           return;
         }
       }

@@ -87,7 +87,7 @@ export default function CheckoutDemo() {
     });
     enableFullInsightsHistoryPersistence();
     setBusy(false);
-    navigate("/full-insights", { replace: true });
+    navigate("/full-insights?section=compare", { replace: true });
   };
 
   return (

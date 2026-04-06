@@ -2553,15 +2553,11 @@ export function ScreenshotCompare({
         </div>
 
         {!fullWidth && (
-          <div className="hidden min-h-0 w-[391px] max-w-[391px] shrink-0 flex-col overflow-hidden lg:flex lg:h-full lg:max-h-full lg:min-h-0 lg:self-stretch">
+          <div className="hidden min-h-0 w-[352px] max-w-[352px] shrink-0 flex-col overflow-hidden lg:flex lg:h-full lg:max-h-full lg:min-h-0 lg:self-stretch">
             {actionPanel}
           </div>
         )}
       </div>
-
-      {fullWidth && (
-        <div className="max-h-[min(88vh,900px)] min-h-0 shrink-0 overflow-y-auto">{actionPanel}</div>
-      )}
 
       {!controlled && (
         <div className="grid shrink-0 gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(sites.length, 5)}, 1fr)` }}>
