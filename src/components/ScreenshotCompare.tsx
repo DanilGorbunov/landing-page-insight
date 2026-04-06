@@ -22,14 +22,12 @@ import {
   TrendingUp,
   Minus,
   BarChart3,
-  Sparkles,
   MousePointer2,
   Type,
   Flame,
   ArrowLeftRight,
   Shield,
   BookOpen,
-  Smartphone,
   Timer,
   Target,
   ChevronDown,
@@ -216,21 +214,12 @@ function ScoreIcon({ score }: { score: number | null }) {
   return <AlertTriangle className="h-3 w-3 shrink-0 text-red-400 dark:text-red-500" />;
 }
 
-function screenshotChromeBarClasses() {
-  return "border-2 bg-white/92 text-zinc-950 border-zinc-300 backdrop-blur-md shadow-lg dark:bg-zinc-950/92 dark:text-zinc-50 dark:border-zinc-600";
-}
-
-function screenshotChromeScoreClass(score: number) {
-  if (score >= 7.5) return "text-emerald-700 dark:text-emerald-300";
-  if (score >= 5) return "text-amber-700 dark:text-amber-300";
-  return "text-red-700 dark:text-red-300";
-}
-
 /** Toolbar overlay modes: layer modes + mobile frame (no extra SVG layer). */
 type ToolbarOverlayMode = CompareOverlayLayerMode | "mobile";
 
 const CIRCLED_EYE_ORDER = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫"];
 
+/** Section chip bottom bar: reflects user-site score band for that section (same as before). */
 function chipUnderlineClass(score: number | null) {
   if (score == null) return "bg-muted-foreground/40 dark:bg-muted-foreground/50";
   if (score < 7) return "bg-red-500";
@@ -753,7 +742,7 @@ function ScreenshotFrame({
       )}
       <div
         ref={scrollRef}
-        className="relative overflow-auto rounded-xl border border-border bg-muted/20 max-h-[min(82vh,1200px)]"
+        className="relative max-h-[min(82vh,1200px)] overflow-auto rounded-xl border border-border bg-muted/20 scrollbar-hide"
         style={{ cursor: zoom > 1 ? "grab" : undefined }}
       >
       <div
@@ -828,56 +817,6 @@ function ScreenshotFrame({
               onMore={onSectionMore ? () => onSectionMore(ann) : undefined}
             />
           ))}
-        <div
-          className={cn(
-            "absolute top-3 left-1/2 -translate-x-1/2 z-[30] flex items-center gap-2 rounded-full px-3 py-1.5 max-w-[90%]",
-            screenshotChromeBarClasses()
-          )}
-        >
-          {site.isUser && (
-            <HintTooltip side="bottom" title="Ваш сайт" description="Цей знімок і бали стосуються вашого домену в цьому звіті." action="Перемкніть вкладку конкурента, щоб побачити їхній скрін.">
-              <span className="rounded bg-emerald-600/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 shrink-0 cursor-default">
-                You
-              </span>
-            </HintTooltip>
-          )}
-          <HintTooltip
-            side="bottom"
-            title="Домен"
-            description={`Клік відкриває живий сайт у новій вкладці. Знімок — для ${site.domain}.`}
-          >
-            <a
-              href={site.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate max-w-[min(200px,40vw)] hover:underline underline-offset-2 decoration-primary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {site.domain}
-            </a>
-          </HintTooltip>
-          <HintTooltip side="bottom" title="Загальний бал" description="Агрегована оцінка з аналізу секцій (шкала до 10)." action="Нижні чіпи та піни показують бали по зонах сторінки.">
-            <span
-              className={cn(
-                "text-xs font-bold tabular-nums shrink-0 cursor-default",
-                site.overallScore != null ? screenshotChromeScoreClass(site.overallScore) : "text-muted-foreground"
-              )}
-            >
-              {site.overallScore != null ? `${site.overallScore.toFixed(1)}/10` : "—"}
-            </span>
-          </HintTooltip>
-          <HintTooltip side="bottom" title="Живий сайт" description="Відкриває поточну сторінку в новій вкладці (як у браузері)." action="Перевірте реальну швидкість, форми та мобільний вигляд.">
-            <a
-              href={site.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 p-1 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-200/90 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-white/10"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </HintTooltip>
-        </div>
       </div>
       </div>
     </div>
@@ -958,16 +897,24 @@ function SplitSiteColumnPicker({
   valueIdx,
   otherIdx,
   onSelect,
+  compact,
 }: {
   sites: SiteEntry[];
   valueIdx: number;
   otherIdx: number;
   onSelect: (idx: number) => void;
+  /** Tighter pill for stacked layout above section chips. */
+  compact?: boolean;
 }) {
   const site = sites[valueIdx];
   if (!site) return null;
   return (
-    <div className="inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 rounded-full border border-border bg-background/95 px-2.5 py-1 text-[10px] shadow-sm backdrop-blur-sm">
+    <div
+      className={cn(
+        "inline-flex max-w-full min-w-0 items-center rounded-lg border border-border font-semibold text-muted-foreground transition-colors hover:text-foreground",
+        compact ? "gap-1 px-2 py-1 text-[10px]" : "gap-1.5 px-2.5 py-1.5 text-[11px]"
+      )}
+    >
       {site.isUser && (
         <span className="shrink-0 rounded bg-emerald-600/15 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
           You
@@ -977,7 +924,7 @@ function SplitSiteColumnPicker({
         href={site.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="min-w-0 truncate font-bold uppercase tracking-wide text-foreground hover:underline decoration-primary/60 underline-offset-2"
+        className="min-w-0 truncate font-semibold uppercase tracking-wide text-foreground hover:underline decoration-primary/60 underline-offset-2"
         title={site.url}
       >
         {site.domain}
@@ -994,19 +941,19 @@ function SplitSiteColumnPicker({
         href={site.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="shrink-0 rounded-md p-0.5 text-primary transition-colors hover:bg-primary/10"
         aria-label="Відкрити сайт у новій вкладці"
       >
-        <ExternalLink className="h-3 w-3" />
+        <ExternalLink className={compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5"} />
       </a>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="shrink-0 rounded-md p-0.5 text-primary transition-colors hover:bg-primary/10"
             aria-label="Інший сайт для цієї колонки"
           >
-            <ChevronDown className="h-3 w-3 opacity-80" aria-hidden />
+            <ChevronDown className={cn(compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5", "opacity-90")} aria-hidden />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center" className="max-w-[min(280px,calc(100vw-2rem))]">
@@ -1029,6 +976,136 @@ function SplitSiteColumnPicker({
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+    </div>
+  );
+}
+
+/** Section score chips (Hero, CTA, …). Scores reflect `chipSite` (column being viewed). */
+function SectionChipsStrip({
+  chipSite,
+  sortedSectionKeys,
+  zoneLens,
+  expandedPin,
+  onSelectSection,
+  userSite,
+  vsSite,
+  activeSite,
+  tooltipCompareDomain,
+  result,
+  compact,
+}: {
+  chipSite: SiteEntry;
+  sortedSectionKeys: readonly string[];
+  zoneLens: ZoneLens;
+  expandedPin: string | null;
+  onSelectSection: (key: string) => void;
+  userSite: SiteEntry;
+  vsSite: SiteEntry | null;
+  activeSite: SiteEntry;
+  tooltipCompareDomain: string | null;
+  result: AnalysisResult;
+  /** Shorter labels + minimal vertical padding (row under URL). */
+  compact?: boolean;
+}) {
+  return (
+    <div className="flex w-max min-w-0 max-w-none flex-nowrap items-center gap-1.5">
+      {sortedSectionKeys.map((key) => {
+        const ann = chipSite.annotations.find((a) => a.sectionKey === key);
+        const uSc = userSite.annotations.find((a) => a.sectionKey === key)?.score ?? null;
+        const compSc =
+          vsSite?.annotations.find((a) => a.sectionKey === key)?.score ??
+          (!activeSite.isUser ? activeSite.annotations.find((a) => a.sectionKey === key)?.score : null);
+        const gapPts = uSc != null && compSc != null ? Math.round((uSc - compSc) * 10) / 10 : null;
+        const priority = sectionPriorityFromGap(key, result.gaps, uSc);
+        const insightLine = userSite.annotations.find((a) => a.sectionKey === key)?.summary ?? "—";
+        const gapRow = gapDetailForSection(key, result.gaps);
+        const chipUser = chipUnderlineClass(uSc);
+        const greySectionChip =
+          (zoneLens === "hot" && uSc != null && uSc >= 7) ||
+          (zoneLens === "delta" && uSc != null && compSc != null && !(compSc > uSc));
+        return (
+          <Tooltip key={key} delayDuration={200}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={() => onSelectSection(key)}
+                className={cn(
+                  "group relative inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border font-semibold transition-colors",
+                  compact ? "gap-0.5 px-2 pb-1.5 pt-1 text-[10px]" : "gap-1 px-2.5 pb-2 pt-1.5 text-[11px]",
+                  expandedPin === key
+                    ? "border-amber-500/60 bg-amber-500/10 shadow-sm dark:border-amber-500/60 dark:bg-amber-500/10"
+                    : "border-border hover:border-border/80 hover:bg-muted/40",
+                  greySectionChip && "opacity-45 grayscale"
+                )}
+              >
+                <span className="inline-flex items-baseline gap-0.5">
+                  <span
+                    className={cn(
+                      expandedPin === key
+                        ? "text-amber-950 dark:text-amber-100"
+                        : "text-muted-foreground group-hover:text-foreground"
+                    )}
+                  >
+                    {compact ? SECTION_ZONES[key].short : SECTION_ZONES[key].label}
+                  </span>
+                  {ann?.score != null && (
+                    <span className={cn("tabular-nums font-bold", sColor(ann.score))}>{ann.score.toFixed(1)}</span>
+                  )}
+                </span>
+                <span className={cn("absolute bottom-0 left-1 right-1 h-[2px] rounded-full", chipUser)} aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="top"
+              sideOffset={8}
+              className="w-[280px] max-w-[80vw] border-border bg-gray-900 p-3 text-white shadow-xl dark:bg-gray-950"
+            >
+              <p className="text-[11px] font-semibold text-white">
+                You {uSc != null ? uSc.toFixed(1) : "—"} vs {tooltipCompareDomain ?? "competitor"}{" "}
+                {compSc != null ? compSc.toFixed(1) : "—"}
+              </p>
+              <p className="mt-1 text-[10px] text-gray-200">
+                Gap:{" "}
+                {gapPts == null ? (
+                  "—"
+                ) : (
+                  <span className="font-bold tabular-nums">
+                    {gapPts > 0 ? "+" : ""}
+                    {gapPts.toFixed(1)} pts
+                  </span>
+                )}
+              </p>
+              <p className="mt-1.5">
+                <span
+                  className={cn(
+                    "inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                    priority === "P1"
+                      ? "bg-red-500/30 text-red-100"
+                      : priority === "P2"
+                        ? "bg-amber-500/30 text-amber-100"
+                        : "bg-slate-500/30 text-slate-100"
+                  )}
+                >
+                  {priority}
+                </span>
+              </p>
+              <p className="mt-2 text-[10px] leading-snug text-gray-300">{insightLine}</p>
+              {gapRow && (
+                <div className="mt-2 border-t border-white/15 pt-2 space-y-1">
+                  <p className="text-[10px] leading-snug text-amber-100/95">
+                    <span className="font-bold">Проблема: </span>
+                    {gapRow.problem}
+                  </p>
+                  <p className="text-[10px] leading-snug text-emerald-100/95">
+                    <span className="font-bold">Рішення: </span>
+                    {gapRow.recommendation}
+                  </p>
+                </div>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }
@@ -1099,7 +1176,7 @@ export function ScreenshotCompare({
       (analyzeMode &&
         (analyzeMode === "trust" ||
           analyzeMode === "readability" ||
-          (narrowViewport && ["attention", "copy", "mobile", "first5s"].includes(analyzeMode))))
+          (narrowViewport && ["attention", "copy", "first5s"].includes(analyzeMode))))
   );
 
   const sites: SiteEntry[] = useMemo(() => {
@@ -1766,7 +1843,6 @@ export function ScreenshotCompare({
                 { id: "heatmap" as const, label: "Gap heat", icon: BarChart3, narrow: false },
                 { id: "copy" as const, label: "Copy", icon: Type, narrow: true },
                 { id: "conversion" as const, label: "Conversion", icon: Target, narrow: false },
-                { id: "mobile" as const, label: "Mobile", icon: Smartphone, narrow: true },
                 { id: "first5s" as const, label: "First 5s", icon: Timer, narrow: true },
               ] as const
             ).map(({ id, label, icon: I, narrow }) => {
@@ -1825,10 +1901,6 @@ export function ScreenshotCompare({
                   <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "copy" ? null : "copy"))}>
                     <Type className="h-3.5 w-3.5 mr-2" />
                     Copy
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "mobile" ? null : "mobile"))}>
-                    <Smartphone className="h-3.5 w-3.5 mr-2" />
-                    Mobile
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "first5s" ? null : "first5s"))}>
                     <Timer className="h-3.5 w-3.5 mr-2" />
@@ -2009,153 +2081,131 @@ export function ScreenshotCompare({
         )}
       >
         <div className="min-w-0 space-y-3">
-          <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-muted/25 px-2 py-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-3 sm:gap-y-2">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-              <HintTooltip side="top" title={HINT_CONTROLS.sparklesRow.title} description={HINT_CONTROLS.sparklesRow.description} action={HINT_CONTROLS.sparklesRow.action}>
-                <span className="inline-flex shrink-0 cursor-default text-primary" aria-hidden>
-                  <Sparkles className="h-3.5 w-3.5" />
-                </span>
-              </HintTooltip>
-              {sortedSectionKeys.map((key) => {
-              const ann = activeSite.annotations.find((a) => a.sectionKey === key);
-              const uSc = userSite.annotations.find((a) => a.sectionKey === key)?.score ?? null;
-              const compSc =
-                vsSite?.annotations.find((a) => a.sectionKey === key)?.score ??
-                (!activeSite.isUser ? activeSite.annotations.find((a) => a.sectionKey === key)?.score : null);
-              const gapPts =
-                uSc != null && compSc != null ? Math.round((uSc - compSc) * 10) / 10 : null;
-              const priority = sectionPriorityFromGap(key, result.gaps, uSc);
-              const insightLine =
-                userSite.annotations.find((a) => a.sectionKey === key)?.summary ?? "—";
-              const gapRow = gapDetailForSection(key, result.gaps);
-              const chipUser = chipUnderlineClass(uSc);
-              const greySectionChip =
-                (zoneLens === "hot" && uSc != null && uSc >= 7) ||
-                (zoneLens === "delta" &&
-                  uSc != null &&
-                  compSc != null &&
-                  !(compSc > uSc));
-              return (
-                <Tooltip key={key} delayDuration={200}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setExpandedPin(key);
-                        setSectionNavTick((n) => n + 1);
-                      }}
-                      className={cn(
-                        "group relative rounded-full border px-2.5 pb-1.5 pt-1 text-[10px] font-semibold transition-colors",
-                        expandedPin === key ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
-                        greySectionChip && "opacity-45 grayscale"
-                      )}
-                    >
-                      <span className="block">
-                        {SECTION_ZONES[key].label}
-                        {ann?.score != null && (
-                          <span className={cn("ml-1 tabular-nums", sColor(ann.score))}>{ann.score.toFixed(1)}</span>
-                        )}
-                      </span>
-                      <span
-                        className={cn("absolute bottom-0 left-1 right-1 h-[3px] rounded-full", chipUser)}
-                        aria-hidden
-                      />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    sideOffset={8}
-                    className="w-[280px] max-w-[80vw] border-border bg-gray-900 p-3 text-white shadow-xl dark:bg-gray-950"
-                  >
-                    <p className="text-[11px] font-semibold text-white">
-                      You {uSc != null ? uSc.toFixed(1) : "—"} vs {tooltipCompareDomain ?? "competitor"}{" "}
-                      {compSc != null ? compSc.toFixed(1) : "—"}
-                    </p>
-                    <p className="mt-1 text-[10px] text-gray-200">
-                      Gap:{" "}
-                      {gapPts == null ? (
-                        "—"
-                      ) : (
-                        <span className="font-bold tabular-nums">
-                          {gapPts > 0 ? "+" : ""}
-                          {gapPts.toFixed(1)} pts
-                        </span>
-                      )}
-                    </p>
-                    <p className="mt-1.5">
-                      <span
-                        className={cn(
-                          "inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase",
-                          priority === "P1"
-                            ? "bg-red-500/30 text-red-100"
-                            : priority === "P2"
-                              ? "bg-amber-500/30 text-amber-100"
-                              : "bg-slate-500/30 text-slate-100"
-                        )}
-                      >
-                        {priority}
-                      </span>
-                    </p>
-                    <p className="mt-2 text-[10px] leading-snug text-gray-300">{insightLine}</p>
-                    {gapRow && (
-                      <div className="mt-2 border-t border-white/15 pt-2 space-y-1">
-                        <p className="text-[10px] leading-snug text-amber-100/95">
-                          <span className="font-bold">Проблема: </span>
-                          {gapRow.problem}
-                        </p>
-                        <p className="text-[10px] leading-snug text-emerald-100/95">
-                          <span className="font-bold">Рішення: </span>
-                          {gapRow.recommendation}
-                        </p>
-                      </div>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
+          {viewMode === "slider" && (
+            <div className="w-full min-w-0 overflow-x-auto scrollbar-hide">
+              <SectionChipsStrip
+                compact
+                chipSite={activeSite}
+                sortedSectionKeys={sortedSectionKeys}
+                zoneLens={zoneLens}
+                expandedPin={expandedPin}
+                onSelectSection={(key) => {
+                  setExpandedPin(key);
+                  setSectionNavTick((n) => n + 1);
+                }}
+                userSite={userSite}
+                vsSite={vsSite}
+                activeSite={activeSite}
+                tooltipCompareDomain={tooltipCompareDomain}
+                result={result}
+              />
             </div>
-          </div>
+          )}
 
           {viewMode === "single" &&
             (activeSite.screenshotUrl ? (
-              <ScreenshotFrame
-                site={activeSite}
-                showZones={showZones}
-                showPins={showPins}
-                expandedPin={expandedPin}
-                setExpandedPin={setExpandedPin}
-                zoom={zoom}
-                overlayMode={effectiveOverlay}
-                sectionNavTick={sectionNavTick}
-                zoneLens={zoneLens}
-                deltaByKey={activeSite.isUser ? undefined : sectionDeltaByKey}
-                onSectionMore={openSectionMore}
-                problemIndicators={showProblemIndicators}
-                eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
-                competitorScores={
-                  showProblemIndicators && activeSite.isUser && vsSite ? competitorScoresForUser : undefined
-                }
-                deltaLensTint={zoneLens === "delta" && !activeSite.isUser}
-                heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
-                heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
-                attentionOverlay={getAttentionOverlay(activeSite)}
-                zoneTooltipFor={showZones ? zoneTooltipForSite(activeSite) : undefined}
-                onZoneMore={showZones ? openSectionMore : undefined}
-              />
+              <div className="min-w-0 space-y-2">
+                <div
+                  className={cn(
+                    "grid w-full min-w-0 items-center gap-x-2 gap-y-1",
+                    controlled ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"
+                  )}
+                >
+                  {controlled && (
+                    <div className="min-w-0">
+                      <SplitSiteColumnPicker
+                        compact
+                        sites={sites}
+                        valueIdx={activeIdx}
+                        otherIdx={-1}
+                        onSelect={setActiveIdx}
+                      />
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "flex min-w-0 justify-end overflow-x-auto scrollbar-hide",
+                      !controlled && "col-span-full"
+                    )}
+                  >
+                    <SectionChipsStrip
+                      compact
+                      chipSite={activeSite}
+                      sortedSectionKeys={sortedSectionKeys}
+                      zoneLens={zoneLens}
+                      expandedPin={expandedPin}
+                      onSelectSection={(key) => {
+                        setExpandedPin(key);
+                        setSectionNavTick((n) => n + 1);
+                      }}
+                      userSite={userSite}
+                      vsSite={vsSite}
+                      activeSite={activeSite}
+                      tooltipCompareDomain={tooltipCompareDomain}
+                      result={result}
+                    />
+                  </div>
+                </div>
+                <ScreenshotFrame
+                  site={activeSite}
+                  showZones={showZones}
+                  showPins={showPins}
+                  expandedPin={expandedPin}
+                  setExpandedPin={setExpandedPin}
+                  zoom={zoom}
+                  overlayMode={effectiveOverlay}
+                  sectionNavTick={sectionNavTick}
+                  zoneLens={zoneLens}
+                  deltaByKey={activeSite.isUser ? undefined : sectionDeltaByKey}
+                  onSectionMore={openSectionMore}
+                  problemIndicators={showProblemIndicators}
+                  eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                  competitorScores={
+                    showProblemIndicators && activeSite.isUser && vsSite ? competitorScoresForUser : undefined
+                  }
+                  deltaLensTint={zoneLens === "delta" && !activeSite.isUser}
+                  heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                  heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                  attentionOverlay={getAttentionOverlay(activeSite)}
+                  zoneTooltipFor={showZones ? zoneTooltipForSite(activeSite) : undefined}
+                  onZoneMore={showZones ? openSectionMore : undefined}
+                />
+              </div>
             ) : (
               <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No screenshot.</div>
             ))}
 
           {(viewMode === "split" || viewMode === "compare") && splitLeftSite && splitRightSite && (
             <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex justify-center">
-                  <SplitSiteColumnPicker
-                    sites={sites}
-                    valueIdx={safeLeft}
-                    otherIdx={safeRight}
-                    onSelect={selectSplitLeft}
-                  />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
+                  <div className="min-w-0">
+                    <SplitSiteColumnPicker
+                      compact
+                      sites={sites}
+                      valueIdx={safeLeft}
+                      otherIdx={safeRight}
+                      onSelect={selectSplitLeft}
+                    />
+                  </div>
+                  <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
+                    <SectionChipsStrip
+                      compact
+                      chipSite={splitLeftSite}
+                      sortedSectionKeys={sortedSectionKeys}
+                      zoneLens={zoneLens}
+                      expandedPin={expandedPin}
+                      onSelectSection={(key) => {
+                        setExpandedPin(key);
+                        setSectionNavTick((n) => n + 1);
+                      }}
+                      userSite={userSite}
+                      vsSite={vsSite}
+                      activeSite={activeSite}
+                      tooltipCompareDomain={tooltipCompareDomain}
+                      result={result}
+                    />
+                  </div>
                 </div>
                 <ScreenshotFrame
                   site={splitLeftSite}
@@ -2183,14 +2233,35 @@ export function ScreenshotCompare({
                   onZoneMore={showZones ? openSectionMore : undefined}
                 />
               </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex justify-center">
-                  <SplitSiteColumnPicker
-                    sites={sites}
-                    valueIdx={safeRight}
-                    otherIdx={safeLeft}
-                    onSelect={selectSplitRight}
-                  />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
+                  <div className="min-w-0">
+                    <SplitSiteColumnPicker
+                      compact
+                      sites={sites}
+                      valueIdx={safeRight}
+                      otherIdx={safeLeft}
+                      onSelect={selectSplitRight}
+                    />
+                  </div>
+                  <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
+                    <SectionChipsStrip
+                      compact
+                      chipSite={splitRightSite}
+                      sortedSectionKeys={sortedSectionKeys}
+                      zoneLens={zoneLens}
+                      expandedPin={expandedPin}
+                      onSelectSection={(key) => {
+                        setExpandedPin(key);
+                        setSectionNavTick((n) => n + 1);
+                      }}
+                      userSite={userSite}
+                      vsSite={vsSite}
+                      activeSite={activeSite}
+                      tooltipCompareDomain={tooltipCompareDomain}
+                      result={result}
+                    />
+                  </div>
                 </div>
                 <ScreenshotFrame
                   site={splitRightSite}

@@ -580,7 +580,7 @@ export default function AuditDashboard() {
         {/* Top bar — Compare shows competitive status instead of domain breadcrumb */}
         <header
           className={cn(
-            "flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border bg-background/90 backdrop-blur px-4 py-2 md:px-6",
+            "flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border bg-background/90 backdrop-blur px-4 py-2",
             activeSection === "compare" ? "min-h-14" : "h-14 min-h-14 justify-end"
           )}
         >
@@ -633,7 +633,7 @@ export default function AuditDashboard() {
         )}
 
         {/* Section content — Compare uses full main width so screenshot + insights can sit side-by-side */}
-        <main className="flex-1 overflow-y-auto p-5 md:p-7">
+        <main className="flex-1 overflow-y-auto px-4 py-5 md:py-7">
           <div
             className={cn(
               activeSection === "compare" ? "w-full max-w-none" : "max-w-5xl mx-auto"
