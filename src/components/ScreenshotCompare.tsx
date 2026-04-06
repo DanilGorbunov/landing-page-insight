@@ -81,6 +81,7 @@ import {
   annotationPreview,
   type SectionOrderKey,
 } from "@/lib/compareDecisionMetrics";
+import { buildSimulateItems, getSimulateOverlayPercentRect } from "@/lib/simulateWhatIf";
 import type { SectionDeepDivePayload } from "@/components/CompareDecisionPanels";
 import {
   type ToolbarContext,
@@ -636,6 +637,7 @@ function ScreenshotFrame({
   attentionOverlay,
   zoneTooltipFor,
   onZoneMore,
+  simulateOverlayRows,
 }: {
   site: SiteEntry;
   showZones: boolean;
@@ -666,6 +668,8 @@ function ScreenshotFrame({
     loading: boolean;
     showPlaceholder: boolean;
   } | null;
+  /** What-if Simulator: green dashed zones on your screenshot when items are checked. */
+  simulateOverlayRows?: Array<{ sectionKey: string; pillText: string }> | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [first5sFoldPct, setFirst5sFoldPct] = useState<number | null>(null);
@@ -808,6 +812,28 @@ function ScreenshotFrame({
               : undefined
           }
         />
+        {site.isUser && simulateOverlayRows && simulateOverlayRows.length > 0 && (
+          <>
+            {simulateOverlayRows.map((row) => {
+              const cta = site.annotations.find((a) => a.sectionKey === "CTA");
+              const rect = getSimulateOverlayPercentRect(
+                row.sectionKey as SectionOrderKey,
+                cta ? { top: cta.top, height: cta.height } : null
+              );
+              return (
+                <div
+                  key={row.sectionKey}
+                  className="pointer-events-none absolute left-2 right-2 z-[20] rounded-lg border-2 border-dashed border-[#1D9E75] bg-[rgba(29,158,117,0.08)] transition-opacity duration-300 ease-out"
+                  style={{ top: `${rect.top}%`, height: `${rect.height}%` }}
+                >
+                  <span className="absolute left-2 top-2 max-w-[min(100%,calc(100%-1rem))] truncate rounded-full border border-[#1D9E75]/40 bg-[#1D9E75]/18 px-2 py-0.5 text-[10px] font-semibold text-[#0d5c44] shadow-sm dark:text-[#8ee8c8]">
+                    {row.pillText}
+                  </span>
+                </div>
+              );
+            })}
+          </>
+        )}
         {attentionOverlay?.loading && overlayMode === "attention" && (
           <div className="pointer-events-none absolute inset-0 z-[24] flex flex-col items-center justify-center gap-2 rounded-xl bg-background/75 backdrop-blur-sm px-4 text-center transition-opacity duration-300">
             <span className="text-2xl" aria-hidden>
@@ -1468,6 +1494,31 @@ export function ScreenshotCompare({
     };
   }, [result, sites, userSite, activeSite.domain]);
 
+  const simulateItems = useMemo(
+    () => buildSimulateItems(result, decisionBundle.gapItems),
+    [result, decisionBundle.gapItems]
+  );
+  const [simulateChecked, setSimulateChecked] = useState<Record<string, boolean>>({});
+  const competitorOverallScores = useMemo(
+    () => sites.filter((s) => !s.isUser).map((s) => s.overallScore).filter((n): n is number => n != null),
+    [sites]
+  );
+  const onSimulateToggle = useCallback((id: string, checked: boolean) => {
+    setSimulateChecked((prev) => ({ ...prev, [id]: checked }));
+  }, []);
+  const simulateOverlayRows = useMemo(() => {
+    const rows = simulateItems.filter((i) => simulateChecked[i.id]);
+    const byKey = new Map<string, { sectionKey: string; pillText: string }>();
+    for (const r of rows) {
+      const short = r.oneLineFix.length > 72 ? `${r.oneLineFix.slice(0, 69)}…` : r.oneLineFix;
+      const pill = `Add: ${short}`;
+      const prev = byKey.get(r.sectionKey);
+      if (!prev) byKey.set(r.sectionKey, { sectionKey: r.sectionKey, pillText: pill });
+      else byKey.set(r.sectionKey, { sectionKey: r.sectionKey, pillText: `${prev.pillText} · ${pill}` });
+    }
+    return [...byKey.values()];
+  }, [simulateItems, simulateChecked]);
+
   const competitorAhead =
     !activeSite.isUser &&
     userSite.overallScore != null &&
@@ -1793,6 +1844,10 @@ export function ScreenshotCompare({
       attentionInsight={attentionInsight}
       toolbarHelpCards={toolbarHelpCards}
       onDismissToolbarHelp={dismissToolbarHelp}
+      simulateItems={simulateItems}
+      simulateChecked={simulateChecked}
+      onSimulateToggle={onSimulateToggle}
+      competitorOverallScores={competitorOverallScores}
     />
   );
 
@@ -2274,6 +2329,7 @@ export function ScreenshotCompare({
                         attentionOverlay={getAttentionOverlay(activeSite)}
                         zoneTooltipFor={showZones ? zoneTooltipForSite(activeSite) : undefined}
                         onZoneMore={showZones ? openSectionMore : undefined}
+                        simulateOverlayRows={activeSite.isUser ? simulateOverlayRows : null}
                       />
                     </div>
                   </div>
@@ -2342,6 +2398,7 @@ export function ScreenshotCompare({
                         attentionOverlay={getAttentionOverlay(splitLeftSite, "left")}
                         zoneTooltipFor={showZones ? zoneTooltipForSite(splitLeftSite) : undefined}
                         onZoneMore={showZones ? openSectionMore : undefined}
+                        simulateOverlayRows={splitLeftSite.isUser ? simulateOverlayRows : null}
                       />
                     </div>
                   </div>
@@ -2400,6 +2457,7 @@ export function ScreenshotCompare({
                         attentionOverlay={getAttentionOverlay(splitRightSite, "right")}
                         zoneTooltipFor={showZones ? zoneTooltipForSite(splitRightSite) : undefined}
                         onZoneMore={showZones ? openSectionMore : undefined}
+                        simulateOverlayRows={splitRightSite.isUser ? simulateOverlayRows : null}
                       />
                     </div>
                   </div>

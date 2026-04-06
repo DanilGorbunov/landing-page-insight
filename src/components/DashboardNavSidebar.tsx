@@ -20,7 +20,8 @@ import {
 import { CompareHeaderSiteTabs } from "@/components/CompareDecisionPanels";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { CompareSiteTab } from "@/lib/compareDecisionMetrics";
-import { cn } from "@/lib/utils";
+import { cn, parseSectionScores, ensureScore } from "@/lib/utils";
+import { weightedOverallFromSections } from "@/lib/insightsProjection";
 import type { AnalysisResult } from "@/types/api";
 
 // ─── Nav config (shared by /full-insights and /history) ────────────────────────
@@ -32,8 +33,10 @@ interface NavItem {
   group: string;
 }
 
+/** Pinned above all groups — shown on every dashboard page that uses this sidebar. */
+const COMPARE_NAV_ITEM: NavItem = { id: "compare", label: "Compare", icon: RefreshCw, group: "MAIN" };
+
 const NAV_ITEMS: NavItem[] = [
-  { id: "compare", label: "Compare", icon: RefreshCw, group: "MAIN" },
   { id: "overview", label: "Overview", icon: LayoutDashboard, group: "MAIN" },
   { id: "performance", label: "Performance", icon: BarChart3, group: "MAIN" },
   { id: "history", label: "History", icon: History, group: "MAIN" },
@@ -61,10 +64,25 @@ function getNavBadge(
     return { text: String(historyCount), variant: "good" };
   }
   if (!result) return null;
+  if (id === "overview") {
+    const synth = result.synthesis?.overall_score;
+    const score =
+      synth != null ? ensureScore(synth) : weightedOverallFromSections(parseSectionScores(result.userAnalysis));
+    if (score == null) return null;
+    return {
+      text: score.toFixed(1),
+      variant: score >= 7.5 ? "good" : score >= 5 ? "warn" : "bad",
+    };
+  }
   if (id === "performance") {
     const s = perfScore(result);
     if (s == null) return null;
     return { text: String(s), variant: s >= 70 ? "good" : s >= 50 ? "warn" : "bad" };
+  }
+  if (id === "compare") {
+    const n = result?.competitors?.length ?? 0;
+    if (!n) return null;
+    return { text: String(n), variant: "good" };
   }
   if (id === "competitors") {
     const n = result.competitors?.length ?? 0;
@@ -139,6 +157,39 @@ export function DashboardNavSidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2 scrollbar-hide" aria-label="Dashboard sections">
+        <div className="mb-1">
+          <Fragment key="compare-pinned">
+            <NavButton
+              item={COMPARE_NAV_ITEM}
+              active={activeNavId}
+              collapsed={collapsed}
+              onSelect={onSelect}
+              badge={getNavBadge("compare", result, historyCount)}
+            />
+            {compareSiteTabs &&
+              compareSiteTabs.sites.length > 0 &&
+              activeNavId === "compare" && (
+                <div
+                  className={cn(
+                    "mb-0.5 mt-0.5",
+                    collapsed ? "px-0.5" : "ml-3 pl-2 pr-1.5"
+                  )}
+                >
+                  <CompareHeaderSiteTabs
+                    sites={compareSiteTabs.sites}
+                    activeIdx={Math.min(
+                      compareSiteTabs.activeIdx,
+                      Math.max(0, compareSiteTabs.sites.length - 1)
+                    )}
+                    onSelect={compareSiteTabs.onSelect}
+                    analysisResult={compareSiteTabs.analysisResult}
+                    orientation="vertical"
+                    density={collapsed ? "compact" : "default"}
+                  />
+                </div>
+              )}
+          </Fragment>
+        </div>
         {NAV_GROUPS.map((group, groupIdx) => {
           const items = NAV_ITEMS.filter((n) => n.group === group);
           if (!items.length) return null;
@@ -153,29 +204,6 @@ export function DashboardNavSidebar({
                     onSelect={onSelect}
                     badge={getNavBadge(item.id, result, historyCount)}
                   />
-                  {item.id === "compare" &&
-                    compareSiteTabs &&
-                    compareSiteTabs.sites.length > 0 &&
-                    activeNavId === "compare" && (
-                      <div
-                        className={cn(
-                          "mb-1.5 mt-0.5",
-                          collapsed ? "px-0.5" : "ml-3 pl-2 pr-1.5"
-                        )}
-                      >
-                        <CompareHeaderSiteTabs
-                          sites={compareSiteTabs.sites}
-                          activeIdx={Math.min(
-                            compareSiteTabs.activeIdx,
-                            Math.max(0, compareSiteTabs.sites.length - 1)
-                          )}
-                          onSelect={compareSiteTabs.onSelect}
-                          analysisResult={compareSiteTabs.analysisResult}
-                          orientation="vertical"
-                          density={collapsed ? "compact" : "default"}
-                        />
-                      </div>
-                    )}
                 </Fragment>
               ))}
             </div>

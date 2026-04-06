@@ -109,6 +109,23 @@ const Index = () => {
     }
   }, [normalizeUrl]);
 
+  /** Full-insights “Re-audit”: navigate here with state to run a fresh pipeline (no cached competitors). */
+  const reauditHandledRef = useRef(false);
+  useEffect(() => {
+    if (location.pathname !== "/") reauditHandledRef.current = false;
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+    const st = location.state as { startFreshAnalysis?: { url: string } } | undefined;
+    if (!st?.startFreshAnalysis?.url) return;
+    if (reauditHandledRef.current) return;
+    reauditHandledRef.current = true;
+    const rawUrl = st.startFreshAnalysis.url;
+    navigate("/", { replace: true, state: {} });
+    void handleAnalyze(rawUrl, []);
+  }, [location.pathname, location.state, navigate, handleAnalyze]);
+
   const handleComplete = useCallback(
     (result: AnalysisResult | null) => {
       const urlToSave = url || "";

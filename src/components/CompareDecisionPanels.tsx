@@ -45,6 +45,7 @@ import {
   ClipboardCopy,
   Crown,
   Flame,
+  FlaskConical,
   LayoutDashboard,
   Lightbulb,
   Rocket,
@@ -55,6 +56,13 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import {
+  projectOverallScore,
+  quickWinsSummary,
+  simulateRankAfterScore,
+  sumCheckedPoints,
+  type SimulateImprovementItem,
+} from "@/lib/simulateWhatIf";
 
 function sColor(s: number) {
   if (s >= 7.5) return "text-primary";
@@ -374,16 +382,46 @@ export type SectionDeepDivePayload = {
   watchPoints: string[];
 };
 
-type DecisionPanelTab = "overview" | "insight" | "plan" | "impact" | "compete" | "scores";
+type DecisionPanelTab = "overview" | "insight" | "plan" | "simulate" | "impact" | "compete" | "scores";
 
 const DECISION_PANEL_TABS: { id: DecisionPanelTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "insight", label: "Insight" },
   { id: "plan", label: "Plan" },
+  { id: "simulate", label: "SIMULATE" },
   { id: "impact", label: "Impact" },
   { id: "compete", label: "Compete" },
   { id: "scores", label: "Scores" },
 ];
+
+function useAnimatedNumber(target: number, durationMs = 300) {
+  const [display, setDisplay] = useState(target);
+  const displayRef = useRef(target);
+
+  useEffect(() => {
+    const from = displayRef.current;
+    const t0 = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / durationMs);
+      const eased = 1 - (1 - p) * (1 - p);
+      const v = from + (target - from) * eased;
+      displayRef.current = v;
+      setDisplay(v);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs]);
+
+  return display;
+}
+
+function effortSimulateClass(e: SimulateImprovementItem["effort"]) {
+  if (e === "Low") return "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/35";
+  if (e === "Med") return "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/35";
+  return "bg-red-500/15 text-red-800 dark:text-red-300 border-red-500/35";
+}
 
 export function DecisionActionPanel({
   result,
@@ -429,6 +467,10 @@ export function DecisionActionPanel({
   attentionInsight = null,
   toolbarHelpCards = [],
   onDismissToolbarHelp,
+  simulateItems = [],
+  simulateChecked = {},
+  onSimulateToggle,
+  competitorOverallScores = [],
 }: {
   result: AnalysisResult;
   activeSite: SiteLite;
@@ -504,6 +546,12 @@ export function DecisionActionPanel({
   /** Stacked “what / problem / how” cards from toolbar button clicks (newest first). */
   toolbarHelpCards?: Array<{ id: string } & ToolbarHintContent>;
   onDismissToolbarHelp?: (id: string) => void;
+  /** What-if Simulator checklist (built from gaps + section gaps). */
+  simulateItems?: SimulateImprovementItem[];
+  simulateChecked?: Record<string, boolean>;
+  onSimulateToggle?: (id: string, checked: boolean) => void;
+  /** Competitor overall scores (/10) for projected rank. */
+  competitorOverallScores?: number[];
 }) {
   const [panelTab, setPanelTab] = useState<DecisionPanelTab>("overview");
   const [heroOpen, setHeroOpen] = useState(true);
@@ -595,6 +643,24 @@ export function DecisionActionPanel({
     return buildDeltaLensItems(result, userBy, lensVs.bySection, lensVs.domain);
   }, [result, lensAnnotations, lensVs]);
 
+  const simulateGain = useMemo(
+    () => sumCheckedPoints(simulateItems, simulateChecked),
+    [simulateItems, simulateChecked]
+  );
+  const simulateProjected = useMemo(
+    () => projectOverallScore(userOverall, simulateGain),
+    [userOverall, simulateGain]
+  );
+  const animatedSimulateScore = useAnimatedNumber(simulateProjected, 300);
+  const simulateRankInfo = useMemo(
+    () => simulateRankAfterScore(simulateProjected, competitorOverallScores),
+    [simulateProjected, competitorOverallScores]
+  );
+  const simulateQuickWins = useMemo(
+    () => quickWinsSummary(simulateItems, userOverall, competitorOverallScores),
+    [simulateItems, userOverall, competitorOverallScores]
+  );
+
   /** Balanced lens (or Analyze overlay): show standard problem + 3s insight. Visual/Hot/Delta replace with filtered views. */
   const defaultInsightProblemCard =
     toolbarContext.analyzeMode !== null || toolbarContext.zoneLens === "balanced";
@@ -650,13 +716,15 @@ export function DecisionActionPanel({
                 ? Lightbulb
                 : id === "plan"
                   ? Rocket
-                  : id === "impact"
-                    ? TrendingUp
-                    : id === "compete"
-                      ? Crown
-                      : id === "scores"
-                        ? BarChart3
-                        : null;
+                  : id === "simulate"
+                    ? FlaskConical
+                    : id === "impact"
+                      ? TrendingUp
+                      : id === "compete"
+                        ? Crown
+                        : id === "scores"
+                          ? BarChart3
+                          : null;
           return (
             <button
               key={id}
@@ -1019,6 +1087,108 @@ export function DecisionActionPanel({
               )}
             </div>
           </>
+        )}
+
+        {panelTab === "simulate" && (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-primary/25 bg-gradient-to-b from-primary/[0.07] to-transparent px-3 py-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <FlaskConical className="h-4 w-4 text-primary shrink-0" aria-hidden />
+                <p className="text-[11px] font-bold text-foreground">What-if Simulator</p>
+                <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Preview</span>
+              </div>
+              <div>
+                  <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1.5">Projected overall</p>
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-2xl font-bold tabular-nums text-primary">{animatedSimulateScore.toFixed(1)}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      /10
+                      <span className="mx-1 text-foreground/80">
+                        {(userOverall ?? 5).toFixed(1)} → {simulateProjected.toFixed(1)} (+{simulateGain.toFixed(1)})
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                      style={{ width: `${Math.min(100, (simulateProjected / 10) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] text-foreground">
+                    {simulateRankInfo.isTop ? (
+                      <>
+                        Projected rank: <span className="font-bold text-primary tabular-nums">#1</span>{" "}
+                        <span aria-hidden>🏆</span>
+                        <span className="text-muted-foreground"> — ahead of benchmarks in this set</span>
+                      </>
+                    ) : (
+                      <>
+                        Projected rank: <span className="font-bold tabular-nums">#{simulateRankInfo.rank}</span> of{" "}
+                        {simulateRankInfo.total}
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/80 bg-card/60 px-2.5 py-2">
+                  <p className="text-[9px] font-bold uppercase text-muted-foreground mb-1">Quick wins</p>
+                  <p className="text-[11px] leading-snug text-foreground">{simulateQuickWins.rankLine}</p>
+                </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Improvements</p>
+              {simulateItems.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-2">
+                  No improvement rows yet — run an analysis with gaps or section scores.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {simulateItems.map((item) => {
+                    const checked = !!simulateChecked[item.id];
+                    return (
+                      <li
+                        key={item.id}
+                        className={cn(
+                          "rounded-xl border px-2.5 py-2 transition-colors",
+                          checked ? "border-[#1D9E75]/50 bg-[#1D9E75]/[0.06]" : "border-border bg-muted/15"
+                        )}
+                      >
+                        <label className="flex cursor-pointer items-start gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => onSimulateToggle?.(item.id, e.target.checked)}
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-1.5 gap-y-1">
+                              <span className="text-[11px] font-bold text-foreground">{item.sectionLabel}</span>
+                              <span className="inline-flex items-center rounded-full border border-[#1D9E75]/40 bg-[#1D9E75]/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#0f6b4f] dark:text-[#5ed9a8]">
+                                +{item.points.toFixed(1)} pts
+                              </span>
+                              <span
+                                className={cn(
+                                  "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                                  effortSimulateClass(item.effort)
+                                )}
+                              >
+                                {item.effort}
+                              </span>
+                            </span>
+                            <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{item.oneLineFix}</span>
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <p className="text-[10px] leading-snug text-muted-foreground border-t border-border pt-2">
+              Estimates based on benchmarks, not guarantees.
+            </p>
+          </div>
         )}
 
         {panelTab === "impact" && (

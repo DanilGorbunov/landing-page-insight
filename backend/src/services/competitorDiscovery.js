@@ -46,9 +46,21 @@ function parseClaudeCompetitors(text) {
   let raw = (text || "").trim();
   const codeMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeMatch) raw = codeMatch[1].trim();
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter((x) => typeof x === "string" && x.length > 0);
+  const arrMatch = raw.match(/\[[\s\S]*\]/);
+  if (arrMatch) raw = arrMatch[0];
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (Array.isArray(parsed)) {
+    return parsed.filter((x) => typeof x === "string" && x.length > 0);
+  }
+  if (parsed && typeof parsed === "object" && Array.isArray(parsed.domains)) {
+    return parsed.domains.filter((x) => typeof x === "string" && x.length > 0);
+  }
+  return [];
 }
 
 const TAVILY_CHECK_TIMEOUT_MS = 4000;
@@ -87,6 +99,79 @@ async function tavilyValidateDomain(domain, apiKey) {
 const PAGE_CONTEXT_MAX_CHARS = 1200;
 
 /**
+ * Instructions: classify business model → niche → pick same-type competitors → validate.
+ * Keeps output as JSON array only (no API contract change).
+ */
+function buildDiscoveryUserPrompt(domain, contextBlock) {
+  return `You find DIRECT COMPETITORS for homepage comparison. Follow these steps internally; your ONLY output is the final JSON array of domains.
+
+STEP 1 — CLASSIFY SITE TYPE (from homepage signals in the page content below)
+
+PRIMARY CTA signals:
+- "Book a call" / "Contact us" / "Hire us" → likely AGENCY / SERVICES
+- "Sign up free" / "Start trial" / "Get started" → likely SAAS
+- "Request demo" → ambiguous; use pricing + content + nav
+
+PRICING signals:
+- Monthly/annual fixed tiers ($X/mo) → likely SAAS
+- "Custom pricing" / "Contact for pricing" → likely AGENCY
+- No pricing page → often AGENCY / services
+
+CONTENT signals:
+- Case studies / Our work / Portfolio → likely AGENCY
+- Features / Integrations / API docs → likely SAAS
+
+SOCIAL PROOF signals:
+- Clutch / Dribbble / Behance → often AGENCY
+- G2 / Product Hunt / AppSumo → often SAAS
+- Client logos "we worked with" → often AGENCY
+- User logos "trusted by X users" → often SAAS
+
+NAV signals:
+- Team / About with people photos → often AGENCY
+- Changelog / Status page → often SAAS
+
+STEP 2 — DETERMINE NICHE (internal reasoning only)
+
+If AGENCY: infer industries served + services (e.g. "SaaS design agency", "fintech UX agency", "brand studio").
+If SAAS: infer category + user + use case (e.g. "project management for teams", "sales intelligence").
+
+If the page is clearly ECOMMERCE (catalog, cart, SKUs) or MARKETPLACE (two-sided), classify that way and match direct retail/marketplace competitors — not agencies.
+
+STEP 3 — FIND COMPETITORS (same business model ONLY)
+
+If AGENCY: think "[niche] agency" / similar services + industry — suggest OTHER AGENCIES/STUDIOS, not SaaS products.
+If SAAS: think "[category] software alternatives" — suggest OTHER SAAS PRODUCTS, not agencies.
+
+NEVER suggest SaaS tools as competitors for an agency site.
+NEVER suggest agencies as competitors for a SaaS product site.
+
+STEP 4 — VALIDATE EACH CANDIDATE (discard if any fail)
+
+For each remaining candidate ask:
+1. Same buyer? (similar role, similar company size)
+2. Same core problem solved?
+3. Would a real customer shortlist BOTH this site and ${domain}?
+
+Remove any that fail.
+
+---
+
+Target site: ${domain}
+${contextBlock}
+
+OUTPUT FORMAT (strict):
+Return ONLY a JSON array of exactly 4 homepage domain strings (no paths, no markdown).
+Example: ["competitor1.com", "competitor2.com", "competitor3.com", "competitor4.com"]
+
+Rules:
+- Real companies with public marketing sites
+- Same business model as classified above (agency vs SaaS vs ecommerce vs marketplace)
+- Direct competitors only; exclude ${domain} itself and obvious non-competitors
+- Use page content above to infer business model — not the domain name alone`;
+}
+
+/**
  * Find competitor sites: Claude for discovery, optional Tavily for validation.
  * @param {string} domainOrProduct - e.g. "myapp.com" or "https://apollo.io"
  * @param {{ pageMarkdown?: string }} [opts] - optional page content for better context
@@ -100,26 +185,20 @@ export async function findCompetitors(domainOrProduct, opts = {}) {
   const client = new Anthropic({ apiKey });
 
   const contextBlock = opts.pageMarkdown
-    ? `\nHere is the actual content from ${domain}'s landing page (use this to understand what the company does):\n---\n${opts.pageMarkdown.slice(0, PAGE_CONTEXT_MAX_CHARS)}\n---\n`
-    : "";
+    ? `Here is content from ${domain}'s landing page (use for classification and niche):\n---\n${opts.pageMarkdown.slice(0, PAGE_CONTEXT_MAX_CHARS)}\n---\n`
+    : "No page body was provided — classify from the domain and public knowledge, but prefer conservative same-industry competitors.\n";
+
+  const userContent = buildDiscoveryUserPrompt(domain, contextBlock);
 
   let response;
   try {
     response = await client.messages.create({
       model: DISCOVERY_MODEL,
-      max_tokens: 200,
+      max_tokens: 400,
       messages: [
         {
           role: "user",
-          content: `What are the 4 most direct competitors of ${domain}?
-${contextBlock}
-Return ONLY a JSON array of domains, nothing else.
-Example: ["competitor1.com", "competitor2.com"]
-Rules:
-- Only homepage domains (no /blog/ paths)
-- Direct competitors offering the SAME type of product/service
-- Real companies with landing pages
-- Determine the company's actual business from the page content above, not just the domain name`,
+          content: userContent,
         },
       ],
     });

@@ -8,6 +8,8 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
+  Lightbulb,
+  RefreshCw,
 } from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
 import { readFullInsightsPayload } from "@/lib/reportSession";
@@ -182,8 +184,35 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
   const perf = perfScore(result);
   const lhSeo = lighthouseSeoScore(result);
 
+  const domain = getDomain(url);
+
   return (
     <div className="space-y-6">
+      <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-transparent px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">Report overview</p>
+          <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+            At-a-glance scores, gaps, and projected trajectory for{" "}
+            <span className="font-medium text-foreground">{domain}</span>. Use{" "}
+            <span className="font-medium text-foreground">Compare</span> for screenshots, zones, and the insight panel.
+          </p>
+          {result.siteType ? (
+            <p className="mt-2">
+              <span className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                Site type: {result.siteType}
+              </span>
+            </p>
+          ) : null}
+        </div>
+        <Link
+          to="/full-insights?section=compare"
+          className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-full bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-all hover:brightness-110 sm:self-center"
+        >
+          Open Compare
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      </div>
+
       {/* Hero metrics row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {/* Overall score */}
@@ -451,7 +480,7 @@ export default function AuditDashboard() {
   const payload = readFullInsightsPayload();
   const [activeSection, setActiveSection] = useState(() => {
     const s = new URLSearchParams(window.location.search).get("section");
-    return s && FULL_INSIGHTS_SECTION_IDS.has(s) ? s : "compare";
+    return s && FULL_INSIGHTS_SECTION_IDS.has(s) ? s : "overview";
   });
   const [compareSiteIdx, setCompareSiteIdx] = useState(0);
   const compareToolbarHostRef = useRef<HTMLDivElement | null>(null);
@@ -553,6 +582,18 @@ export default function AuditDashboard() {
     }
   };
 
+  const handleReaudit = () => {
+    if (
+      !window.confirm(
+        "Run a full new analysis from scratch? The site will be scraped again and competitors discovered fresh."
+      )
+    ) {
+      return;
+    }
+    toast.info("Starting full re-audit…");
+    navigate("/", { state: { startFreshAnalysis: { url } } });
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <DashboardNavSidebar
@@ -592,7 +633,18 @@ export default function AuditDashboard() {
           )}
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             {activeSection === "compare" && (
-              <span className="hidden h-4 w-px shrink-0 bg-border/70 sm:block" aria-hidden />
+              <>
+                <button
+                  type="button"
+                  onClick={handleReaudit}
+                  aria-label="Re-audit from scratch"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground hover:border-primary/40 hover:text-primary"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">Re-audit</span>
+                </button>
+                <span className="hidden h-4 w-px shrink-0 bg-border/70 sm:block" aria-hidden />
+              </>
             )}
             <button
               type="button"
