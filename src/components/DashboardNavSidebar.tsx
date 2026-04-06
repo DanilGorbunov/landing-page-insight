@@ -20,7 +20,7 @@ import {
 import { CompareHeaderSiteTabs } from "@/components/CompareDecisionPanels";
 import { ThemeToggle } from "@/components/theme-toggle";
 import type { CompareSiteTab } from "@/lib/compareDecisionMetrics";
-import { cn, getDomain } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { AnalysisResult } from "@/types/api";
 
 // ─── Nav config (shared by /full-insights and /history) ────────────────────────
@@ -33,8 +33,8 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard, group: "MAIN" },
   { id: "compare", label: "Compare", icon: RefreshCw, group: "MAIN" },
+  { id: "overview", label: "Overview", icon: LayoutDashboard, group: "MAIN" },
   { id: "performance", label: "Performance", icon: BarChart3, group: "MAIN" },
   { id: "history", label: "History", icon: History, group: "MAIN" },
   { id: "actions", label: "Action Plan", icon: Target, group: "ACTION" },
@@ -80,7 +80,7 @@ export interface DashboardNavSidebarProps {
   onSelect: (id: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  /** When set, shows domain + score in the sidebar; otherwise a short hint. */
+  /** When set, used for Upgrade / created date; URL and score are not shown in the nav chrome. */
   reportContext: { url: string; overallScore: number; createdAt?: string } | null;
   /** When true with `reportContext`, show Upgrade in the sidebar (moved from report header). Default true. */
   showUpgrade?: boolean;
@@ -109,21 +109,11 @@ export function DashboardNavSidebar({
   onNewAnalysis,
   compareSiteTabs = null,
 }: DashboardNavSidebarProps) {
-  const domain = reportContext ? getDomain(reportContext.url) : null;
-  const overallScore = reportContext?.overallScore ?? null;
   const createdAt = reportContext?.createdAt;
   const createdLabel =
     createdAt != null && createdAt !== ""
       ? new Date(createdAt).toLocaleDateString(undefined, { dateStyle: "medium" })
       : null;
-  const scoreColor =
-    overallScore != null
-      ? overallScore >= 7.5
-        ? "text-primary"
-        : overallScore >= 5
-          ? "text-amber-500"
-          : "text-red-500"
-      : "";
 
   return (
     <aside
@@ -132,7 +122,7 @@ export function DashboardNavSidebar({
         collapsed ? "w-14" : "w-52"
       )}
     >
-      <div className={cn("flex h-14 shrink-0 items-center border-b border-border px-3 gap-2", !collapsed && "justify-between")}>
+      <div className={cn("flex h-14 shrink-0 items-center px-3 gap-2", !collapsed && "justify-between")}>
         {!collapsed && (
           <Link to="/" className="font-bold text-sm text-primary tracking-tight truncate">
             LandingLens
@@ -148,32 +138,12 @@ export function DashboardNavSidebar({
         </button>
       </div>
 
-      {!collapsed && (
-        <div className="px-3 py-3 border-b border-border shrink-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Analysing</p>
-          {domain != null && overallScore != null ? (
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-medium text-foreground truncate">{domain}</p>
-              <span className={cn("text-sm font-bold tabular-nums shrink-0", scoreColor)}>{overallScore.toFixed(1)}</span>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground leading-snug">Open a report to see your latest score here.</p>
-          )}
-        </div>
-      )}
-
       <nav className="flex-1 overflow-y-auto py-2 scrollbar-hide" aria-label="Dashboard sections">
-        {NAV_GROUPS.map((group) => {
+        {NAV_GROUPS.map((group, groupIdx) => {
           const items = NAV_ITEMS.filter((n) => n.group === group);
           if (!items.length) return null;
           return (
-            <div key={group}>
-              {!collapsed && (
-                <p className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70 border-t border-border/60 first:border-t-0 first:pt-2">
-                  {group}
-                </p>
-              )}
-              {collapsed && <div className="my-1 mx-3 h-px bg-border/50 first:hidden" />}
+            <div key={group} className={cn(groupIdx > 0 && "mt-2")}>
               {items.map((item) => (
                 <Fragment key={item.id}>
                   <NavButton
@@ -190,14 +160,9 @@ export function DashboardNavSidebar({
                       <div
                         className={cn(
                           "mb-1.5 mt-0.5",
-                          collapsed ? "px-0.5" : "ml-3 pl-2 pr-1.5 border-l-2 border-primary/20"
+                          collapsed ? "px-0.5" : "ml-3 pl-2 pr-1.5"
                         )}
                       >
-                        {!collapsed && (
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-1.5 px-0.5">
-                            Sites
-                          </p>
-                        )}
                         <CompareHeaderSiteTabs
                           sites={compareSiteTabs.sites}
                           activeIdx={Math.min(
@@ -218,7 +183,7 @@ export function DashboardNavSidebar({
         })}
       </nav>
 
-      <div className="shrink-0 border-t border-border px-2 py-2 space-y-2">
+      <div className="shrink-0 px-2 py-2 space-y-2">
         {!collapsed && createdLabel && (
           <p className="px-1 text-[11px] text-muted-foreground tabular-nums" title="Report created">
             Created {createdLabel}
@@ -252,7 +217,7 @@ export function DashboardNavSidebar({
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-border py-2">
+      <div className="shrink-0 py-2">
         <SidebarAction icon={Plus} label="New Analysis" collapsed={collapsed} onClick={onNewAnalysis} />
       </div>
     </aside>

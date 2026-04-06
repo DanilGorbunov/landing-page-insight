@@ -580,8 +580,8 @@ export default function AuditDashboard() {
         {/* Top bar — Compare shows competitive status instead of domain breadcrumb */}
         <header
           className={cn(
-            "flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border bg-background/90 backdrop-blur px-4 py-2",
-            activeSection === "compare" ? "min-h-14" : "h-14 min-h-14 justify-end"
+            "flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 bg-background/90 backdrop-blur p-4",
+            activeSection === "compare" ? "min-h-14" : "justify-end"
           )}
         >
           {activeSection === "compare" && (
@@ -632,11 +632,21 @@ export default function AuditDashboard() {
           </div>
         )}
 
-        {/* Section content — Compare uses full main width so screenshot + insights can sit side-by-side */}
-        <main className="flex-1 overflow-y-auto px-4 py-5 md:py-7">
+        {/* Compare: main fills below header; flex column so ScreenshotCompare can split center | panel */}
+        <main
+          className={cn(
+            "flex-1 px-4",
+            activeSection === "compare" ? "pb-0" : "pb-5 md:pb-7",
+            activeSection === "compare"
+              ? "flex min-h-0 flex-col overflow-hidden pt-0"
+              : "overflow-y-auto pt-4"
+          )}
+        >
           <div
             className={cn(
-              activeSection === "compare" ? "w-full max-w-none" : "max-w-5xl mx-auto"
+              activeSection === "compare"
+                ? "flex w-full max-w-none min-h-0 flex-1 flex-col"
+                : "max-w-5xl mx-auto"
             )}
           >
             {activeSection !== "compare" && (
@@ -649,15 +659,32 @@ export default function AuditDashboard() {
                 </p>
               </>
             )}
-            {tip && <TipCard tip={tip} />}
-            <SectionContent
-              id={activeSection}
-              result={result}
-              url={url}
-              compareSiteIdx={activeSection === "compare" ? compareSiteIdx : undefined}
-              onCompareSiteIdxChange={activeSection === "compare" ? setCompareSiteIdx : undefined}
-              compareToolbarSlot={activeSection === "compare" ? compareToolbarHost : undefined}
-            />
+            {tip && (
+              <div className={cn(activeSection === "compare" && "shrink-0")}>
+                <TipCard tip={tip} />
+              </div>
+            )}
+            {activeSection === "compare" ? (
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <SectionContent
+                  id={activeSection}
+                  result={result}
+                  url={url}
+                  compareSiteIdx={compareSiteIdx}
+                  onCompareSiteIdxChange={setCompareSiteIdx}
+                  compareToolbarSlot={compareToolbarHost}
+                />
+              </div>
+            ) : (
+              <SectionContent
+                id={activeSection}
+                result={result}
+                url={url}
+                compareSiteIdx={undefined}
+                onCompareSiteIdxChange={undefined}
+                compareToolbarSlot={undefined}
+              />
+            )}
           </div>
         </main>
       </div>

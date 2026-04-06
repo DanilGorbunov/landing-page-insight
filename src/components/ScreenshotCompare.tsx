@@ -435,8 +435,8 @@ function AnnotationPin({
     ann.summary.length > 200 ? `${ann.summary.slice(0, 200).trim()}…` : ann.summary;
   const pinAction =
     ann.score != null && ann.score < 7
-      ? "Натисніть, щоб розгорнути текст; «More» відкриє дії в правій панелі."
-      : "Сильніша секція — порівняйте з відповідною зоною на скріні конкурента.";
+      ? "Click to expand the text; “More” opens actions in the right panel."
+      : "Stronger section — compare with the matching zone on the competitor screenshot.";
   return (
     <div className="absolute z-[25] pointer-events-auto" style={{ top: `${ann.top + ann.height / 2}%`, [side]: "6px", transform: "translateY(-50%)", maxWidth: "min(320px,44vw)" }}>
       <HintTooltip
@@ -715,7 +715,7 @@ function ScreenshotFrame({
 
   if (!site.screenshotUrl) return <div className="flex items-center justify-center min-h-[200px] text-sm text-muted-foreground bg-muted/20 rounded-xl">No screenshot for {site.domain}</div>;
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-1.5">
       {attentionOverlay && overlayMode === "attention" && !attentionOverlay.loading && (
         <div className="flex shrink-0 flex-wrap items-center justify-center gap-1 rounded-lg border border-border/80 bg-muted/40 px-1.5 py-1">
           <button
@@ -742,7 +742,7 @@ function ScreenshotFrame({
       )}
       <div
         ref={scrollRef}
-        className="relative max-h-[min(82vh,1200px)] overflow-auto rounded-xl border border-border bg-muted/20 scrollbar-hide"
+        className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-muted/20 scrollbar-hide"
         style={{ cursor: zoom > 1 ? "grab" : undefined }}
       >
       <div
@@ -829,7 +829,7 @@ function SliderCompare({ left, right, leftLabel, rightLabel }: { left: SiteEntry
   const [pct, setPct] = useState(50);
   if (!left.screenshotUrl || !right.screenshotUrl) return null;
   return (
-    <div className="space-y-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
       <HintTooltip
         side="top"
         title={HINT_CONTROLS.slider.title}
@@ -842,16 +842,18 @@ function SliderCompare({ left, right, leftLabel, rightLabel }: { left: SiteEntry
           max={95}
           value={pct}
           onChange={(e) => setPct(Number(e.target.value))}
-          className="w-full h-1.5 accent-primary cursor-ew-resize rounded-full"
-          aria-label="Порівняння: перетягніть межу між скрінами"
+          className="w-full h-1.5 shrink-0 accent-primary cursor-ew-resize rounded-full"
+          aria-label="Comparison: drag the divider between screenshots"
         />
       </HintTooltip>
-      <div className="relative rounded-xl border border-border overflow-hidden bg-muted/30 select-none">
-        <img src={right.screenshotUrl} alt={rightLabel} className="w-full h-auto block" draggable={false} />
-        <img src={left.screenshotUrl} alt={leftLabel} className="absolute top-0 left-0 w-full h-auto pointer-events-none" style={{ clipPath: `inset(0 ${100 - pct}% 0 0)` }} draggable={false} />
-        <div className="absolute top-0 bottom-0 w-0.5 bg-primary shadow-[0_0_12px_rgba(0,0,0,0.4)] z-30 pointer-events-none" style={{ left: `${pct}%`, transform: "translateX(-50%)" }} />
-        <div className="absolute bottom-2 left-2 z-30 rounded-md bg-background/90 px-2 py-1 text-[10px] font-bold text-foreground border border-border">{leftLabel}</div>
-        <div className="absolute bottom-2 right-2 z-30 rounded-md bg-background/90 px-2 py-1 text-[10px] font-bold text-foreground border border-border">{rightLabel}</div>
+      <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-muted/30 select-none scrollbar-hide">
+        <div className="relative min-h-[120px]">
+          <img src={right.screenshotUrl} alt={rightLabel} className="w-full h-auto block" draggable={false} />
+          <img src={left.screenshotUrl} alt={leftLabel} className="absolute top-0 left-0 w-full h-auto pointer-events-none" style={{ clipPath: `inset(0 ${100 - pct}% 0 0)` }} draggable={false} />
+          <div className="absolute top-0 bottom-0 w-0.5 bg-primary shadow-[0_0_12px_rgba(0,0,0,0.4)] z-30 pointer-events-none" style={{ left: `${pct}%`, transform: "translateX(-50%)" }} />
+          <div className="absolute bottom-2 left-2 z-30 rounded-md bg-background/90 px-2 py-1 text-[10px] font-bold text-foreground border border-border">{leftLabel}</div>
+          <div className="absolute bottom-2 right-2 z-30 rounded-md bg-background/90 px-2 py-1 text-[10px] font-bold text-foreground border border-border">{rightLabel}</div>
+        </div>
       </div>
     </div>
   );
@@ -895,13 +897,11 @@ function SiteTab({ site, active, onClick, delta }: { site: SiteEntry; active: bo
 function SplitSiteColumnPicker({
   sites,
   valueIdx,
-  otherIdx,
   onSelect,
   compact,
 }: {
   sites: SiteEntry[];
   valueIdx: number;
-  otherIdx: number;
   onSelect: (idx: number) => void;
   /** Tighter pill for stacked layout above section chips. */
   compact?: boolean;
@@ -942,7 +942,7 @@ function SplitSiteColumnPicker({
         target="_blank"
         rel="noopener noreferrer"
         className="shrink-0 rounded-md p-0.5 text-primary transition-colors hover:bg-primary/10"
-        aria-label="Відкрити сайт у новій вкладці"
+        aria-label="Open site in new tab"
       >
         <ExternalLink className={compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5"} />
       </a>
@@ -951,7 +951,7 @@ function SplitSiteColumnPicker({
           <button
             type="button"
             className="shrink-0 rounded-md p-0.5 text-primary transition-colors hover:bg-primary/10"
-            aria-label="Інший сайт для цієї колонки"
+            aria-label="Other site for this column"
           >
             <ChevronDown className={cn(compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5", "opacity-90")} aria-hidden />
           </button>
@@ -959,13 +959,9 @@ function SplitSiteColumnPicker({
         <DropdownMenuContent align="center" className="max-w-[min(280px,calc(100vw-2rem))]">
           {sites.map((s, i) => (
             <DropdownMenuItem
-              key={s.url}
-              disabled={sites.length > 1 && i === otherIdx}
+              key={`${i}-${s.url}`}
               className="gap-2"
-              onClick={() => {
-                if (sites.length > 1 && i === otherIdx) return;
-                onSelect(i);
-              }}
+              onClick={() => onSelect(i)}
             >
               {s.isUser && (
                 <span className="rounded bg-primary/15 px-1 py-0.5 text-[8px] font-bold uppercase text-primary">You</span>
@@ -1093,11 +1089,11 @@ function SectionChipsStrip({
               {gapRow && (
                 <div className="mt-2 border-t border-white/15 pt-2 space-y-1">
                   <p className="text-[10px] leading-snug text-amber-100/95">
-                    <span className="font-bold">Проблема: </span>
+                    <span className="font-bold">Issue: </span>
                     {gapRow.problem}
                   </p>
                   <p className="text-[10px] leading-snug text-emerald-100/95">
-                    <span className="font-bold">Рішення: </span>
+                    <span className="font-bold">Fix: </span>
                     {gapRow.recommendation}
                   </p>
                 </div>
@@ -1200,9 +1196,8 @@ export function ScreenshotCompare({
   const { safeLeft, safeRight } = useMemo(() => {
     const n = sites.length;
     if (n < 2) return { safeLeft: 0, safeRight: 0 };
-    let L = Math.min(Math.max(0, splitLeftIdx), n - 1);
-    let R = Math.min(Math.max(0, splitRightIdx), n - 1);
-    if (L === R) R = (L + 1) % n;
+    const L = Math.min(Math.max(0, splitLeftIdx), n - 1);
+    const R = Math.min(Math.max(0, splitRightIdx), n - 1);
     return { safeLeft: L, safeRight: R };
   }, [sites.length, splitLeftIdx, splitRightIdx]);
 
@@ -1291,20 +1286,22 @@ export function ScreenshotCompare({
   }, [analyzeMode, sites.length, viewMode]);
 
   const getAttentionOverlay = useCallback(
-    (site: SiteEntry) => {
+    (site: SiteEntry, splitColumn?: "left" | "right") => {
       if (effectiveOverlay !== "attention") return undefined;
       if (viewMode === "slider") return undefined;
       const data = attentionState.data;
       const loading = attentionState.loading;
       const err = attentionState.error;
-      const isLeftColumn = site.url === splitLeftSite?.url;
+      const isLeftColumn =
+        splitColumn != null ? splitColumn === "left" : site.url === splitLeftSite?.url;
       const realZones = isLeftColumn ? data?.your?.zones ?? null : data?.competitor?.zones ?? null;
       const useDemo = loading || err || !realZones?.length;
       const zones: typeof ATTENTION_DEMO_ZONES = useDemo ? ATTENTION_DEMO_ZONES : (realZones ?? ATTENTION_DEMO_ZONES);
+      const layerKey = splitColumn != null ? `att:${splitColumn}` : site.url;
       return {
         zones,
-        layerVisible: attentionLayerVisible[site.url] !== false,
-        onLayerVisibleChange: (v: boolean) => setAttentionLayerVisible((prev) => ({ ...prev, [site.url]: v })),
+        layerVisible: attentionLayerVisible[layerKey] !== false,
+        onLayerVisibleChange: (v: boolean) => setAttentionLayerVisible((prev) => ({ ...prev, [layerKey]: v })),
         loading,
         /** Demo + API zones always drive HeatmapOverlay; legacy gradient placeholder off. */
         showPlaceholder: false,
@@ -1388,13 +1385,6 @@ export function ScreenshotCompare({
       splitIdxInitRef.current = true;
     }
   }, [sites.length, defaultVsIdx, sitesKey]);
-
-  useEffect(() => {
-    if (sites.length < 2) return;
-    if (splitLeftIdx === splitRightIdx) {
-      setSplitRightIdx((splitLeftIdx + 1) % sites.length);
-    }
-  }, [splitLeftIdx, splitRightIdx, sites.length]);
 
   useEffect(() => {
     if (sites.length < 2) return;
@@ -1667,23 +1657,15 @@ export function ScreenshotCompare({
     });
   }, []);
 
-  const selectSplitLeft = useCallback(
-    (i: number) => {
-      if (sites.length < 2) return;
-      if (i === splitRightIdx) setSplitRightIdx(splitLeftIdx);
-      setSplitLeftIdx(i);
-    },
-    [sites.length, splitRightIdx, splitLeftIdx]
-  );
+  const selectSplitLeft = useCallback((i: number) => {
+    if (sites.length < 2) return;
+    setSplitLeftIdx(i);
+  }, [sites.length]);
 
-  const selectSplitRight = useCallback(
-    (i: number) => {
-      if (sites.length < 2) return;
-      if (i === splitLeftIdx) setSplitLeftIdx(splitRightIdx);
-      setSplitRightIdx(i);
-    },
-    [sites.length, splitLeftIdx, splitRightIdx]
-  );
+  const selectSplitRight = useCallback((i: number) => {
+    if (sites.length < 2) return;
+    setSplitRightIdx(i);
+  }, [sites.length]);
 
   const handlePrev = useCallback(() => {
     const next = activeIdx > 0 ? activeIdx - 1 : sites.length - 1;
@@ -1887,7 +1869,7 @@ export function ScreenshotCompare({
                   <p className="text-xs font-semibold leading-snug text-foreground">{HINT_CONTROLS.moreMenu.title}</p>
                   <p className="text-[11px] leading-relaxed text-muted-foreground">{HINT_CONTROLS.moreMenu.description}</p>
                   <p className="mt-1 border-t border-border pt-2 text-[11px] leading-relaxed text-foreground/95">
-                    <span className="font-medium">Дія: </span>
+                    <span className="font-medium">Action: </span>
                     <span className="text-muted-foreground">{HINT_CONTROLS.moreMenu.action}</span>
                   </p>
                 </TooltipContent>
@@ -2039,9 +2021,9 @@ export function ScreenshotCompare({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       {!controlled && (
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
           <HintTooltip side="bottom" title={HINT_CONTROLS.prevSite.title} description={HINT_CONTROLS.prevSite.description}>
             <button type="button" onClick={handlePrev} className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted">
               <ChevronLeft className="h-3.5 w-3.5" />
@@ -2073,306 +2055,331 @@ export function ScreenshotCompare({
           ? createPortal(compareToolbarEl, compareToolbarSlot)
           : null}
 
-      {/* Screenshot | Action plan */}
+      {/* Center (scrollable) | Right panel — left column fit-content height; right fills viewport band */}
       <div
         className={cn(
-          "grid gap-4 items-start",
-          fullWidth ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_minmax(323px,391px)]"
+          "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden min-w-0",
+          !fullWidth && "lg:flex-row lg:items-stretch"
         )}
       >
-        <div className="min-w-0 space-y-3">
-          {viewMode === "slider" && (
-            <div className="w-full min-w-0 overflow-x-auto scrollbar-hide">
-              <SectionChipsStrip
-                compact
-                chipSite={activeSite}
-                sortedSectionKeys={sortedSectionKeys}
-                zoneLens={zoneLens}
-                expandedPin={expandedPin}
-                onSelectSection={(key) => {
-                  setExpandedPin(key);
-                  setSectionNavTick((n) => n + 1);
-                }}
-                userSite={userSite}
-                vsSite={vsSite}
-                activeSite={activeSite}
-                tooltipCompareDomain={tooltipCompareDomain}
-                result={result}
-              />
-            </div>
-          )}
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-0 lg:max-h-full lg:self-stretch">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+            {viewMode === "slider" && (
+              <div className="w-full min-w-0 shrink-0 overflow-x-auto scrollbar-hide">
+                <SectionChipsStrip
+                  compact
+                  chipSite={activeSite}
+                  sortedSectionKeys={sortedSectionKeys}
+                  zoneLens={zoneLens}
+                  expandedPin={expandedPin}
+                  onSelectSection={(key) => {
+                    setExpandedPin(key);
+                    setSectionNavTick((n) => n + 1);
+                  }}
+                  userSite={userSite}
+                  vsSite={vsSite}
+                  activeSite={activeSite}
+                  tooltipCompareDomain={tooltipCompareDomain}
+                  result={result}
+                />
+              </div>
+            )}
 
-          {viewMode === "single" &&
-            (activeSite.screenshotUrl ? (
-              <div className="min-w-0 space-y-2">
-                <div
-                  className={cn(
-                    "grid w-full min-w-0 items-center gap-x-2 gap-y-1",
-                    controlled ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"
-                  )}
-                >
-                  {controlled && (
-                    <div className="min-w-0">
-                      <SplitSiteColumnPicker
-                        compact
-                        sites={sites}
-                        valueIdx={activeIdx}
-                        otherIdx={-1}
-                        onSelect={setActiveIdx}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {viewMode === "single" &&
+                (activeSite.screenshotUrl ? (
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                    <div
+                      className={cn(
+                        "grid w-full min-w-0 shrink-0 items-start gap-x-2 gap-y-1",
+                        controlled ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"
+                      )}
+                    >
+                      {controlled && (
+                        <div className="min-w-0">
+                          <SplitSiteColumnPicker
+                            compact
+                            sites={sites}
+                            valueIdx={activeIdx}
+                            onSelect={setActiveIdx}
+                          />
+                        </div>
+                      )}
+                      <div
+                        className={cn(
+                          "flex min-w-0 justify-end overflow-x-auto scrollbar-hide",
+                          !controlled && "col-span-full"
+                        )}
+                      >
+                        <SectionChipsStrip
+                          compact
+                          chipSite={activeSite}
+                          sortedSectionKeys={sortedSectionKeys}
+                          zoneLens={zoneLens}
+                          expandedPin={expandedPin}
+                          onSelectSection={(key) => {
+                            setExpandedPin(key);
+                            setSectionNavTick((n) => n + 1);
+                          }}
+                          userSite={userSite}
+                          vsSite={vsSite}
+                          activeSite={activeSite}
+                          tooltipCompareDomain={tooltipCompareDomain}
+                          result={result}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                      <ScreenshotFrame
+                        site={activeSite}
+                        showZones={showZones}
+                        showPins={showPins}
+                        expandedPin={expandedPin}
+                        setExpandedPin={setExpandedPin}
+                        zoom={zoom}
+                        overlayMode={effectiveOverlay}
+                        sectionNavTick={sectionNavTick}
+                        zoneLens={zoneLens}
+                        deltaByKey={activeSite.isUser ? undefined : sectionDeltaByKey}
+                        onSectionMore={openSectionMore}
+                        problemIndicators={showProblemIndicators}
+                        eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                        competitorScores={
+                          showProblemIndicators && activeSite.isUser && vsSite ? competitorScoresForUser : undefined
+                        }
+                        deltaLensTint={zoneLens === "delta" && !activeSite.isUser}
+                        heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                        heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                        attentionOverlay={getAttentionOverlay(activeSite)}
+                        zoneTooltipFor={showZones ? zoneTooltipForSite(activeSite) : undefined}
+                        onZoneMore={showZones ? openSectionMore : undefined}
                       />
                     </div>
-                  )}
-                  <div
-                    className={cn(
-                      "flex min-w-0 justify-end overflow-x-auto scrollbar-hide",
-                      !controlled && "col-span-full"
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+                    No screenshot.
+                  </div>
+                ))}
+
+              {(viewMode === "split" || viewMode === "compare") && splitLeftSite && splitRightSite && (
+                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden md:flex-row md:items-stretch md:gap-3">
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                    <div className="grid w-full min-w-0 shrink-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
+                      <div className="min-w-0">
+                        <SplitSiteColumnPicker
+                          compact
+                          sites={sites}
+                          valueIdx={safeLeft}
+                          onSelect={selectSplitLeft}
+                        />
+                      </div>
+                      <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
+                        <SectionChipsStrip
+                          compact
+                          chipSite={splitLeftSite}
+                          sortedSectionKeys={sortedSectionKeys}
+                          zoneLens={zoneLens}
+                          expandedPin={expandedPin}
+                          onSelectSection={(key) => {
+                            setExpandedPin(key);
+                            setSectionNavTick((n) => n + 1);
+                          }}
+                          userSite={userSite}
+                          vsSite={vsSite}
+                          activeSite={activeSite}
+                          tooltipCompareDomain={tooltipCompareDomain}
+                          result={result}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                      <ScreenshotFrame
+                        site={splitLeftSite}
+                        showZones={showZones}
+                        showPins={showPins}
+                        expandedPin={expandedPin}
+                        setExpandedPin={setExpandedPin}
+                        zoom={zoom}
+                        overlayMode={effectiveOverlay}
+                        sectionNavTick={sectionNavTick}
+                        zoneLens={zoneLens}
+                        deltaByKey={viewMode === "compare" ? sectionDeltaLR : undefined}
+                        onSectionMore={openSectionMore}
+                        problemIndicators={showProblemIndicators}
+                        eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                        competitorScores={
+                          showProblemIndicators && splitLeftSite.isUser ? competitorScoresForSplitLeft : undefined
+                        }
+                        deltaLensTint={false}
+                        compareDiffMode={viewMode === "compare"}
+                        heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                        heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                        attentionOverlay={getAttentionOverlay(splitLeftSite, "left")}
+                        zoneTooltipFor={showZones ? zoneTooltipForSite(splitLeftSite) : undefined}
+                        onZoneMore={showZones ? openSectionMore : undefined}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                    <div className="grid w-full min-w-0 shrink-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
+                      <div className="min-w-0">
+                        <SplitSiteColumnPicker
+                          compact
+                          sites={sites}
+                          valueIdx={safeRight}
+                          onSelect={selectSplitRight}
+                        />
+                      </div>
+                      <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
+                        <SectionChipsStrip
+                          compact
+                          chipSite={splitRightSite}
+                          sortedSectionKeys={sortedSectionKeys}
+                          zoneLens={zoneLens}
+                          expandedPin={expandedPin}
+                          onSelectSection={(key) => {
+                            setExpandedPin(key);
+                            setSectionNavTick((n) => n + 1);
+                          }}
+                          userSite={userSite}
+                          vsSite={vsSite}
+                          activeSite={activeSite}
+                          tooltipCompareDomain={tooltipCompareDomain}
+                          result={result}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                      <ScreenshotFrame
+                        site={splitRightSite}
+                        showZones={showZones}
+                        showPins={showPins}
+                        expandedPin={expandedPin}
+                        setExpandedPin={setExpandedPin}
+                        zoom={zoom}
+                        overlayMode={effectiveOverlay}
+                        sectionNavTick={sectionNavTick}
+                        zoneLens={zoneLens}
+                        deltaByKey={sectionDeltaLR}
+                        onSectionMore={openSectionMore}
+                        problemIndicators={showProblemIndicators}
+                        eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                        competitorScores={undefined}
+                        deltaLensTint={zoneLens === "delta"}
+                        compareDiffMode={viewMode === "compare"}
+                        heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                        heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                        attentionOverlay={getAttentionOverlay(splitRightSite, "right")}
+                        zoneTooltipFor={showZones ? zoneTooltipForSite(splitRightSite) : undefined}
+                        onZoneMore={showZones ? openSectionMore : undefined}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {viewMode === "slider" &&
+                splitLeftSite &&
+                splitRightSite &&
+                splitLeftSite.screenshotUrl &&
+                splitRightSite.screenshotUrl && (
+                  <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+                    <SliderCompare
+                      left={splitLeftSite}
+                      right={splitRightSite}
+                      leftLabel={splitLeftSite.domain}
+                      rightLabel={splitRightSite.domain}
+                    />
+                    {effectiveOverlay === "attention" && (
+                      <p className="shrink-0 text-[10px] text-center text-muted-foreground leading-snug px-2">
+                        Attention heatmap overlays work in Single, Original, or Split. Switch view to see predicted attention on each full screenshot side by side.
+                      </p>
                     )}
-                  >
-                    <SectionChipsStrip
-                      compact
-                      chipSite={activeSite}
-                      sortedSectionKeys={sortedSectionKeys}
-                      zoneLens={zoneLens}
-                      expandedPin={expandedPin}
-                      onSelectSection={(key) => {
-                        setExpandedPin(key);
-                        setSectionNavTick((n) => n + 1);
-                      }}
-                      userSite={userSite}
-                      vsSite={vsSite}
-                      activeSite={activeSite}
-                      tooltipCompareDomain={tooltipCompareDomain}
-                      result={result}
-                    />
                   </div>
-                </div>
-                <ScreenshotFrame
-                  site={activeSite}
-                  showZones={showZones}
-                  showPins={showPins}
-                  expandedPin={expandedPin}
-                  setExpandedPin={setExpandedPin}
-                  zoom={zoom}
-                  overlayMode={effectiveOverlay}
-                  sectionNavTick={sectionNavTick}
-                  zoneLens={zoneLens}
-                  deltaByKey={activeSite.isUser ? undefined : sectionDeltaByKey}
-                  onSectionMore={openSectionMore}
-                  problemIndicators={showProblemIndicators}
-                  eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
-                  competitorScores={
-                    showProblemIndicators && activeSite.isUser && vsSite ? competitorScoresForUser : undefined
-                  }
-                  deltaLensTint={zoneLens === "delta" && !activeSite.isUser}
-                  heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
-                  heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
-                  attentionOverlay={getAttentionOverlay(activeSite)}
-                  zoneTooltipFor={showZones ? zoneTooltipForSite(activeSite) : undefined}
-                  onZoneMore={showZones ? openSectionMore : undefined}
-                />
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No screenshot.</div>
-            ))}
-
-          {(viewMode === "split" || viewMode === "compare") && splitLeftSite && splitRightSite && (
-            <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
-                  <div className="min-w-0">
-                    <SplitSiteColumnPicker
-                      compact
-                      sites={sites}
-                      valueIdx={safeLeft}
-                      otherIdx={safeRight}
-                      onSelect={selectSplitLeft}
-                    />
-                  </div>
-                  <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
-                    <SectionChipsStrip
-                      compact
-                      chipSite={splitLeftSite}
-                      sortedSectionKeys={sortedSectionKeys}
-                      zoneLens={zoneLens}
-                      expandedPin={expandedPin}
-                      onSelectSection={(key) => {
-                        setExpandedPin(key);
-                        setSectionNavTick((n) => n + 1);
-                      }}
-                      userSite={userSite}
-                      vsSite={vsSite}
-                      activeSite={activeSite}
-                      tooltipCompareDomain={tooltipCompareDomain}
-                      result={result}
-                    />
-                  </div>
-                </div>
-                <ScreenshotFrame
-                  site={splitLeftSite}
-                  showZones={showZones}
-                  showPins={showPins}
-                  expandedPin={expandedPin}
-                  setExpandedPin={setExpandedPin}
-                  zoom={zoom}
-                  overlayMode={effectiveOverlay}
-                  sectionNavTick={sectionNavTick}
-                  zoneLens={zoneLens}
-                  deltaByKey={viewMode === "compare" ? sectionDeltaLR : undefined}
-                  onSectionMore={openSectionMore}
-                  problemIndicators={showProblemIndicators}
-                  eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
-                  competitorScores={
-                    showProblemIndicators && splitLeftSite.isUser ? competitorScoresForSplitLeft : undefined
-                  }
-                  deltaLensTint={false}
-                  compareDiffMode={viewMode === "compare"}
-                  heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
-                  heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
-                  attentionOverlay={getAttentionOverlay(splitLeftSite)}
-                  zoneTooltipFor={showZones ? zoneTooltipForSite(splitLeftSite) : undefined}
-                  onZoneMore={showZones ? openSectionMore : undefined}
-                />
-              </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1">
-                  <div className="min-w-0">
-                    <SplitSiteColumnPicker
-                      compact
-                      sites={sites}
-                      valueIdx={safeRight}
-                      otherIdx={safeLeft}
-                      onSelect={selectSplitRight}
-                    />
-                  </div>
-                  <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
-                    <SectionChipsStrip
-                      compact
-                      chipSite={splitRightSite}
-                      sortedSectionKeys={sortedSectionKeys}
-                      zoneLens={zoneLens}
-                      expandedPin={expandedPin}
-                      onSelectSection={(key) => {
-                        setExpandedPin(key);
-                        setSectionNavTick((n) => n + 1);
-                      }}
-                      userSite={userSite}
-                      vsSite={vsSite}
-                      activeSite={activeSite}
-                      tooltipCompareDomain={tooltipCompareDomain}
-                      result={result}
-                    />
-                  </div>
-                </div>
-                <ScreenshotFrame
-                  site={splitRightSite}
-                  showZones={showZones}
-                  showPins={showPins}
-                  expandedPin={expandedPin}
-                  setExpandedPin={setExpandedPin}
-                  zoom={zoom}
-                  overlayMode={effectiveOverlay}
-                  sectionNavTick={sectionNavTick}
-                  zoneLens={zoneLens}
-                  deltaByKey={sectionDeltaLR}
-                  onSectionMore={openSectionMore}
-                  problemIndicators={showProblemIndicators}
-                  eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
-                  competitorScores={undefined}
-                  deltaLensTint={zoneLens === "delta"}
-                  compareDiffMode={viewMode === "compare"}
-                  heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
-                  heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
-                  attentionOverlay={getAttentionOverlay(splitRightSite)}
-                  zoneTooltipFor={showZones ? zoneTooltipForSite(splitRightSite) : undefined}
-                  onZoneMore={showZones ? openSectionMore : undefined}
-                />
-              </div>
+                )}
             </div>
-          )}
 
-          {zoneLens === "delta" && (viewMode === "split" || viewMode === "compare" || !activeSite.isUser) && splitRightSite && (
-            <p className="text-center text-[10px] text-muted-foreground dark:text-muted-foreground/90">
-              {splitLeftSite?.isUser && !splitRightSite?.isUser
-                ? "🟢 Competitor advantage · 🔴 Your advantage"
-                : !splitLeftSite?.isUser && splitRightSite?.isUser
-                  ? "🟢 Your advantage · 🔴 Competitor advantage"
-                  : splitLeftSite?.isUser || splitRightSite?.isUser
-                    ? "🟢 Higher on the right · 🔴 Higher on the left"
-                    : `🟢 ${splitRightSite.domain} · 🔴 ${splitLeftSite?.domain ?? ""}`}
-            </p>
-          )}
-
-          {viewMode === "slider" &&
-            splitLeftSite &&
-            splitRightSite &&
-            splitLeftSite.screenshotUrl &&
-            splitRightSite.screenshotUrl && (
-            <div className="space-y-2">
-              <SliderCompare
-                left={splitLeftSite}
-                right={splitRightSite}
-                leftLabel={splitLeftSite.domain}
-                rightLabel={splitRightSite.domain}
-              />
-              {effectiveOverlay === "attention" && (
-                <p className="text-[10px] text-center text-muted-foreground leading-snug px-2">
-                  Attention heatmap overlays work in Single, Original, or Split. Switch view to see predicted attention on each full screenshot side by side.
+            <div className="shrink-0 space-y-2">
+              {zoneLens === "delta" && (viewMode === "split" || viewMode === "compare" || !activeSite.isUser) && splitRightSite && (
+                <p className="text-center text-[10px] text-muted-foreground dark:text-muted-foreground/90">
+                  {splitLeftSite?.isUser && !splitRightSite?.isUser
+                    ? "🟢 Competitor advantage · 🔴 Your advantage"
+                    : !splitLeftSite?.isUser && splitRightSite?.isUser
+                      ? "🟢 Your advantage · 🔴 Competitor advantage"
+                      : splitLeftSite?.isUser || splitRightSite?.isUser
+                        ? "🟢 Higher on the right · 🔴 Higher on the left"
+                        : `🟢 ${splitRightSite.domain} · 🔴 ${splitLeftSite?.domain ?? ""}`}
                 </p>
               )}
-            </div>
-          )}
 
-          {effectiveOverlay === "attention" && viewMode !== "slider" && (
-            <p className="text-[10px] text-center text-muted-foreground flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(255, 85, 20, 0.5)" }} />
-                High (red/orange)
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(255, 210, 40, 0.4)" }} />
-                Medium (yellow)
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(55, 125, 255, 0.3)" }} />
-                Low (blue)
-              </span>
-            </p>
-          )}
+              {effectiveOverlay === "attention" && viewMode !== "slider" && (
+                <p className="text-[10px] text-center text-muted-foreground flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(255, 85, 20, 0.5)" }} />
+                    High (red/orange)
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(255, 210, 40, 0.4)" }} />
+                    Medium (yellow)
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: "rgba(55, 125, 255, 0.3)" }} />
+                    Low (blue)
+                  </span>
+                </p>
+              )}
 
-          {!activeSite.isUser && userSite && (
-            <div className="rounded-xl border border-dashed border-border p-2.5 bg-muted/20">
-              <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1"><BarChart3 className="h-3 w-3" />Δ vs you</p>
-              <div className="flex flex-wrap gap-1.5">
-                {SECTION_KEYS.map((key) => {
-                  const u = userSite.annotations.find((a) => a.sectionKey === key)?.score;
-                  const t = activeSite.annotations.find((a) => a.sectionKey === key)?.score;
-                  const d = u != null && t != null ? Math.round((t - u) * 10) / 10 : null;
-                  return (
-                    <div key={key} className="rounded-lg bg-card border border-border px-2 py-1 text-[10px]">
-                      <span className="text-muted-foreground">{SECTION_ZONES[key].short}:</span>{" "}
-                      {d == null ? (
-                        "—"
-                      ) : (
-                        <span className={cn("font-bold", d > 0 ? "text-primary" : d < 0 ? "text-red-500" : "text-muted-foreground")}>
-                          {d > 0 ? "+" : ""}
-                          {d.toFixed(1)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              {!activeSite.isUser && userSite && (
+                <div className="rounded-xl border border-dashed border-border p-2.5 bg-muted/20">
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1">
+                    <BarChart3 className="h-3 w-3" />
+                    Δ vs you
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SECTION_KEYS.map((key) => {
+                      const u = userSite.annotations.find((a) => a.sectionKey === key)?.score;
+                      const t = activeSite.annotations.find((a) => a.sectionKey === key)?.score;
+                      const d = u != null && t != null ? Math.round((t - u) * 10) / 10 : null;
+                      return (
+                        <div key={key} className="rounded-lg bg-card border border-border px-2 py-1 text-[10px]">
+                          <span className="text-muted-foreground">{SECTION_ZONES[key].short}:</span>{" "}
+                          {d == null ? (
+                            "—"
+                          ) : (
+                            <span
+                              className={cn(
+                                "font-bold",
+                                d > 0 ? "text-primary" : d < 0 ? "text-red-500" : "text-muted-foreground"
+                              )}
+                            >
+                              {d > 0 ? "+" : ""}
+                              {d.toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
-        {!fullWidth && <div className="hidden lg:block min-w-0 sticky top-4">{actionPanel}</div>}
+        {!fullWidth && (
+          <div className="hidden min-h-0 w-[391px] max-w-[391px] shrink-0 flex-col overflow-hidden lg:flex lg:h-full lg:max-h-full lg:min-h-0 lg:self-stretch">
+            {actionPanel}
+          </div>
+        )}
       </div>
 
-      {fullWidth && <div className="max-h-[min(88vh,900px)]">{actionPanel}</div>}
+      {fullWidth && (
+        <div className="max-h-[min(88vh,900px)] min-h-0 shrink-0 overflow-y-auto">{actionPanel}</div>
+      )}
 
       {!controlled && (
-        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(sites.length, 5)}, 1fr)` }}>
+        <div className="grid shrink-0 gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(sites.length, 5)}, 1fr)` }}>
           {sites.map((site, i) => {
             const h = hintSiteTab(site.isUser, site.domain, deltaVsYou(site));
             return (

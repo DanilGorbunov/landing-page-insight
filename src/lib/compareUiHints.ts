@@ -1,26 +1,26 @@
-/** Підказки для Compare / Screenshot (українською) */
+/** Compare / Screenshot UI hints (English) */
 
 export const HINT_VIEW_SLIDER = {
-  title: "Режим «Слайдер»",
-  description: "Один рядок знімків з вертикальною межею: ліворуч — ви, праворуч — конкурент.",
-  action: "Керуйте повзунком зверху, щоб порівняти композицію та елементи.",
+  title: "Slider mode",
+  description: "One row of screenshots with a vertical divider: your site on the left, competitor on the right.",
+  action: "Drag the handle at the top to compare layout and elements.",
 } as const;
 
 export const HINT_VIEW = {
   single: {
-    title: "Режим «Один»",
-    description: "Показує скріншот одного обраного сайту. Перемикайте домени вкладками зверху.",
-    action: "Порівняйте з конкурентом у Original або Split.",
+    title: "Single mode",
+    description: "Shows one selected site’s screenshot. Switch domains with the tabs above.",
+    action: "Compare with a competitor in Original or Split.",
   },
   split: {
-    title: "Режим «Original»",
-    description: "Два знімки поруч — звичайний поділ екрана без акценту на різниці балів по зонах.",
-    action: "Оберіть конкурента у випадаючому списку «vs».",
+    title: "Original mode",
+    description: "Two screenshots side by side — standard split view without emphasizing per-zone score gaps.",
+    action: "Pick a competitor in the “vs” dropdown.",
   },
   compare: {
-    title: "Режим «Split»",
-    description: "Ті самі знімки з підсвіткою різниці балів по секціях (де хто сильніший).",
-    action: "Увімкніть зони та потрібний Lens, щоб зосередитись на проблемних місцях.",
+    title: "Split mode",
+    description: "Same screenshots with per-section score gaps highlighted (who leads where).",
+    action: "Turn on zones and the lens you need to focus on weak spots.",
   },
 } as const;
 
@@ -29,113 +29,113 @@ export const HINT_ANALYZE: Record<
   { title: string; description: string; action: string }
 > = {
   attention: {
-    title: "Увага (салієнтність)",
-    description: "Накладає спрощену карту того, куди зазвичай «падає» погляд на сторінці.",
-    action: "Перевірте, чи герой і CTA потрапляють у зону найбільшої уваги.",
+    title: "Attention (saliency)",
+    description: "Overlays a simplified map of where the eye typically goes on the page.",
+    action: "Check that the hero and CTA sit in the highest-attention area.",
   },
   heatmap: {
-    title: "Теплова карта розриву",
-    description: "Підсвічує секції з найбільшою різницею балів між вами та конкурентом.",
-    action: "Почніть з найтемніших смуг — там найбільший відставання.",
+    title: "Gap heat",
+    description: "Highlights sections with the largest score gap between you and the competitor.",
+    action: "Start with the darkest bands — that’s where you trail most.",
   },
   copy: {
-    title: "Текст",
-    description: "Підсвічує блоки з текстом, щоб оцінити читабельність і заголовки.",
-    action: "Порівняйте формулювання з конкурентом у Original або Split.",
+    title: "Copy",
+    description: "Highlights text blocks so you can judge readability and headlines.",
+    action: "Compare wording with the competitor in Original or Split.",
   },
   conversion: {
-    title: "Конверсія",
-    description: "Оцінює зони, що впливають на кліки та дії (CTA, форми, довіра).",
-    action: "Перегляньте піни та праву панель для конкретних кроків.",
+    title: "Conversion",
+    description: "Scores zones that drive clicks and actions (CTAs, forms, trust).",
+    action: "Use pins and the right panel for concrete next steps.",
   },
   mobile: {
-    title: "Мобільний вигляд",
-    description: "Рамка мобільної ширини навколо знімка для оцінки мобільного UX.",
-    action: "Перевірте кнопки та читабельність у вузькій колонці.",
+    title: "Mobile frame",
+    description: "A mobile-width frame around the shot for mobile UX review.",
+    action: "Check tap targets and readability in the narrow column.",
   },
   first5s: {
-    title: "Перші 5 секунд",
-    description: "Затемнює область нижче «згину», щоб змоделювати перше враження.",
-    action: "Переконайтесь, що цінність зрозуміла без прокрутки.",
+    title: "First 5 seconds",
+    description: "Dims everything below the fold to simulate first impression.",
+    action: "Make sure the value prop is clear without scrolling.",
   },
   trust: {
-    title: "Довіра",
-    description: "Підсвічує зони з логотипами, відгуками, гарантіями.",
-    action: "Додайте соціальний доказ там, де його не видно.",
+    title: "Trust",
+    description: "Highlights zones with logos, testimonials, and guarantees.",
+    action: "Add social proof where it’s missing.",
   },
   readability: {
-    title: "Читабельність",
-    description: "Підсвічує блоки з основним текстом для оцінки ієрархії.",
-    action: "Скоротіть речення та підзаголовки для сканування.",
+    title: "Readability",
+    description: "Highlights main body copy blocks to judge hierarchy.",
+    action: "Tighten sentences and subheads for scanning.",
   },
 };
 
 export const HINT_LENS: Record<string, { title: string; description: string; action: string }> = {
   hot: {
-    title: "Гарячі зони",
-    description: "Підсвічує секції з балом нижче 7 — потенційні вузькі місця.",
-    action: "Відкрийте пін або праву панель для пріоритетних виправлень.",
+    title: "Hot zones",
+    description: "Highlights sections scoring below 7 — likely weak spots.",
+    action: "Open a pin or the right panel for priority fixes.",
   },
   delta: {
     title: "Δ vs you",
-    description: "Показує різницю балів по секціях відносно вашого сайту (на скріні конкурента).",
-    action: "Доступно на знімку конкурента; порівняйте з вашим табом.",
+    description: "Shows per-section score deltas vs your site (on the competitor screenshot).",
+    action: "Available on the competitor shot; compare with your tab.",
   },
 };
 
 export const HINT_CONTROLS = {
   pins: {
-    title: "Піни на скріні",
-    description: "Маркери по секціях: натиск відкриває короткий текст аналізу біля знімка.",
-    action: "Натисніть «More» у піні, щоб відкрити деталі в правій панелі.",
+    title: "Pins on screenshot",
+    description: "Per-section markers: click to open a short analysis next to the shot.",
+    action: "Click “More” on a pin to open details in the right panel.",
   },
   zones: {
-    title: "Зони сторінки",
-    description: "Кольорові смуги Hero, Value Prop, Features тощо — межі секцій для оцінки.",
-    action: "Поєднуйте з Lens Hot або режимом Split для контексту проблем.",
+    title: "Page zones",
+    description: "Colored bands for Hero, Value Prop, Features, etc. — section boundaries for review.",
+    action: "Pair with Hot lens or Split mode for problem context.",
   },
   wide: {
-    title: "Широкий режим",
-    description: "Розтягує колонку зі скріном на всю ширину; панель дій може йти нижче.",
-    action: "Зручно для дрібних деталей на великому моніторі.",
+    title: "Wide layout",
+    description: "Stretches the screenshot column full width; the action panel may move below.",
+    action: "Useful for fine detail on large displays.",
   },
   zoomOut: {
-    title: "Зменшити масштаб",
-    description: "Показує більшу частину сторінки в межах вікна.",
-    action: "Перегляньте повну висоту скролом.",
+    title: "Zoom out",
+    description: "Shows more of the page in the viewport.",
+    action: "Scroll to see the full height.",
   },
   zoomIn: {
-    title: "Збільшити масштаб",
-    description: "Наближає знімок для дрібного тексту та елементів.",
-    action: "Після збільшення скрольте всередині рамки знімка.",
+    title: "Zoom in",
+    description: "Magnifies the shot for small text and UI elements.",
+    action: "After zooming, scroll inside the screenshot frame.",
   },
   prevSite: {
-    title: "Попередній сайт",
-    description: "Перемикає на попередню вкладку в списку порівнянь.",
+    title: "Previous site",
+    description: "Switches to the previous tab in the compare list.",
   },
   nextSite: {
-    title: "Наступний сайт",
-    description: "Перемикає на наступну вкладку в списку порівнянь.",
+    title: "Next site",
+    description: "Switches to the next tab in the compare list.",
   },
   moreMenu: {
-    title: "Додаткові режими",
-    description: "Слайдер, Trust, Read та інші опції аналізу.",
-    action: "Слайдер — перетягування межі між двома скрінами.",
+    title: "More modes",
+    description: "Slider, Trust, Read, and other analysis options.",
+    action: "Slider — drag the divider between the two screenshots.",
   },
   vsSelect: {
-    title: "Конкурент для порівняння",
-    description: "Який домен показувати поруч із вашим у Original / Split / Slider.",
-    action: "Оберіть найрелевантнішого конкурента для вашої ніші.",
+    title: "Competitor to compare",
+    description: "Which domain to show next to yours in Original / Split / Slider.",
+    action: "Pick the most relevant competitor for your niche.",
   },
   slider: {
-    title: "Повзунок порівняння",
-    description: "Рухає вертикальну межу між вашим знімком і знімком конкурента.",
-    action: "Швидко порівнюйте ліву/праву половину композиції.",
+    title: "Comparison slider",
+    description: "Moves the vertical divider between your screenshot and the competitor’s.",
+    action: "Quickly compare the left vs right half of the layout.",
   },
   sparklesRow: {
-    title: "Секції та бали",
-    description: "Швидкі чіпи: бал секції на поточному сайті; клік центрує зону на скріні.",
-    action: "Наведіть на чіп — підказка з розривом vs конкурент і пріоритетом.",
+    title: "Sections & scores",
+    description: "Quick chips: section score for the current site; click centers the zone on the shot.",
+    action: "Hover a chip — tooltip shows gap vs competitor and priority.",
   },
 } as const;
 
@@ -146,33 +146,33 @@ export function hintSiteTab(isUser: boolean, domain: string, delta: number | nul
 } {
   if (isUser) {
     return {
-      title: "Ваш сайт",
-      description: `Поточний знімок і аналіз для ${domain}.`,
-      action: "Перемкніть на конкурента, щоб побачити їхній скрін і порівняння.",
+      title: "Your site",
+      description: `Current screenshot and analysis for ${domain}.`,
+      action: "Switch to a competitor to see their shot and comparison.",
     };
   }
   if (delta == null) {
     return {
       title: domain,
-      description: "Скріншот і секційні бали цього конкурента.",
+      description: "This competitor’s screenshot and section scores.",
     };
   }
   if (delta > 0) {
     return {
       title: domain,
-      description: `Загальний бал на ${delta.toFixed(1)} вище за ваш за цим звітом.`,
-      action: "Відкрийте Compare та праву панель — знайдіть, що варто перейняти.",
+      description: `Overall score is ${delta.toFixed(1)} points higher than yours in this report.`,
+      action: "Open Compare and the right panel — find ideas to borrow.",
     };
   }
   if (delta < 0) {
     return {
       title: domain,
-      description: `Загальний бал на ${Math.abs(delta).toFixed(1)} нижче за ваш.`,
-      action: "Перевірте, чи є у них сильніші окремі секції (чіпи та Hot).",
+      description: `Overall score is ${Math.abs(delta).toFixed(1)} points lower than yours.`,
+      action: "Check whether they still win individual sections (chips and Hot).",
     };
   }
   return {
     title: domain,
-    description: "Загальний бал збігається з вашим у межах округлення.",
+    description: "Overall score matches yours within rounding.",
   };
 }

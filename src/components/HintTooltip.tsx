@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 type Side = "top" | "bottom" | "left" | "right";
 
 /**
- * Contextual hover hint: що це → пояснення → що робити / рішення.
+ * Contextual hover hint: what it is → explanation → what to do / fix.
  */
 export function HintTooltip({
   children,
@@ -20,7 +20,7 @@ export function HintTooltip({
   children: ReactNode;
   title: string;
   description?: string;
-  /** Порада, крок або рішення */
+  /** Tip, step, or suggested fix */
   action?: string;
   side?: Side;
   className?: string;
@@ -45,7 +45,7 @@ export function HintTooltip({
         ) : null}
         {action ? (
           <p className="mt-1 border-t border-border pt-2 text-[11px] leading-relaxed text-foreground/95">
-            <span className="font-medium">Дія: </span>
+            <span className="font-medium">Action: </span>
             <span className="text-muted-foreground">{action}</span>
           </p>
         ) : null}

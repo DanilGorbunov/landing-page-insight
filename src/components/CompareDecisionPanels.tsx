@@ -37,6 +37,7 @@ import type { AttentionComparison, HeatmapAnalysis } from "@/types/attention";
 import { BusinessImpactEstimate } from "@/components/BusinessImpactEstimate";
 import { InsightConfidenceBadge } from "@/components/InsightConfidenceBadge";
 import {
+  BarChart3,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -625,30 +626,50 @@ export function DecisionActionPanel({
   return (
     <div
       className={cn(
-        "rounded-2xl border bg-card/95 backdrop-blur-sm overflow-hidden flex flex-col h-full max-h-[min(92vh,960px)] lg:sticky lg:top-4 z-10",
+        "rounded-2xl border bg-card/95 backdrop-blur-sm overflow-hidden flex h-full min-h-0 max-h-full flex-col z-10",
         fixMode ? "border-primary/50 shadow-md shadow-primary/10" : "border-primary/25 shadow-lg shadow-black/15"
       )}
     >
-      <div className="flex shrink-0 border-b border-border bg-muted/20 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Compare sections">
-        {DECISION_PANEL_TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={panelTab === id}
-            onClick={() => setPanelTab(id)}
-            className={cn(
-              "inline-flex items-center gap-1 shrink-0 px-3 py-2.5 text-[11px] font-bold uppercase tracking-wide border-b-2 transition-colors",
-              panelTab === id
-                ? "border-primary text-primary bg-background/80"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
-            )}
-          >
-            {id === "overview" ? <LayoutDashboard className="h-3.5 w-3.5 opacity-60 shrink-0" aria-hidden /> : null}
-            {id === "insight" ? <Lightbulb className="h-3.5 w-3.5 opacity-60 shrink-0" aria-hidden /> : null}
-            {label}
-          </button>
-        ))}
+      <div
+        className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border bg-muted/20 px-2 py-2 overflow-x-auto scrollbar-hide"
+        role="tablist"
+        aria-label="Compare sections"
+      >
+        {DECISION_PANEL_TABS.map(({ id, label }) => {
+          const active = panelTab === id;
+          const Icon =
+            id === "overview"
+              ? LayoutDashboard
+              : id === "insight"
+                ? Lightbulb
+                : id === "plan"
+                  ? Rocket
+                  : id === "impact"
+                    ? TrendingUp
+                    : id === "compete"
+                      ? Crown
+                      : id === "scores"
+                        ? BarChart3
+                        : null;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setPanelTab(id)}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors shrink-0",
+                active
+                  ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden /> : null}
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       <div ref={panelScrollRef} className="p-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0">

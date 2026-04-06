@@ -4,8 +4,8 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TIP_DELAY_MS = 200;
-const Z_TOOLTIP = 50;
-const Z_POPUP = 55;
+const Z_TOOLTIP = 9999;
+const Z_POPUP = 10000;
 
 function placeTooltip(rect: DOMRect, tipW: number, tipH: number, margin = 8): { left: number; top: number } {
   const vw = window.innerWidth;
@@ -122,7 +122,7 @@ export function ZoneAnchorPopup({
       ref={popRef}
       role="dialog"
       aria-modal="true"
-      className="fixed z-[55] w-[280px] rounded-lg border border-border bg-card p-3 text-foreground shadow-xl dark:bg-zinc-900 dark:border-zinc-700"
+      className="fixed w-[280px] rounded-lg border border-border bg-card p-3 text-foreground shadow-xl dark:bg-zinc-900 dark:border-zinc-700"
       style={{ left, top, zIndex: Z_POPUP }}
     >
       <div className="flex items-start justify-between gap-2">
