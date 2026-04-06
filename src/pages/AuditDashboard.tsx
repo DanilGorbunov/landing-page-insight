@@ -1,18 +1,15 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useLayoutEffect } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowRight,
-  ChevronRight,
   FileDown,
   Share2,
-  Sparkles,
   TrendingUp,
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { readFullInsightsPayload } from "@/lib/reportSession";
 import { downloadFullInsightsPdf } from "@/lib/fullReportPdf";
 import { getHistoryCount } from "@/lib/analysisHistory";
@@ -29,7 +26,6 @@ import { StructuredSynthesis } from "@/components/StructuredSynthesis";
 import { parseSectionScores, ensureScore } from "@/lib/utils";
 import { weightedOverallFromSections, projectRatings } from "@/lib/insightsProjection";
 import { compareSitesList } from "@/lib/compareDecisionMetrics";
-import { CompareHeaderSiteTabs } from "@/components/CompareDecisionPanels";
 import { DashboardNavSidebar } from "@/components/DashboardNavSidebar";
 import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
 import type { AnalysisResult } from "@/types/api";
@@ -347,12 +343,15 @@ function SectionContent({
   url,
   compareSiteIdx,
   onCompareSiteIdxChange,
+  compareToolbarSlot,
+  compareLensMenuSlot,
 }: {
   id: string;
   result: AnalysisResult;
   url: string;
   compareSiteIdx?: number;
   onCompareSiteIdxChange?: (idx: number) => void;
+  compareToolbarSlot?: HTMLElement | null;
 }) {
   switch (id) {
     case "overview":
@@ -364,6 +363,7 @@ function SectionContent({
           url={url}
           compareSiteIdx={compareSiteIdx}
           onCompareSiteIdxChange={onCompareSiteIdxChange}
+          compareToolbarSlot={compareToolbarSlot}
         />
       );
     case "performance":
@@ -454,6 +454,8 @@ export default function AuditDashboard() {
     return s && FULL_INSIGHTS_SECTION_IDS.has(s) ? s : "compare";
   });
   const [compareSiteIdx, setCompareSiteIdx] = useState(0);
+  const compareToolbarHostRef = useRef<HTMLDivElement | null>(null);
+  const [compareToolbarHost, setCompareToolbarHost] = useState<HTMLDivElement | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const historyCount = getHistoryCount();
@@ -465,6 +467,14 @@ export default function AuditDashboard() {
 
   useEffect(() => {
     if (activeSection !== "compare") setCompareSiteIdx(0);
+  }, [activeSection]);
+
+  useLayoutEffect(() => {
+    if (activeSection !== "compare") {
+      setCompareToolbarHost(null);
+      return;
+    }
+    setCompareToolbarHost(compareToolbarHostRef.current);
   }, [activeSection]);
 
   if (!payload?.result) {
@@ -517,10 +527,7 @@ export default function AuditDashboard() {
     return weightedOverallFromSections(userScores) ?? 7.0;
   }, [result]);
 
-  const compareTabSites = useMemo(
-    () => (activeSection === "compare" ? compareSitesList(result, url) : []),
-    [activeSection, result, url]
-  );
+  const compareTabSites = useMemo(() => compareSitesList(result, url), [result, url]);
 
   const tip = getSectionTip(activeSection, result);
 
@@ -553,66 +560,60 @@ export default function AuditDashboard() {
         onSelect={handleSidebarSelect}
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed((c) => !c)}
-        reportContext={{ url, overallScore }}
+        reportContext={{ url, overallScore, createdAt: paidAt }}
         result={result}
         historyCount={historyCount}
         onNewAnalysis={() => navigate("/")}
+        compareSiteTabs={
+          compareTabSites.length > 0
+            ? {
+                sites: compareTabSites,
+                activeIdx: Math.min(compareSiteIdx, Math.max(0, compareTabSites.length - 1)),
+                onSelect: setCompareSiteIdx,
+                analysisResult: result,
+              }
+            : null
+        }
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* Top bar — Compare shows competitive status instead of domain breadcrumb */}
         <header
           className={cn(
-            "flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2 md:px-6 min-h-14",
-            activeSection === "compare" && "items-center bg-background/90 backdrop-blur border-border",
-            activeSection !== "compare" && "h-14 items-center bg-background/90 backdrop-blur border-border"
+            "flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-border bg-background/90 backdrop-blur px-4 py-2 md:px-6",
+            activeSection === "compare" ? "min-h-14" : "h-14 min-h-14 justify-end"
           )}
         >
-          {activeSection === "compare" && compareTabSites.length > 0 ? (
-            <div className="flex-1 min-w-0 flex items-center">
-              <CompareHeaderSiteTabs
-                sites={compareTabSites}
-                activeIdx={Math.min(compareSiteIdx, Math.max(0, compareTabSites.length - 1))}
-                onSelect={setCompareSiteIdx}
-                analysisResult={result}
-              />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0 flex-1">
-              <span className="text-foreground font-semibold truncate">{getDomain(url)}</span>
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" />
-              <span className="truncate">{SECTION_LABELS[activeSection] ?? activeSection}</span>
-            </div>
+          {activeSection === "compare" && (
+            <div
+              ref={compareToolbarHostRef}
+              className="flex min-h-0 min-w-0 flex-1 basis-full items-center overflow-x-auto pb-0.5 sm:basis-auto sm:px-1"
+            />
           )}
-          <span className="hidden sm:inline text-[11px] text-muted-foreground shrink-0 tabular-nums" title="Report created">
-            Created {new Date(paidAt).toLocaleDateString()}
-          </span>
-          <div className="flex items-center gap-2 shrink-0">
-            <Link
-              to="/pricing"
-              state={{ fromReport: true }}
-              className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 px-3 py-2 text-xs font-semibold text-amber-950 dark:text-amber-100 hover:bg-amber-500/20 transition-colors shrink-0"
-            >
-              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Upgrade</span>
-            </Link>
-            <ThemeToggle className="shrink-0" />
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            {activeSection === "compare" && (
+              <span className="hidden h-4 w-px shrink-0 bg-border/70 sm:block" aria-hidden />
+            )}
             <button
               type="button"
               onClick={handleShare}
-              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+              aria-label="Share report"
+              className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
             >
-              <Share2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Share Report</span>
+              <Share2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span className="hidden sm:inline">Share</span>
             </button>
             <button
               type="button"
               onClick={handlePdf}
               disabled={pdfLoading}
-              className="flex items-center gap-1.5 rounded-full bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:brightness-110 disabled:opacity-60 disabled:pointer-events-none transition-all"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground",
+                "disabled:pointer-events-none disabled:opacity-40 disabled:cursor-not-allowed"
+              )}
             >
-              <FileDown className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{pdfLoading ? "Building…" : "Export PDF"}</span>
+              <FileDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>{pdfLoading ? "Building…" : "Export PDF"}</span>
             </button>
           </div>
         </header>
@@ -655,6 +656,7 @@ export default function AuditDashboard() {
               url={url}
               compareSiteIdx={activeSection === "compare" ? compareSiteIdx : undefined}
               onCompareSiteIdxChange={activeSection === "compare" ? setCompareSiteIdx : undefined}
+              compareToolbarSlot={activeSection === "compare" ? compareToolbarHost : undefined}
             />
           </div>
         </main>

@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -14,9 +15,11 @@ import {
   Plus,
   History,
   Sparkles,
-  Calendar,
   type LucideIcon,
 } from "lucide-react";
+import { CompareHeaderSiteTabs } from "@/components/CompareDecisionPanels";
+import { ThemeToggle } from "@/components/theme-toggle";
+import type { CompareSiteTab } from "@/lib/compareDecisionMetrics";
 import { cn, getDomain } from "@/lib/utils";
 import type { AnalysisResult } from "@/types/api";
 
@@ -85,6 +88,13 @@ export interface DashboardNavSidebarProps {
   result: AnalysisResult | null;
   historyCount: number;
   onNewAnalysis: () => void;
+  /** Full-insights Compare: site pills under Compare nav (same behavior as former header tabs). */
+  compareSiteTabs?: {
+    sites: CompareSiteTab[];
+    activeIdx: number;
+    onSelect: (i: number) => void;
+    analysisResult: AnalysisResult | null;
+  } | null;
 }
 
 export function DashboardNavSidebar({
@@ -97,6 +107,7 @@ export function DashboardNavSidebar({
   result,
   historyCount,
   onNewAnalysis,
+  compareSiteTabs = null,
 }: DashboardNavSidebarProps) {
   const domain = reportContext ? getDomain(reportContext.url) : null;
   const overallScore = reportContext?.overallScore ?? null;
@@ -164,19 +175,82 @@ export function DashboardNavSidebar({
               )}
               {collapsed && <div className="my-1 mx-3 h-px bg-border/50 first:hidden" />}
               {items.map((item) => (
-                <NavButton
-                  key={item.id}
-                  item={item}
-                  active={activeNavId}
-                  collapsed={collapsed}
-                  onSelect={onSelect}
-                  badge={getNavBadge(item.id, result, historyCount)}
-                />
+                <Fragment key={item.id}>
+                  <NavButton
+                    item={item}
+                    active={activeNavId}
+                    collapsed={collapsed}
+                    onSelect={onSelect}
+                    badge={getNavBadge(item.id, result, historyCount)}
+                  />
+                  {item.id === "compare" &&
+                    compareSiteTabs &&
+                    compareSiteTabs.sites.length > 0 &&
+                    activeNavId === "compare" && (
+                      <div
+                        className={cn(
+                          "mb-1.5 mt-0.5",
+                          collapsed ? "px-0.5" : "ml-3 pl-2 pr-1.5 border-l-2 border-primary/20"
+                        )}
+                      >
+                        {!collapsed && (
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-1.5 px-0.5">
+                            Sites
+                          </p>
+                        )}
+                        <CompareHeaderSiteTabs
+                          sites={compareSiteTabs.sites}
+                          activeIdx={Math.min(
+                            compareSiteTabs.activeIdx,
+                            Math.max(0, compareSiteTabs.sites.length - 1)
+                          )}
+                          onSelect={compareSiteTabs.onSelect}
+                          analysisResult={compareSiteTabs.analysisResult}
+                          orientation="vertical"
+                          density={collapsed ? "compact" : "default"}
+                        />
+                      </div>
+                    )}
+                </Fragment>
               ))}
             </div>
           );
         })}
       </nav>
+
+      <div className="shrink-0 border-t border-border px-2 py-2 space-y-2">
+        {!collapsed && createdLabel && (
+          <p className="px-1 text-[11px] text-muted-foreground tabular-nums" title="Report created">
+            Created {createdLabel}
+          </p>
+        )}
+        {collapsed && createdLabel && (
+          <p className="sr-only">Created {createdLabel}</p>
+        )}
+        <div
+          className={cn(
+            "flex items-center gap-2",
+            collapsed ? "flex-col" : "flex-row",
+            !collapsed && (showUpgrade && reportContext ? "justify-stretch" : "justify-end")
+          )}
+        >
+          {showUpgrade && reportContext && (
+            <Link
+              to="/pricing"
+              state={{ fromReport: true }}
+              title="Upgrade"
+              className={cn(
+                "inline-flex items-center justify-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-500/12 font-semibold text-amber-950 dark:text-amber-100 hover:bg-amber-500/20 transition-colors shrink-0",
+                collapsed ? "h-9 w-9 p-0" : "flex-1 min-w-0 px-3 py-2 text-xs"
+              )}
+            >
+              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              {!collapsed && <span className="truncate">Upgrade</span>}
+            </Link>
+          )}
+          <ThemeToggle className={cn("shrink-0", collapsed && "h-9 w-9")} />
+        </div>
+      </div>
 
       <div className="shrink-0 border-t border-border py-2">
         <SidebarAction icon={Plus} label="New Analysis" collapsed={collapsed} onClick={onNewAnalysis} />

@@ -17,7 +17,7 @@ export type ToolbarAnalyzeMode =
   | "readability"
   | null;
 
-export type ToolbarZoneLens = "balanced" | "rich" | "hot" | "delta";
+export type ToolbarZoneLens = "balanced" | "hot" | "delta";
 
 export type ToolbarContext = {
   viewMode: ToolbarViewMode;
@@ -36,11 +36,9 @@ const ANALYZE_LABEL: Record<Exclude<ToolbarAnalyzeMode, null>, string> = {
   readability: "Readability",
 };
 
-const LENS_LABEL: Record<ToolbarZoneLens, string> = {
-  balanced: "Balanced",
-  rich: "Visual+",
-  hot: "Hot",
-  delta: "Δ vs you",
+const LENS_LABEL: Record<Exclude<ToolbarZoneLens, "balanced">, string> = {
+  hot: "HOT",
+  delta: "Δ VS YOU",
 };
 
 /** Right panel title (below tabs). Single + balanced + no analyze → none. */
@@ -56,7 +54,7 @@ export function getRightPanelHeader(
   } else if (viewMode === "split" || viewMode === "slider") {
     parts.push("You vs competitor");
   } else if (viewMode === "compare") {
-    parts.push("Gap comparison");
+    parts.push("Split · gap comparison");
   }
 
   if (analyzeMode === "attention") {
@@ -84,9 +82,6 @@ export function getRightPanelHeader(
     return { title: "Readability", subtitle: "Scan-friendly blocks and hierarchy" };
   }
 
-  if (zoneLens === "rich") {
-    return { title: "Visual Design Analysis", subtitle: "Layout · Type · Color · Imagery" };
-  }
   if (zoneLens === "hot") {
     const n = opts?.hotSectionCount ?? 0;
     return {
@@ -99,7 +94,7 @@ export function getRightPanelHeader(
   }
 
   if (viewMode === "compare") {
-    return { title: "Gap view", subtitle: "Green = competitor stronger · Red = you stronger" };
+    return { title: "Split view", subtitle: "Green = competitor stronger · Red = you stronger" };
   }
 
   if (parts.length && analyzeMode === null && zoneLens === "balanced") {
@@ -111,7 +106,8 @@ export function getRightPanelHeader(
 
 export function formatToolbarContextForEmpty(ctx: ToolbarContext): string {
   const a = ctx.analyzeMode ? ANALYZE_LABEL[ctx.analyzeMode] : "";
-  const z = ctx.zoneLens !== "balanced" ? LENS_LABEL[ctx.zoneLens] : "";
+  const z =
+    ctx.zoneLens !== "balanced" ? LENS_LABEL[ctx.zoneLens as Exclude<ToolbarZoneLens, "balanced">] : "";
   if (a && z) return `${a} + ${z}`;
   if (a) return a;
   if (z) return z;
@@ -134,9 +130,6 @@ export function sectionPassesToolbarFilters(
     lensOk = userScore != null && userScore < 7;
   } else if (zoneLens === "delta") {
     lensOk = gap != null && gap > 0;
-  } else if (zoneLens === "rich") {
-    /** Visual+ drives the right-panel breakdown, not screenshot zone filtering. */
-    lensOk = true;
   }
 
   let analyzeOk = true;

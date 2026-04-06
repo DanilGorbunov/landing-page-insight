@@ -10,15 +10,15 @@ export const HINT_VIEW = {
   single: {
     title: "Режим «Один»",
     description: "Показує скріншот одного обраного сайту. Перемикайте домени вкладками зверху.",
-    action: "Порівняйте з конкурентом у Split або Compare.",
+    action: "Порівняйте з конкурентом у Original або Split.",
   },
   split: {
-    title: "Режим «Поруч»",
-    description: "Ваш сайт і обраний конкурент одночасно, щоб швидко бачити відмінності.",
+    title: "Режим «Original»",
+    description: "Два знімки поруч — звичайний поділ екрана без акценту на різниці балів по зонах.",
     action: "Оберіть конкурента у випадаючому списку «vs».",
   },
   compare: {
-    title: "Режим «Порівняння»",
+    title: "Режим «Split»",
     description: "Ті самі знімки з підсвіткою різниці балів по секціях (де хто сильніший).",
     action: "Увімкніть зони та потрібний Lens, щоб зосередитись на проблемних місцях.",
   },
@@ -41,7 +41,7 @@ export const HINT_ANALYZE: Record<
   copy: {
     title: "Текст",
     description: "Підсвічує блоки з текстом, щоб оцінити читабельність і заголовки.",
-    action: "Порівняйте формулювання з конкурентом у Split.",
+    action: "Порівняйте формулювання з конкурентом у Original або Split.",
   },
   conversion: {
     title: "Конверсія",
@@ -71,16 +71,6 @@ export const HINT_ANALYZE: Record<
 };
 
 export const HINT_LENS: Record<string, { title: string; description: string; action: string }> = {
-  balanced: {
-    title: "Баланс (Lens)",
-    description: "Стандартні зони та піни без додаткового фільтра — загальний огляд.",
-    action: "Почніть тут, потім перемкніться на Hot або Δ.",
-  },
-  rich: {
-    title: "Visual+",
-    description: "Показує «багатство» секції — смужка інтенсивності за балом.",
-    action: "Шукайте секції з низькою смугою для покращення контенту.",
-  },
   hot: {
     title: "Гарячі зони",
     description: "Підсвічує секції з балом нижче 7 — потенційні вузькі місця.",
@@ -102,7 +92,7 @@ export const HINT_CONTROLS = {
   zones: {
     title: "Зони сторінки",
     description: "Кольорові смуги Hero, Value Prop, Features тощо — межі секцій для оцінки.",
-    action: "Поєднуйте з Lens Hot або Compare для контексту проблем.",
+    action: "Поєднуйте з Lens Hot або режимом Split для контексту проблем.",
   },
   wide: {
     title: "Широкий режим",
@@ -134,7 +124,7 @@ export const HINT_CONTROLS = {
   },
   vsSelect: {
     title: "Конкурент для порівняння",
-    description: "Який домен показувати поруч із вашим у Split / Compare / Slider.",
+    description: "Який домен показувати поруч із вашим у Original / Split / Slider.",
     action: "Оберіть найрелевантнішого конкурента для вашої ніші.",
   },
   slider: {

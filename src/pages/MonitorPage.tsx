@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Bell, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { DashboardNavSidebar } from "@/components/DashboardNavSidebar";
 import { getDomain, ensureScore, parseSectionScores } from "@/lib/utils";
 import { readFullInsightsPayload } from "@/lib/reportSession";
@@ -50,7 +49,10 @@ export default function MonitorPage() {
     return weightedOverallFromSections(userScores) ?? 7.0;
   }, [result]);
 
-  const reportContext = url != null && overallScore != null ? { url, overallScore } : null;
+  const reportContext =
+    url != null && overallScore != null
+      ? { url, overallScore, ...(payload?.paidAt ? { createdAt: payload.paidAt } : {}) }
+      : null;
 
   useEffect(() => {
     setHistoryCount(getHistoryCount());
@@ -113,7 +115,6 @@ export default function MonitorPage() {
               Monitor
             </span>
           </div>
-          <ThemeToggle />
         </header>
 
         <main id="main" className="flex-1 overflow-y-auto p-5 md:p-7">

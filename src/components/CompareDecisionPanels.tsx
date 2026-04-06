@@ -28,13 +28,8 @@ import {
 } from "@/lib/compareToolbarContext";
 import { buildSectionScoreBreakdown } from "@/lib/scoreBreakdown";
 import { insightConfidenceFromResult } from "@/lib/insightConfidence";
-import {
-  buildVisualLensSections,
-  buildHotLensIssues,
-  buildDeltaLensItems,
-  type DeltaLensItem,
-} from "@/lib/lensPanelContent";
-import { VisualLensCollapsible, HotLensPanel, DeltaLensPanel } from "@/components/LensInsightPanels";
+import { buildHotLensIssues, buildDeltaLensItems, type DeltaLensItem } from "@/lib/lensPanelContent";
+import { HotLensPanel, DeltaLensPanel } from "@/components/LensInsightPanels";
 import { ScoreBreakdownPopover } from "@/components/ScoreBreakdownPopover";
 import { CopyGeneratorBlock } from "@/components/CopyGeneratorBlock";
 import { AttentionAnalysisPanel } from "@/components/AttentionAnalysisPanel";
@@ -63,6 +58,13 @@ function sColor(s: number) {
   if (s >= 7.5) return "text-primary";
   if (s >= 5) return "text-amber-500";
   return "text-red-500";
+}
+
+/** Your site overall score in Compare tabs: &lt;5 red, &lt;7 orange, else primary. */
+function userSiteScoreClass(s: number) {
+  if (s < 5) return "text-red-500";
+  if (s < 7) return "text-amber-500";
+  return "text-primary";
 }
 
 function riskBadge(r: ConversionLayer["risk"]) {
@@ -205,19 +207,26 @@ function tabAnalysisResult(result: AnalysisResult, site: CompareSiteTab): Analys
   };
 }
 
-/** Horizontal site tabs for Compare dashboard header (You + competitors, Δ vs you). */
+/** Site tabs for Compare: header strip or sidebar submenu (your domain + competitors, Δ vs you). */
 export function CompareHeaderSiteTabs({
   sites,
   activeIdx,
   onSelect,
   analysisResult,
+  orientation = "horizontal",
+  density = "default",
 }: {
   sites: CompareSiteTab[];
   activeIdx: number;
   onSelect: (i: number) => void;
   /** When set, overall scores open methodology popovers (div tab avoids nested buttons). */
   analysisResult?: AnalysisResult | null;
+  orientation?: "horizontal" | "vertical";
+  /** Tighter padding for collapsed sidebar. */
+  density?: "default" | "compact";
 }) {
+  const isVertical = orientation === "vertical";
+  const compact = density === "compact";
   const userScore = sites.find((s) => s.isUser)?.overallScore ?? null;
   const scoreClass = (x: number | null) => {
     if (x == null) return "text-muted-foreground";
@@ -226,27 +235,45 @@ export function CompareHeaderSiteTabs({
 
   const ScoreOrDash = ({ site, active }: { site: CompareSiteTab; active: boolean }) => {
     if (site.overallScore == null) return <span className="tabular-nums font-bold">—</span>;
+    const scoreColorClass = site.isUser
+      ? userSiteScoreClass(site.overallScore)
+      : active
+        ? "text-primary"
+        : scoreClass(site.overallScore);
     if (analysisResult) {
       return (
         <ScoreBreakdownPopover
           sectionTitle="Score methodology"
           breakdown={buildSectionScoreBreakdown("hero", site.overallScore, tabAnalysisResult(analysisResult, site))}
         >
-          <span className={cn("tabular-nums font-bold", active ? "text-primary" : site.isUser ? "text-foreground" : scoreClass(site.overallScore))}>
+          <span className={cn("tabular-nums font-bold", compact && "text-[10px]", scoreColorClass)}>
             {site.overallScore.toFixed(1)}
           </span>
         </ScoreBreakdownPopover>
       );
     }
     return (
-      <span className={cn("tabular-nums font-bold", active ? "text-primary" : site.isUser ? "text-foreground" : scoreClass(site.overallScore))}>
+      <span className={cn("tabular-nums font-bold", compact && "text-[10px]", scoreColorClass)}>
         {site.overallScore.toFixed(1)}
       </span>
     );
   };
 
+  const trendIcon = (delta: number) =>
+    delta > 0 ? (
+      <TrendingUp className={cn("shrink-0", compact ? "h-2.5 w-2.5" : "h-3 w-3")} />
+    ) : delta < 0 ? (
+      <TrendingDown className={cn("shrink-0", compact ? "h-2.5 w-2.5" : "h-3 w-3")} />
+    ) : null;
+
   return (
-    <div className="flex flex-1 min-w-0 items-center gap-1 overflow-x-auto py-0.5 scrollbar-hide">
+    <div
+      className={cn(
+        isVertical
+          ? "flex flex-col gap-1.5 w-full min-w-0 py-0.5"
+          : "flex flex-1 min-w-0 items-center gap-1 overflow-x-auto py-0.5 scrollbar-hide"
+      )}
+    >
       {sites.map((s, i) => {
         const delta =
           !s.isUser && userScore != null && s.overallScore != null
@@ -266,7 +293,9 @@ export function CompareHeaderSiteTabs({
               }
             }}
             className={cn(
-              "flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors cursor-pointer select-none",
+              "flex items-center rounded-lg border font-semibold transition-colors cursor-pointer select-none",
+              compact ? "gap-1 px-1.5 py-1 text-[9px]" : "gap-1.5 px-2.5 py-1.5 text-[11px]",
+              isVertical ? "w-full max-w-full min-w-0 flex-nowrap justify-between" : "shrink-0",
               active
                 ? "border-primary bg-primary/15 text-primary shadow-sm"
                 : "border-border bg-card/80 text-muted-foreground hover:border-primary/30 hover:text-foreground"
@@ -274,29 +303,51 @@ export function CompareHeaderSiteTabs({
           >
             {s.isUser ? (
               <>
-                <span className="text-[9px] font-bold uppercase tracking-wide text-primary/90">You</span>
-                <ScoreOrDash site={s} active={active} />
+                <span
+                  className={cn(
+                    "truncate text-left font-semibold text-foreground",
+                    compact ? "text-[9px]" : "text-[11px]",
+                    isVertical ? "min-w-0 flex-1 max-w-full" : "max-w-[128px]"
+                  )}
+                  title={s.domain}
+                >
+                  {s.domain}
+                </span>
+                <div className={cn("flex items-center shrink-0", isVertical && "ml-auto")}>
+                  <ScoreOrDash site={s} active={active} />
+                </div>
               </>
             ) : (
               <>
-                <span className="truncate max-w-[128px]">{s.domain}</span>
-                {s.overallScore != null && <ScoreOrDash site={s} active={active} />}
-                {delta != null && (
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums border",
-                      delta > 0
-                        ? "border-primary/50 bg-primary/15 text-primary"
-                        : delta < 0
-                          ? "border-red-500/50 bg-red-500/15 text-red-600 dark:text-red-400"
-                          : "border-border bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {delta > 0 ? <TrendingUp className="h-3 w-3 shrink-0" /> : delta < 0 ? <TrendingDown className="h-3 w-3 shrink-0" /> : null}
-                    {delta > 0 ? "+" : ""}
-                    {delta.toFixed(1)}
-                  </span>
-                )}
+                <span
+                  className={cn(
+                    "truncate text-left",
+                    isVertical ? "min-w-0 flex-1 max-w-full" : "max-w-[128px]"
+                  )}
+                  title={s.domain}
+                >
+                  {s.domain}
+                </span>
+                <div className={cn("flex items-center gap-1 shrink-0", isVertical && "ml-auto")}>
+                  {s.overallScore != null && <ScoreOrDash site={s} active={active} />}
+                  {delta != null && (
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-0.5 rounded-full font-bold tabular-nums border",
+                        compact ? "px-1 py-0 text-[8px]" : "px-1.5 py-0.5 text-[10px]",
+                        delta > 0
+                          ? "border-primary/50 bg-primary/15 text-primary"
+                          : delta < 0
+                            ? "border-red-500/50 bg-red-500/15 text-red-600 dark:text-red-400"
+                            : "border-border bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {trendIcon(delta)}
+                      {delta > 0 ? "+" : ""}
+                      {delta.toFixed(1)}
+                    </span>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -451,6 +502,7 @@ export function DecisionActionPanel({
   const [heroOpen, setHeroOpen] = useState(true);
   const [behaviorOpen, setBehaviorOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
+  const [sectionDivePulse, setSectionDivePulse] = useState(false);
   const lastPlanTickRef = useRef<number | null>(null);
   const prevFocusedKeyRef = useRef<string | null | undefined>(undefined);
   const panelScrollRef = useRef<HTMLDivElement>(null);
@@ -469,6 +521,17 @@ export function DecisionActionPanel({
 
   useEffect(() => {
     if (sectionDeepDive) setPanelTab("insight");
+  }, [sectionDeepDive?.sectionKey]);
+
+  useEffect(() => {
+    if (!sectionDeepDive) return;
+    setSectionDivePulse(true);
+    const id = `compare-section-dive-${sectionDeepDive.sectionKey}`;
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    const t = window.setTimeout(() => setSectionDivePulse(false), 2000);
+    return () => window.clearTimeout(t);
   }, [sectionDeepDive?.sectionKey]);
 
   useEffect(() => {
@@ -516,11 +579,6 @@ export function DecisionActionPanel({
   const topPlan = useMemo(() => topActionPlanRows(result), [result]);
   const riskWhyBut = useMemo(() => conversionRiskWhyBut(conversion, result), [conversion, result]);
   const insightConf = useMemo(() => insightConfidenceFromResult(result), [result]);
-
-  const visualLensSections = useMemo(
-    () => buildVisualLensSections(result, { heroScore, behavioral }),
-    [result, heroScore, behavioral]
-  );
 
   const hotLensIssues = useMemo(() => buildHotLensIssues(result, lensAnnotations), [result, lensAnnotations]);
 
@@ -626,7 +684,7 @@ export function DecisionActionPanel({
               <div className="rounded-xl border border-border bg-muted/30 px-3 py-2.5">
                 <p className="text-[11px] font-semibold text-foreground">Your site only</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
-                  Single view — competitor comparison is hidden. Use Split, Compare, or Slider to see vs{" "}
+                  Single view — competitor comparison is hidden. Use Original, Split, or Slider to see vs{" "}
                   {vsDomain ?? "a competitor"}.
                 </p>
               </div>
@@ -698,7 +756,13 @@ export function DecisionActionPanel({
               </div>
             </div>
             {sectionDeepDive && (
-              <div className="shrink-0 border border-amber-500/25 rounded-xl bg-gradient-to-b from-amber-500/[0.08] to-transparent px-3 py-3 space-y-2">
+              <div
+                id={`compare-section-dive-${sectionDeepDive.sectionKey}`}
+                className={cn(
+                  "shrink-0 border border-amber-500/25 rounded-xl bg-gradient-to-b from-amber-500/[0.08] to-transparent px-3 py-3 space-y-2 scroll-mt-4 transition-[box-shadow,background-color] duration-300",
+                  sectionDivePulse && "ring-2 ring-amber-400 bg-amber-50/95 dark:bg-amber-950/45 dark:ring-amber-500/80"
+                )}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-400">Section analysis</p>
@@ -753,9 +817,6 @@ export function DecisionActionPanel({
                   Copy full text
                 </button>
               </div>
-            )}
-            {toolbarContext.analyzeMode === null && toolbarContext.zoneLens === "rich" && (
-              <VisualLensCollapsible sections={visualLensSections} />
             )}
             {toolbarContext.analyzeMode === null && toolbarContext.zoneLens === "hot" && (
               <HotLensPanel issues={hotLensIssues} />
@@ -928,7 +989,7 @@ export function DecisionActionPanel({
           <div className="space-y-3">
             {hideCompetitorRefs ? (
               <p className="text-[11px] text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-3 leading-relaxed">
-                Competitive steal lists and win narratives are hidden in Single view. Use Split, Compare, or Slider to compare against a competitor.
+                Competitive steal lists and win narratives are hidden in Single view. Use Original, Split, or Slider to compare against a competitor.
               </p>
             ) : (
               <>
@@ -1265,6 +1326,7 @@ export function CompareOverlayLayer({
   heatmapGapOnCompetitorOnly,
   siteIsUser,
   attention,
+  onAttentionZoneMore,
 }: {
   mode: CompareOverlayLayerMode;
   annotations: Array<{ top: number; height: number; score: number | null; label: string; sectionKey?: string }>;
@@ -1281,6 +1343,8 @@ export function CompareOverlayLayer({
     visible: boolean;
     showPlaceholder: boolean;
   } | null;
+  /** Attention blobs: click → More in parent (Insight / section). */
+  onAttentionZoneMore?: (zone: AttentionZone) => void;
 }) {
   if (mode === "compare") return null;
 
@@ -1294,7 +1358,7 @@ export function CompareOverlayLayer({
   return (
     <div className="pointer-events-none absolute inset-0 z-[15]">
       {mode === "attention" && attentionResolved?.visible && attentionResolved.zones && attentionResolved.zones.length > 0 && (
-        <HeatmapOverlay zones={attentionResolved.zones} />
+        <HeatmapOverlay zones={attentionResolved.zones} onZoneMore={onAttentionZoneMore} />
       )}
       {mode === "attention" && attentionResolved?.visible && (!attentionResolved.zones || !attentionResolved.zones.length) && attentionResolved.showPlaceholder && (
         <>
