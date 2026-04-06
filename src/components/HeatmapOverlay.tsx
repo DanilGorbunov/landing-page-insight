@@ -1,10 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { AttentionZone } from "@/types/attention";
-import {
-  ZoneAnchorPopup,
-  ZonePortalTooltip,
-  useHoverTooltipDelay,
-} from "@/components/visual/VisualZoneLayers";
+import { ZoneAnchorPopup, ZoneInlineHoverTooltip } from "@/components/visual/VisualZoneLayers";
 
 function gradientForIntensity(intensity: number): string {
   if (intensity >= 8) {
@@ -24,10 +20,9 @@ function AttentionZoneHit({
   onZoneMore?: (zone: AttentionZone) => void;
 }) {
   const hitRef = useRef<HTMLDivElement | null>(null);
-  const [tipOpen, setTipOpen] = useState(false);
+  const [hoverInside, setHoverInside] = useState(false);
   const [tipRect, setTipRect] = useState<DOMRect | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
-  const { show, hide } = useHoverTooltipDelay();
 
   const syncRect = useCallback(() => {
     if (hitRef.current) setTipRect(hitRef.current.getBoundingClientRect());
@@ -45,7 +40,7 @@ function AttentionZoneHit({
     <>
       <div
         ref={hitRef}
-        className="absolute transition-opacity duration-300 ease-out pointer-events-auto cursor-pointer z-[11]"
+        className="absolute overflow-visible transition-opacity duration-300 ease-out pointer-events-auto cursor-pointer z-[11]"
         style={{
           left: `${Math.min(100, Math.max(0, zone.x))}%`,
           top: `${Math.min(100, Math.max(0, zone.y))}%`,
@@ -55,23 +50,12 @@ function AttentionZoneHit({
           minHeight: 80,
           borderRadius: "50%",
         }}
-        onMouseEnter={() => {
-          show(() => {
-            syncRect();
-            setTipOpen(true);
-          });
-        }}
-        onMouseLeave={() => {
-          hide(() => {
-            setTipOpen(false);
-            setTipRect(null);
-          });
-        }}
+        onMouseEnter={() => setHoverInside(true)}
+        onMouseLeave={() => setHoverInside(false)}
         onClick={(e) => {
           e.stopPropagation();
           if (!onZoneMore) return;
           syncRect();
-          setTipOpen(false);
           setPopupOpen(true);
         }}
         onKeyDown={(e) => {
@@ -101,20 +85,15 @@ function AttentionZoneHit({
             {zone.order}
           </span>
         )}
+        <ZoneInlineHoverTooltip visible={hoverInside} title={title} lines={lines} />
       </div>
-      <ZonePortalTooltip
-        open={tipOpen && !popupOpen}
-        anchorRect={tipRect}
-        title={title}
-        lines={lines}
-      />
       {onZoneMore && (
         <ZoneAnchorPopup
           open={popupOpen}
           anchorRect={tipRect}
           onClose={() => setPopupOpen(false)}
           title={zone.element}
-          scoreLine={`Attention intensity ${zone.intensity ?? 5}/10`}
+          scoreLine={`Heatmap intensity ${zone.intensity ?? 5}/10`}
           body={lines.join(" ")}
           onMore={() => onZoneMore(zone)}
         />
@@ -137,7 +116,7 @@ export function HeatmapOverlay({
 }) {
   const sorted = [...zones].filter(Boolean).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   return (
-    <div className="absolute left-0 top-0 h-full w-full pointer-events-none" style={{ zIndex: 10 }}>
+    <div className="absolute left-0 top-0 h-full w-full overflow-visible pointer-events-none" style={{ zIndex: 10 }}>
       {sorted.map((zone, i) => (
         <AttentionZoneHit key={`${zone.order}-${i}`} zone={zone} onZoneMore={onZoneMore} />
       ))}

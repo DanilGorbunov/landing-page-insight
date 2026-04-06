@@ -26,7 +26,7 @@ export type ToolbarContext = {
 };
 
 const ANALYZE_LABEL: Record<Exclude<ToolbarAnalyzeMode, null>, string> = {
-  attention: "Attention",
+  attention: "Heatmap",
   heatmap: "Gap heat",
   copy: "Copy",
   conversion: "Conversion",
@@ -58,7 +58,7 @@ export function getRightPanelHeader(
   }
 
   if (analyzeMode === "attention") {
-    return { title: "Attention Analysis", subtitle: "Eye path: headline → CTA → social proof · Visual hierarchy & above-fold focus" };
+    return { title: "Heatmap Analysis", subtitle: "Eye path: headline → CTA → social proof · Visual hierarchy & above-fold focus" };
   }
   if (analyzeMode === "heatmap") {
     return { title: "Competitive Gap Analysis", subtitle: "Zones: red = they lead · green = you lead · grey = similar" };

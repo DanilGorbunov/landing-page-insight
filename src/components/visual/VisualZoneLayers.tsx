@@ -3,56 +3,29 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const TIP_DELAY_MS = 200;
-const Z_TOOLTIP = 9999;
 const Z_POPUP = 10000;
 
-function placeTooltip(rect: DOMRect, tipW: number, tipH: number, margin = 8): { left: number; top: number } {
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const midY = rect.top + rect.height / 2;
-  const placeAbove = midY > vh / 2;
-  let top = placeAbove ? rect.top - tipH - margin : rect.bottom + margin;
-  let left = rect.left + rect.width / 2 - tipW / 2;
-  left = Math.max(margin, Math.min(left, vw - tipW - margin));
-  if (top < margin) top = rect.bottom + margin;
-  if (top + tipH > vh - margin) top = Math.max(margin, rect.top - tipH - margin);
-  return { left, top };
-}
-
-/** Dark floating tooltip (portal) — one visible at a time per instance. */
-export function ZonePortalTooltip({
-  open,
-  anchorRect,
+/** Tooltip anchored above the zone — child of the same hover target so there is no gap mouseleave. */
+export function ZoneInlineHoverTooltip({
+  visible,
   title,
   lines,
   className,
 }: {
-  open: boolean;
-  anchorRect: DOMRect | null;
+  visible: boolean;
   title: string;
   lines: string[];
   className?: string;
 }) {
-  if (!open || !anchorRect || typeof document === "undefined") return null;
-  const tipW = 260;
-  const tipH = 120;
-  const pos = placeTooltip(anchorRect, tipW, tipH);
-
-  const node = (
+  return (
     <div
       role="tooltip"
       className={cn(
-        "fixed rounded-lg border border-white/10 bg-zinc-900 px-3 py-2.5 text-[13px] leading-snug text-white shadow-xl dark:bg-zinc-950 max-w-[260px]",
+        "absolute bottom-full left-1/2 z-[30] mb-1 w-[min(260px,calc(100vw-2rem))] max-w-[260px] -translate-x-1/2 select-none rounded-lg border border-white/10 bg-zinc-900 px-3 py-2.5 text-[13px] leading-snug text-white shadow-xl transition-opacity duration-150 dark:bg-zinc-950",
+        visible ? "opacity-100" : "opacity-0",
         className
       )}
-      style={{
-        left: pos.left,
-        top: pos.top,
-        width: tipW,
-        zIndex: Z_TOOLTIP,
-        pointerEvents: "none",
-      }}
+      style={{ pointerEvents: visible ? "auto" : "none" }}
     >
       <p className="font-semibold leading-tight">{title}</p>
       {lines.map((line, i) => (
@@ -62,8 +35,6 @@ export function ZonePortalTooltip({
       ))}
     </div>
   );
-
-  return createPortal(node, document.body);
 }
 
 export function ZoneAnchorPopup({
@@ -122,7 +93,7 @@ export function ZoneAnchorPopup({
       ref={popRef}
       role="dialog"
       aria-modal="true"
-      className="fixed w-[280px] rounded-lg border border-border bg-card p-3 text-foreground shadow-xl dark:bg-zinc-900 dark:border-zinc-700"
+      className="fixed w-[280px] select-none rounded-lg border border-border bg-card p-3 text-foreground shadow-xl dark:bg-zinc-900 dark:border-zinc-700"
       style={{ left, top, zIndex: Z_POPUP }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -154,23 +125,4 @@ export function ZoneAnchorPopup({
   );
 
   return createPortal(node, document.body);
-}
-
-export function useHoverTooltipDelay() {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const show = useCallback((fn: () => void) => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(fn, TIP_DELAY_MS);
-  }, []);
-  const hide = useCallback((fn?: () => void) => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-    fn?.();
-  }, []);
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-  return { show, hide };
 }

@@ -32,6 +32,8 @@ import {
   Target,
   ChevronDown,
   Check,
+  Image,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -42,11 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HintTooltip } from "@/components/HintTooltip";
-import {
-  ZoneAnchorPopup,
-  ZonePortalTooltip,
-  useHoverTooltipDelay,
-} from "@/components/visual/VisualZoneLayers";
+import { ZoneAnchorPopup, ZoneInlineHoverTooltip } from "@/components/visual/VisualZoneLayers";
 import {
   HINT_VIEW,
   HINT_VIEW_SLIDER,
@@ -54,6 +52,7 @@ import {
   HINT_LENS,
   HINT_CONTROLS,
   hintSiteTab,
+  type ToolbarHintContent,
 } from "@/lib/compareUiHints";
 import {
   DecisionActionPanel,
@@ -345,11 +344,10 @@ function SectionZoneInteractiveHitbox({
   onZoneMore: (ann: Annotation) => void;
 }) {
   const hitRef = useRef<HTMLDivElement | null>(null);
-  const [tipOpen, setTipOpen] = useState(false);
+  const [hoverInside, setHoverInside] = useState(false);
   const [tipRect, setTipRect] = useState<DOMRect | null>(null);
   const [tipContent, setTipContent] = useState<{ title: string; lines: string[] } | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
-  const { show, hide } = useHoverTooltipDelay();
 
   const syncRect = useCallback(() => {
     if (hitRef.current) setTipRect(hitRef.current.getBoundingClientRect());
@@ -360,28 +358,17 @@ function SectionZoneInteractiveHitbox({
       <div
         ref={hitRef}
         role="presentation"
-        className="absolute inset-0 z-[18] cursor-pointer"
+        className="absolute inset-0 z-[18] cursor-pointer overflow-visible"
         style={{ pointerEvents: "auto" }}
         onMouseEnter={() => {
           const content = zoneTooltipFor(ann);
-          if (!content) return;
-          show(() => {
-            syncRect();
-            setTipContent(content);
-            setTipOpen(true);
-          });
+          setTipContent(content);
+          setHoverInside(true);
         }}
-        onMouseLeave={() => {
-          hide(() => {
-            setTipOpen(false);
-            setTipRect(null);
-            setTipContent(null);
-          });
-        }}
+        onMouseLeave={() => setHoverInside(false)}
         onClick={(e) => {
           e.stopPropagation();
           syncRect();
-          setTipOpen(false);
           setPopupOpen(true);
         }}
         onTouchEnd={(e) => {
@@ -389,13 +376,15 @@ function SectionZoneInteractiveHitbox({
           syncRect();
           setPopupOpen(true);
         }}
-      />
-      <ZonePortalTooltip
-        open={Boolean(tipOpen && tipContent && !popupOpen)}
-        anchorRect={tipRect}
-        title={tipContent?.title ?? ""}
-        lines={tipContent?.lines ?? []}
-      />
+      >
+        {tipContent && (
+          <ZoneInlineHoverTooltip
+            visible={hoverInside}
+            title={tipContent.title}
+            lines={tipContent.lines}
+          />
+        )}
+      </div>
       <ZoneAnchorPopup
         open={popupOpen}
         anchorRect={tipRect}
@@ -430,7 +419,6 @@ function AnnotationPin({
   side: "left" | "right";
   onMore?: () => void;
 }) {
-  const bullets = annotationBulletPoints(ann.fullText, 3);
   const pinSummary =
     ann.summary.length > 200 ? `${ann.summary.slice(0, 200).trim()}…` : ann.summary;
   const pinAction =
@@ -463,21 +451,28 @@ function AnnotationPin({
         </button>
       </HintTooltip>
       {expanded && (
-        <div className="mt-1 rounded-xl border border-border bg-card/95 backdrop-blur-md p-2.5 shadow-xl text-[11px] leading-relaxed text-foreground max-w-[min(300px,44vw)]">
-          {ann.preview ? <p className="text-foreground/95">{ann.preview}</p> : <p>{ann.summary}</p>}
-          {bullets.length > 0 && (
-            <ul className="mt-2 space-y-1 text-[10px] text-muted-foreground list-disc pl-3.5">
-              {bullets.map((b, i) => (
-                <li key={i}>{b}</li>
-              ))}
-            </ul>
-          )}
+        <div className="relative mt-1 max-w-[min(300px,44vw)] select-none rounded-xl border border-border bg-card/95 p-2.5 text-[11px] leading-relaxed text-foreground shadow-xl backdrop-blur-md">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            className="absolute right-1.5 top-1.5 z-10 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Close"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+          <div className="pr-7">
+            {ann.preview ? <p className="text-foreground/95">{ann.preview}</p> : <p>{ann.summary}</p>}
+          </div>
           {onMore && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onMore();
+                onToggle();
               }}
               className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-primary/40 bg-primary/10 py-1.5 text-[10px] font-bold uppercase tracking-wide text-primary hover:bg-primary/20"
             >
@@ -486,7 +481,7 @@ function AnnotationPin({
             </button>
           )}
           {ann.score != null && ann.score < 7 && (
-            <p className="mt-2 text-primary font-semibold flex items-center gap-1 text-[10px]">
+            <p className="mt-2 flex items-center gap-1 pr-7 text-[10px] font-semibold text-primary">
               <Lightbulb className="h-3 w-3 shrink-0" />
               Needs improvement
             </p>
@@ -715,28 +710,44 @@ function ScreenshotFrame({
 
   if (!site.screenshotUrl) return <div className="flex items-center justify-center min-h-[200px] text-sm text-muted-foreground bg-muted/20 rounded-xl">No screenshot for {site.domain}</div>;
   return (
-    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-1.5">
+    <div className="relative flex min-h-0 min-w-0 w-full flex-1 flex-col">
       {attentionOverlay && overlayMode === "attention" && !attentionOverlay.loading && (
-        <div className="flex shrink-0 flex-wrap items-center justify-center gap-1 rounded-lg border border-border/80 bg-muted/40 px-1.5 py-1">
+        <div
+          className="pointer-events-auto absolute top-1.5 right-1.5 z-[28] inline-flex items-center gap-0 rounded-lg border border-border/90 bg-background/85 p-0.5 shadow-md backdrop-blur-sm dark:bg-background/80"
+          role="tablist"
+          aria-label="Screenshot view"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={!attentionOverlay.layerVisible}
+            title="Original"
+            aria-label="Original screenshot"
             onClick={() => attentionOverlay.onLayerVisibleChange(false)}
             className={cn(
-              "rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors",
-              !attentionOverlay.layerVisible ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              "inline-flex size-6 items-center justify-center rounded-md transition-colors",
+              !attentionOverlay.layerVisible
+                ? "text-amber-700 dark:text-amber-400"
+                : "text-muted-foreground/75 hover:text-foreground"
             )}
           >
-            📸 Original
+            <Image className="h-2.5 w-2.5 shrink-0" strokeWidth={2.25} aria-hidden />
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={attentionOverlay.layerVisible}
+            title="Heatmap"
+            aria-label="Heatmap overlay"
             onClick={() => attentionOverlay.onLayerVisibleChange(true)}
             className={cn(
-              "rounded-md px-2.5 py-1 text-[10px] font-semibold transition-colors",
-              attentionOverlay.layerVisible ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              "inline-flex size-6 items-center justify-center rounded-md transition-colors",
+              attentionOverlay.layerVisible
+                ? "text-amber-700 dark:text-amber-400"
+                : "text-muted-foreground/75 hover:text-foreground"
             )}
           >
-            🧠 Heatmap
+            <MousePointer2 className="h-2.5 w-2.5 shrink-0" strokeWidth={2.25} aria-hidden />
           </button>
         </div>
       )}
@@ -747,7 +758,7 @@ function ScreenshotFrame({
       >
       <div
         className={cn(
-          "relative overflow-hidden inline-block min-w-full origin-top transition-transform duration-150 ease-out",
+          "relative overflow-visible inline-block min-w-full origin-top transition-transform duration-150 ease-out",
           mobileFrame && "mx-auto block max-w-[390px] shadow-2xl ring-2 ring-border/80 dark:ring-border/60 rounded-xl"
         )}
         style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
@@ -1156,6 +1167,17 @@ export function ScreenshotCompare({
   const [simplifyCEO, setSimplifyCEO] = useState(false);
   const [planFocusTick, setPlanFocusTick] = useState(0);
   const [quickWinDismissed, setQuickWinDismissed] = useState(false);
+  /** Stacked “what / problem / how” cards from toolbar clicks; newest first. */
+  const [toolbarHelpCards, setToolbarHelpCards] = useState<Array<{ id: string } & ToolbarHintContent>>([]);
+  const pushToolbarHelp = useCallback((id: string, hint: ToolbarHintContent) => {
+    setToolbarHelpCards((prev) => {
+      const rest = prev.filter((c) => c.id !== id);
+      return [{ id, ...hint }, ...rest].slice(0, 12);
+    });
+  }, []);
+  const dismissToolbarHelp = useCallback((id: string) => {
+    setToolbarHelpCards((prev) => prev.filter((c) => c.id !== id));
+  }, []);
   const [narrowViewport, setNarrowViewport] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
   );
@@ -1769,6 +1791,8 @@ export function ScreenshotCompare({
           : null
       }
       attentionInsight={attentionInsight}
+      toolbarHelpCards={toolbarHelpCards}
+      onDismissToolbarHelp={dismissToolbarHelp}
     />
   );
 
@@ -1776,7 +1800,7 @@ export function ScreenshotCompare({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
-          {/* ANALYZE — Attention → HOT → Gap heat … → First 5s → More */}
+          {/* ANALYZE — Heatmap → HOT → Gap heat … → First 5s → More */}
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <HintTooltip
               side="bottom"
@@ -1786,7 +1810,10 @@ export function ScreenshotCompare({
             >
               <button
                 type="button"
-                onClick={() => setAnalyzeMode((prev) => (prev === "attention" ? null : "attention"))}
+                onClick={() => {
+                  pushToolbarHelp("analyze-attention", HINT_ANALYZE.attention);
+                  setAnalyzeMode((prev) => (prev === "attention" ? null : "attention"));
+                }}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors max-md:hidden",
                   analyzeMode === "attention"
@@ -1795,7 +1822,7 @@ export function ScreenshotCompare({
                 )}
               >
                 <MousePointer2 className="h-3.5 w-3.5" />
-                Attention
+                Heatmap
               </button>
             </HintTooltip>
 
@@ -1807,7 +1834,10 @@ export function ScreenshotCompare({
             >
               <button
                 type="button"
-                onClick={() => setZoneLens((prev) => (prev === "hot" ? "balanced" : "hot"))}
+                onClick={() => {
+                  pushToolbarHelp("lens-hot", HINT_LENS.hot);
+                  setZoneLens((prev) => (prev === "hot" ? "balanced" : "hot"));
+                }}
                 className={cn(
                   "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
                   zoneLens === "hot"
@@ -1833,7 +1863,10 @@ export function ScreenshotCompare({
                 <HintTooltip key={id} side="bottom" title={hint.title} description={hint.description} action={hint.action}>
                   <button
                     type="button"
-                    onClick={() => setAnalyzeMode((prev) => (prev === id ? null : id))}
+                    onClick={() => {
+                      pushToolbarHelp(`analyze-${id}`, hint);
+                      setAnalyzeMode((prev) => (prev === id ? null : id));
+                    }}
                     className={cn(
                       "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
                       analyzeMode === id
@@ -1855,6 +1888,7 @@ export function ScreenshotCompare({
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
+                      onClick={() => pushToolbarHelp("more-menu", HINT_CONTROLS.moreMenu)}
                       className={cn(
                         "inline-flex items-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
                         moreMenuLooksActive && "border-amber-500/50 bg-amber-500/5 text-amber-800 dark:text-amber-300"
@@ -1876,15 +1910,30 @@ export function ScreenshotCompare({
               </Tooltip>
               <DropdownMenuContent align="start" className="w-48">
                 <div className="md:hidden">
-                  <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "attention" ? null : "attention"))}>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      pushToolbarHelp("analyze-attention", HINT_ANALYZE.attention);
+                      setAnalyzeMode((p) => (p === "attention" ? null : "attention"));
+                    }}
+                  >
                     <MousePointer2 className="h-3.5 w-3.5 mr-2" />
-                    Attention
+                    Heatmap
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "copy" ? null : "copy"))}>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      pushToolbarHelp("analyze-copy", HINT_ANALYZE.copy);
+                      setAnalyzeMode((p) => (p === "copy" ? null : "copy"));
+                    }}
+                  >
                     <Type className="h-3.5 w-3.5 mr-2" />
                     Copy
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setAnalyzeMode((p) => (p === "first5s" ? null : "first5s"))}>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      pushToolbarHelp("analyze-first5s", HINT_ANALYZE.first5s);
+                      setAnalyzeMode((p) => (p === "first5s" ? null : "first5s"));
+                    }}
+                  >
                     <Timer className="h-3.5 w-3.5 mr-2" />
                     First 5s
                   </DropdownMenuItem>
@@ -1894,6 +1943,7 @@ export function ScreenshotCompare({
                   disabled={sites.length < 2}
                   title={`${HINT_VIEW_SLIDER.title}: ${HINT_VIEW_SLIDER.description} ${HINT_VIEW_SLIDER.action}`}
                   onClick={() => {
+                    pushToolbarHelp("view-slider", HINT_VIEW_SLIDER);
                     setViewMode("slider");
                   }}
                 >
@@ -1902,14 +1952,20 @@ export function ScreenshotCompare({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   title={`${HINT_ANALYZE.trust.title}: ${HINT_ANALYZE.trust.description}`}
-                  onClick={() => setAnalyzeMode((p) => (p === "trust" ? null : "trust"))}
+                  onClick={() => {
+                    pushToolbarHelp("analyze-trust", HINT_ANALYZE.trust);
+                    setAnalyzeMode((p) => (p === "trust" ? null : "trust"));
+                  }}
                 >
                   <Shield className="h-3.5 w-3.5 mr-2" />
                   Trust
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   title={`${HINT_ANALYZE.readability.title}: ${HINT_ANALYZE.readability.description}`}
-                  onClick={() => setAnalyzeMode((p) => (p === "readability" ? null : "readability"))}
+                  onClick={() => {
+                    pushToolbarHelp("analyze-readability", HINT_ANALYZE.readability);
+                    setAnalyzeMode((p) => (p === "readability" ? null : "readability"));
+                  }}
                 >
                   <BookOpen className="h-3.5 w-3.5 mr-2" />
                   Read
@@ -1918,7 +1974,10 @@ export function ScreenshotCompare({
                 <DropdownMenuItem
                   disabled={activeSite.isUser}
                   title={`${HINT_LENS.delta.title}: ${HINT_LENS.delta.description}`}
-                  onClick={() => setZoneLens((p) => (p === "delta" ? "balanced" : "delta"))}
+                  onClick={() => {
+                    pushToolbarHelp("lens-delta", HINT_LENS.delta);
+                    setZoneLens((p) => (p === "delta" ? "balanced" : "delta"));
+                  }}
                   className="gap-2 font-semibold"
                 >
                   <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
@@ -1935,7 +1994,10 @@ export function ScreenshotCompare({
             <HintTooltip side="bottom" title={HINT_VIEW.single.title} description={HINT_VIEW.single.description} action={HINT_VIEW.single.action}>
               <button
                 type="button"
-                onClick={() => setViewMode("single")}
+                onClick={() => {
+                  pushToolbarHelp("view-single", HINT_VIEW.single);
+                  setViewMode("single");
+                }}
                 aria-label="Single"
                 className={cn(
                   "inline-flex items-center justify-center rounded-lg border p-1.5 text-[11px] font-semibold transition-colors",
@@ -1949,7 +2011,10 @@ export function ScreenshotCompare({
               <button
                 type="button"
                 disabled={sites.length < 2}
-                onClick={() => setViewMode("split")}
+                onClick={() => {
+                  pushToolbarHelp("view-split", HINT_VIEW.split);
+                  setViewMode("split");
+                }}
                 aria-label="Split"
                 className={cn(
                   "inline-flex items-center justify-center rounded-lg border p-1.5 text-[11px] font-semibold transition-colors",
@@ -1964,7 +2029,10 @@ export function ScreenshotCompare({
               <button
                 type="button"
                 disabled={sites.length < 2}
-                onClick={() => setViewMode("compare")}
+                onClick={() => {
+                  pushToolbarHelp("view-compare", HINT_VIEW.compare);
+                  setViewMode("compare");
+                }}
                 aria-label="Compare"
                 className={cn(
                   "inline-flex items-center justify-center rounded-lg border p-1.5 text-[11px] font-semibold transition-colors",
@@ -1981,7 +2049,10 @@ export function ScreenshotCompare({
             <HintTooltip side="bottom" title={HINT_CONTROLS.pins.title} description={HINT_CONTROLS.pins.description} action={HINT_CONTROLS.pins.action}>
               <button
                 type="button"
-                onClick={() => setShowPins((v) => !v)}
+                onClick={() => {
+                  pushToolbarHelp("ctrl-pins", HINT_CONTROLS.pins);
+                  setShowPins((v) => !v);
+                }}
                 aria-label="Pins"
                 className={cn(
                   "inline-flex items-center justify-center rounded-lg border p-1.5 text-[11px] font-semibold transition-colors",
@@ -1992,12 +2063,24 @@ export function ScreenshotCompare({
               </button>
             </HintTooltip>
             <HintTooltip side="bottom" title={HINT_CONTROLS.zones.title} description={HINT_CONTROLS.zones.description} action={HINT_CONTROLS.zones.action}>
-              <button type="button" onClick={() => setShowZones((v) => !v)} className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showZones ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>Zones</button>
+              <button
+                type="button"
+                onClick={() => {
+                  pushToolbarHelp("ctrl-zones", HINT_CONTROLS.zones);
+                  setShowZones((v) => !v);
+                }}
+                className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showZones ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}
+              >
+                Zones
+              </button>
             </HintTooltip>
             <HintTooltip side="bottom" title={HINT_CONTROLS.wide.title} description={HINT_CONTROLS.wide.description} action={HINT_CONTROLS.wide.action}>
               <button
                 type="button"
-                onClick={() => setFullWidth((v) => !v)}
+                onClick={() => {
+                  pushToolbarHelp("ctrl-wide", HINT_CONTROLS.wide);
+                  setFullWidth((v) => !v);
+                }}
                 aria-label={fullWidth ? "Normal width" : "Wide"}
                 className="inline-flex items-center justify-center rounded-lg border border-border p-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
               >
@@ -2008,11 +2091,31 @@ export function ScreenshotCompare({
           <span className="hidden h-4 w-px shrink-0 bg-border/70 sm:block" aria-hidden />
           <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5">
             <HintTooltip side="bottom" title={HINT_CONTROLS.zoomOut.title} description={HINT_CONTROLS.zoomOut.description} action={HINT_CONTROLS.zoomOut.action} disabled={zoomIdx === 0}>
-              <button type="button" onClick={() => setZoomIdx((i) => Math.max(0, i - 1))} disabled={zoomIdx === 0} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomOut className="h-3 w-3" /></button>
+              <button
+                type="button"
+                onClick={() => {
+                  pushToolbarHelp("ctrl-zoom-out", HINT_CONTROLS.zoomOut);
+                  setZoomIdx((i) => Math.max(0, i - 1));
+                }}
+                disabled={zoomIdx === 0}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40"
+              >
+                <ZoomOut className="h-3 w-3" />
+              </button>
             </HintTooltip>
             <span className="text-[10px] font-mono font-bold w-10 text-center text-muted-foreground">{Math.round(zoom * 100)}%</span>
             <HintTooltip side="bottom" title={HINT_CONTROLS.zoomIn.title} description={HINT_CONTROLS.zoomIn.description} action={HINT_CONTROLS.zoomIn.action} disabled={zoomIdx >= ZOOM_LEVELS.length - 1}>
-              <button type="button" onClick={() => setZoomIdx((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1))} disabled={zoomIdx >= ZOOM_LEVELS.length - 1} className="p-1 rounded hover:bg-muted disabled:opacity-40"><ZoomIn className="h-3 w-3" /></button>
+              <button
+                type="button"
+                onClick={() => {
+                  pushToolbarHelp("ctrl-zoom-in", HINT_CONTROLS.zoomIn);
+                  setZoomIdx((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1));
+                }}
+                disabled={zoomIdx >= ZOOM_LEVELS.length - 1}
+                className="p-1 rounded hover:bg-muted disabled:opacity-40"
+              >
+                <ZoomIn className="h-3 w-3" />
+              </button>
             </HintTooltip>
           </div>
         </div>
@@ -2025,7 +2128,14 @@ export function ScreenshotCompare({
       {!controlled && (
         <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
           <HintTooltip side="bottom" title={HINT_CONTROLS.prevSite.title} description={HINT_CONTROLS.prevSite.description}>
-            <button type="button" onClick={handlePrev} className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted">
+            <button
+              type="button"
+              onClick={() => {
+                pushToolbarHelp("nav-prev", HINT_CONTROLS.prevSite);
+                handlePrev();
+              }}
+              className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
               <ChevronLeft className="h-3.5 w-3.5" />
             </button>
           </HintTooltip>
@@ -2035,6 +2145,7 @@ export function ScreenshotCompare({
               site={s}
               active={i === activeIdx}
               onClick={() => {
+                pushToolbarHelp(`site-tab-${s.domain}`, hintSiteTab(s.isUser, s.domain, deltaVsYou(s)));
                 setActiveIdx(i);
                 setExpandedPin(null);
               }}
@@ -2042,7 +2153,14 @@ export function ScreenshotCompare({
             />
           ))}
           <HintTooltip side="bottom" title={HINT_CONTROLS.nextSite.title} description={HINT_CONTROLS.nextSite.description}>
-            <button type="button" onClick={handleNext} className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted">
+            <button
+              type="button"
+              onClick={() => {
+                pushToolbarHelp("nav-next", HINT_CONTROLS.nextSite);
+                handleNext();
+              }}
+              className="shrink-0 rounded-lg border border-border p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </HintTooltip>
@@ -2101,7 +2219,10 @@ export function ScreenshotCompare({
                             compact
                             sites={sites}
                             valueIdx={activeIdx}
-                            onSelect={setActiveIdx}
+                            onSelect={(idx) => {
+                              pushToolbarHelp("vs-column-single", HINT_CONTROLS.vsSelect);
+                              setActiveIdx(idx);
+                            }}
                           />
                         </div>
                       )}
@@ -2171,7 +2292,10 @@ export function ScreenshotCompare({
                           compact
                           sites={sites}
                           valueIdx={safeLeft}
-                          onSelect={selectSplitLeft}
+                          onSelect={(idx) => {
+                            pushToolbarHelp("vs-column-left", HINT_CONTROLS.vsSelect);
+                            selectSplitLeft(idx);
+                          }}
                         />
                       </div>
                       <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
@@ -2228,7 +2352,10 @@ export function ScreenshotCompare({
                           compact
                           sites={sites}
                           valueIdx={safeRight}
-                          onSelect={selectSplitRight}
+                          onSelect={(idx) => {
+                            pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
+                            selectSplitRight(idx);
+                          }}
                         />
                       </div>
                       <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
@@ -2293,7 +2420,7 @@ export function ScreenshotCompare({
                     />
                     {effectiveOverlay === "attention" && (
                       <p className="shrink-0 text-[10px] text-center text-muted-foreground leading-snug px-2">
-                        Attention heatmap overlays work in Single, Original, or Split. Switch view to see predicted attention on each full screenshot side by side.
+                        Heatmap overlays work in Single, Original, or Split. Switch view to see predicted attention on each full screenshot side by side.
                       </p>
                     )}
                   </div>
@@ -2387,6 +2514,7 @@ export function ScreenshotCompare({
                 <button
                   type="button"
                   onClick={() => {
+                    pushToolbarHelp(`site-grid-${site.domain}`, hintSiteTab(site.isUser, site.domain, deltaVsYou(site)));
                     setActiveIdx(i);
                     setExpandedPin(null);
                   }}

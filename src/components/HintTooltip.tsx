@@ -37,7 +37,7 @@ export function HintTooltip({
       </TooltipTrigger>
       <TooltipContent
         side={side}
-        className="max-w-[min(320px,calc(100vw-2rem))] space-y-1.5 p-3 text-left"
+        className="max-w-[min(320px,calc(100vw-2rem))] select-none space-y-1.5 p-3 text-left"
       >
         <p className="text-xs font-semibold leading-snug text-foreground">{title}</p>
         {description ? (

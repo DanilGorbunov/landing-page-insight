@@ -64,7 +64,7 @@ export function AttentionAnalysisPanel({
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-primary shrink-0 animate-pulse" />
           <div>
-            <p className="text-[11px] font-bold text-foreground">Attention Analysis</p>
+            <p className="text-[11px] font-bold text-foreground">Heatmap Analysis</p>
             <p className="text-[10px] text-muted-foreground">AI-predicted · visual saliency</p>
           </div>
         </div>
@@ -90,7 +90,7 @@ export function AttentionAnalysisPanel({
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[11px] text-foreground">
         <p className="font-semibold flex items-center gap-1.5">
           <Eye className="h-3.5 w-3.5 shrink-0" />
-          Attention analysis unavailable for this screenshot
+          Heatmap analysis unavailable for this screenshot
         </p>
         <p className="text-muted-foreground mt-1 leading-snug">
           Try again later or check that screenshot URLs are reachable. Your compare view still works without the overlay.
@@ -118,7 +118,7 @@ export function AttentionAnalysisPanel({
         <div className="flex items-start gap-2">
           <Eye className="h-4 w-4 text-primary shrink-0 mt-0.5" />
           <div>
-            <p className="text-[11px] font-bold text-foreground">Attention Analysis</p>
+            <p className="text-[11px] font-bold text-foreground">Heatmap Analysis</p>
             <p className="text-[10px] text-muted-foreground leading-snug">AI-predicted · based on visual saliency principles</p>
           </div>
         </div>
@@ -146,7 +146,7 @@ export function AttentionAnalysisPanel({
           </div>
         </div>
         <div className="grid grid-cols-3 gap-px bg-border text-[11px]">
-          <div className="bg-card px-2 py-2 text-muted-foreground font-medium">Attention</div>
+          <div className="bg-card px-2 py-2 text-muted-foreground font-medium">Heatmap</div>
           <div className={cn("bg-card px-2 py-2 text-center tabular-nums", attDelta != null && attDelta >= 0 ? "text-primary" : "text-red-600 dark:text-red-400")}>
             {yAtt != null ? `${Math.round(yAtt)}/100` : "—"}
           </div>

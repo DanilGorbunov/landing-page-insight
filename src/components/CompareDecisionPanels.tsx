@@ -34,6 +34,7 @@ import { ScoreBreakdownPopover } from "@/components/ScoreBreakdownPopover";
 import { CopyGeneratorBlock } from "@/components/CopyGeneratorBlock";
 import { AttentionAnalysisPanel } from "@/components/AttentionAnalysisPanel";
 import type { AttentionComparison, HeatmapAnalysis } from "@/types/attention";
+import { COMPARE_DEFAULT_PANEL_GUIDE, type ToolbarHintContent } from "@/lib/compareUiHints";
 import { BusinessImpactEstimate } from "@/components/BusinessImpactEstimate";
 import { InsightConfidenceBadge } from "@/components/InsightConfidenceBadge";
 import {
@@ -426,6 +427,8 @@ export function DecisionActionPanel({
   lensAnnotations = [],
   lensVs = null,
   attentionInsight = null,
+  toolbarHelpCards = [],
+  onDismissToolbarHelp,
 }: {
   result: AnalysisResult;
   activeSite: SiteLite;
@@ -498,6 +501,9 @@ export function DecisionActionPanel({
     showUpgradePrompt: boolean;
     onDismissUpgrade: () => void;
   } | null;
+  /** Stacked “what / problem / how” cards from toolbar button clicks (newest first). */
+  toolbarHelpCards?: Array<{ id: string } & ToolbarHintContent>;
+  onDismissToolbarHelp?: (id: string) => void;
 }) {
   const [panelTab, setPanelTab] = useState<DecisionPanelTab>("overview");
   const [heroOpen, setHeroOpen] = useState(true);
@@ -673,6 +679,58 @@ export function DecisionActionPanel({
       </div>
 
       <div ref={panelScrollRef} className="p-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0">
+        {toolbarHelpCards.length > 0 && (
+          <div className="flex min-w-0 flex-col gap-2">
+            {toolbarHelpCards.map((card) => (
+              <div
+                key={card.id}
+                className="rounded-lg border border-primary/25 bg-primary/[0.06] px-3 py-2.5 text-left shadow-sm dark:border-primary/35 dark:bg-primary/10"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs font-bold text-foreground">{card.title}</p>
+                  <button
+                    type="button"
+                    onClick={() => onDismissToolbarHelp?.(card.id)}
+                    className="shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <p className="mt-1.5 text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Why it matters</p>
+                <p className="text-[11px] leading-snug text-muted-foreground">{card.problem}</p>
+                <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">What it is</p>
+                <p className="text-[11px] leading-snug text-foreground/95">{card.description}</p>
+                <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-primary">How to use</p>
+                <p className="text-[11px] leading-snug text-muted-foreground">{card.action}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="rounded-xl border border-border bg-muted/20 px-3 py-2.5 shadow-sm dark:bg-muted/15">
+          <div className="flex items-start gap-2">
+            <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+            <div className="min-w-0 space-y-2">
+              <div>
+                <p className="text-[11px] font-bold text-foreground">{COMPARE_DEFAULT_PANEL_GUIDE.title}</p>
+                <p className="mt-1 text-[10px] leading-snug text-muted-foreground">{COMPARE_DEFAULT_PANEL_GUIDE.lead}</p>
+              </div>
+              <ul className="space-y-2">
+                {COMPARE_DEFAULT_PANEL_GUIDE.pairs.map((pair, i) => (
+                  <li
+                    key={i}
+                    className="rounded-lg border border-border/70 bg-card/70 px-2.5 py-2 dark:border-border/50 dark:bg-card/40"
+                  >
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Look for</p>
+                    <p className="text-[11px] leading-snug text-foreground/95">{pair.focus}</p>
+                    <p className="mt-1.5 text-[9px] font-bold uppercase tracking-wide text-primary">Try next</p>
+                    <p className="text-[11px] leading-snug text-muted-foreground">{pair.nextStep}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
         {(panelHeader.title || panelHeader.subtitle) && (
           <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 transition-opacity duration-150">
             {panelHeader.title && <p className="text-[11px] font-bold text-primary">{panelHeader.title}</p>}
