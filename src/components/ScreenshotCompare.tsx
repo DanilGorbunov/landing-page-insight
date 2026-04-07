@@ -14,12 +14,8 @@ import type { AnalysisResult } from "@/types/api";
 import {
   ChevronLeft,
   ChevronRight,
-  Eye,
-  EyeOff,
   Maximize2,
   Minimize2,
-  AlertTriangle,
-  CheckCircle2,
   Lightbulb,
   LayoutGrid,
   GalleryHorizontal,
@@ -42,7 +38,6 @@ import {
   ChevronDown,
   Check,
   Image,
-  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -53,7 +48,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HintTooltip } from "@/components/HintTooltip";
-import { ZoneAnchorPopup, ZoneInlineHoverTooltip } from "@/components/visual/VisualZoneLayers";
 import {
   HINT_VIEW,
   HINT_VIEW_SLIDER,
@@ -69,8 +63,9 @@ import {
   type CompareOverlayLayerMode,
   type DecisionPanelTab,
 } from "@/components/CompareDecisionPanels";
-import { SimulateAiLabels } from "@/components/SimulateAiLabels";
+import { AiLabelMarkers } from "@/components/AiLabelMarkers";
 import { buildSimulateAiLabelRows } from "@/lib/simulateAiLabels";
+import { buildUnifiedAiLabelRowsForMode } from "@/lib/unifiedAiLabels";
 import type { AttentionHeatmapResponse, AttentionZone } from "@/types/attention";
 import { fetchAttentionHeatmap } from "@/lib/api";
 import { normalizeAttentionResponse } from "@/lib/attentionNormalize";
@@ -201,31 +196,6 @@ function sBorder(s: number | null) {
   return "border-red-500/60 bg-red-500/10";
 }
 
-/** Section tabs on screenshots: in light UI theme use frosted dark chip + light text so labels stay readable on any screenshot. */
-function screenshotPinSurface(score: number | null) {
-  return cn(
-    "border-white/[0.18] bg-zinc-950/[0.78] shadow-md shadow-black/25",
-    score == null && "dark:border-muted-foreground/40 dark:bg-muted/60 dark:shadow-lg",
-    score != null && score >= 7.5 && "dark:border-primary/60 dark:bg-primary/10 dark:shadow-lg",
-    score != null && score >= 5 && score < 7.5 && "dark:border-amber-500/60 dark:bg-amber-500/10 dark:shadow-lg",
-    score != null && score < 5 && "dark:border-red-500/60 dark:bg-red-500/10 dark:shadow-lg"
-  );
-}
-
-function screenshotPinScoreClass(score: number | null) {
-  if (score == null) return "text-zinc-400 dark:text-muted-foreground";
-  if (score >= 7.5) return "text-emerald-300 dark:text-primary";
-  if (score >= 5) return "text-amber-300 dark:text-amber-500";
-  return "text-red-300 dark:text-red-500";
-}
-
-function ScoreIcon({ score }: { score: number | null }) {
-  if (score == null) return null;
-  if (score >= 7.5) return <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400 dark:text-primary" />;
-  if (score >= 5) return <Lightbulb className="h-3 w-3 shrink-0 text-amber-400 dark:text-amber-500" />;
-  return <AlertTriangle className="h-3 w-3 shrink-0 text-red-400 dark:text-red-500" />;
-}
-
 /** Toolbar overlay modes: layer modes + mobile frame (no extra SVG layer). */
 type ToolbarOverlayMode = CompareOverlayLayerMode | "mobile";
 
@@ -266,245 +236,6 @@ function gapDetailForSection(sectionKey: string, gaps: CriticalGap[] | undefined
   return gaps?.find((gap) => matchesSectionKey(gap.area, sectionKey));
 }
 
-function buildZoneTooltipLines(
-  ann: Annotation,
-  args: {
-    overlayMode: ToolbarOverlayMode;
-    siteIsUser: boolean;
-    compareDiffMode: boolean;
-    sectionDelta: number | null;
-    gapRow?: CriticalGap;
-    vsDomain: string | null;
-    /** When set, compare diff copy uses domains instead of "your page" / "You". */
-    compareThisDomain?: string | null;
-    eyeOrd: number | undefined;
-  }
-): { title: string; lines: string[] } | null {
-  const { overlayMode, compareDiffMode, sectionDelta, gapRow, vsDomain, compareThisDomain, eyeOrd } = args;
-  const sc = ann.score;
-  const baseTitle =
-    eyeOrd != null && eyeOrd <= 3 && vsDomain
-      ? `Priority ${eyeOrd}: ${ann.label}${sc != null ? ` — ${sc.toFixed(1)}/10` : ""}`
-      : `${ann.label}${sc != null ? ` — ${sc.toFixed(1)}/10` : ""}`;
-  const title = `⚠️ ${baseTitle}`;
-  const lines: string[] = [];
-
-  if (overlayMode === "heatmap") {
-    if (sectionDelta != null) {
-      if (sectionDelta > 0.35) {
-        lines.push(
-          args.siteIsUser
-            ? "Competitor is notably stronger in this band — tighten proof and clarity."
-            : "The other page is notably stronger in this band — tighten proof and clarity."
-        );
-      } else if (sectionDelta < -0.35) {
-        lines.push(
-          args.siteIsUser
-            ? "You're stronger here — keep this advantage visible."
-            : "This page is stronger here — keep this advantage visible."
-        );
-      } else lines.push("Roughly even — small changes can shift perception.");
-    } else {
-      lines.push("Gap heat highlights score differences across the page.");
-    }
-  } else if (overlayMode === "conversion" && sc != null) {
-    if (sc >= 8) lines.push("Strong: visitors likely understand what to do next.");
-    else if (sc >= 6) lines.push("Needs improvement — reduce friction and clarify the primary ask.");
-    else lines.push("Weak — visitors may hesitate or bounce before converting.");
-  } else if (overlayMode === "attention") {
-    lines.push(`Visual focus area: ${ann.label}. Open the Insight tab for narrative context.`);
-  } else if (overlayMode === "copy") {
-    lines.push(gapRow?.problem ?? ann.summary.slice(0, 200));
-  } else {
-    if (gapRow?.problem) lines.push(gapRow.problem);
-    else if (ann.summary?.trim()) lines.push(ann.summary.length > 220 ? `${ann.summary.slice(0, 217)}…` : ann.summary);
-  }
-
-  if (compareDiffMode && vsDomain && sectionDelta != null) {
-    const d = sectionDelta;
-    const selfLabel = compareThisDomain?.trim();
-    if (args.siteIsUser && !selfLabel) {
-      lines.push(
-        d > 0.08
-          ? `${vsDomain} leads this section by ${d.toFixed(1)} pts vs your page.`
-          : d < -0.08
-            ? `You lead by ${Math.abs(d).toFixed(1)} pts vs ${vsDomain}.`
-            : "Essentially tied on this section."
-      );
-    } else if (selfLabel) {
-      lines.push(
-        d > 0.08
-          ? `${vsDomain} leads this section by ${d.toFixed(1)} pts vs ${selfLabel}.`
-          : d < -0.08
-            ? `${selfLabel} leads by ${Math.abs(d).toFixed(1)} pts vs ${vsDomain}.`
-            : "Essentially tied on this section."
-      );
-    }
-  }
-
-  const filtered = lines.map((l) => l.trim()).filter(Boolean);
-  if (filtered.length === 0) return null;
-  return { title, lines: filtered.slice(0, 4) };
-}
-
-function SectionZoneInteractiveHitbox({
-  ann,
-  zoneTooltipFor,
-  onZoneMore,
-}: {
-  ann: Annotation;
-  zoneTooltipFor: (ann: Annotation) => { title: string; lines: string[] } | null;
-  onZoneMore: (ann: Annotation) => void;
-}) {
-  const hitRef = useRef<HTMLDivElement | null>(null);
-  const [hoverInside, setHoverInside] = useState(false);
-  const [tipRect, setTipRect] = useState<DOMRect | null>(null);
-  const [tipContent, setTipContent] = useState<{ title: string; lines: string[] } | null>(null);
-  const [popupOpen, setPopupOpen] = useState(false);
-
-  const syncRect = useCallback(() => {
-    if (hitRef.current) setTipRect(hitRef.current.getBoundingClientRect());
-  }, []);
-
-  return (
-    <>
-      <div
-        ref={hitRef}
-        role="presentation"
-        className="absolute inset-0 z-[18] cursor-pointer overflow-visible"
-        style={{ pointerEvents: "auto" }}
-        onMouseEnter={() => {
-          const content = zoneTooltipFor(ann);
-          setTipContent(content);
-          setHoverInside(true);
-        }}
-        onMouseLeave={() => setHoverInside(false)}
-        onClick={(e) => {
-          e.stopPropagation();
-          syncRect();
-          setPopupOpen(true);
-        }}
-        onTouchEnd={(e) => {
-          e.stopPropagation();
-          syncRect();
-          setPopupOpen(true);
-        }}
-      >
-        {tipContent && (
-          <ZoneInlineHoverTooltip
-            visible={hoverInside}
-            title={tipContent.title}
-            lines={tipContent.lines}
-          />
-        )}
-      </div>
-      <ZoneAnchorPopup
-        open={popupOpen}
-        anchorRect={tipRect}
-        onClose={() => setPopupOpen(false)}
-        title={ann.label}
-        scoreLine={ann.score != null ? `Score: ${ann.score.toFixed(1)}/10` : undefined}
-        body={
-          ann.preview?.trim()
-            ? ann.preview.length > 420
-              ? `${ann.preview.slice(0, 417)}…`
-              : ann.preview
-            : ann.summary
-        }
-        onMore={() => onZoneMore(ann)}
-      />
-    </>
-  );
-}
-
-// ─── AnnotationPin ──────────────────────────────────────────────────────────────
-
-function AnnotationPin({
-  ann,
-  expanded,
-  onToggle,
-  side,
-  onMore,
-}: {
-  ann: Annotation;
-  expanded: boolean;
-  onToggle: () => void;
-  side: "left" | "right";
-  onMore?: () => void;
-}) {
-  const pinSummary =
-    ann.summary.length > 200 ? `${ann.summary.slice(0, 200).trim()}…` : ann.summary;
-  const pinAction =
-    ann.score != null && ann.score < 7
-      ? "Click to expand the text; “More” opens actions in the right panel."
-      : "Stronger section — compare with the matching zone on the competitor screenshot.";
-  return (
-    <div className="absolute z-[25] pointer-events-auto" style={{ top: `${ann.top + ann.height / 2}%`, [side]: "6px", transform: "translateY(-50%)", maxWidth: "min(320px,44vw)" }}>
-      <HintTooltip
-        disabled={expanded}
-        side={side === "left" ? "right" : "left"}
-        title={`${ann.label} — ${ann.score != null ? ann.score.toFixed(1) : "—"}/10`}
-        description={pinSummary}
-        action={pinAction}
-      >
-        <button
-          type="button"
-          onClick={onToggle}
-          className={cn(
-            "flex items-center gap-1 rounded-xl border px-2 py-1 text-[11px] font-semibold backdrop-blur-md transition-all cursor-pointer select-none",
-            screenshotPinSurface(ann.score),
-            expanded && "ring-2 ring-primary/40"
-          )}
-        >
-          <ScoreIcon score={ann.score} />
-          <span className="text-zinc-100 dark:text-foreground">{ann.label}</span>
-          {ann.score != null && (
-            <span className={cn("tabular-nums font-bold", screenshotPinScoreClass(ann.score))}>{ann.score.toFixed(1)}</span>
-          )}
-        </button>
-      </HintTooltip>
-      {expanded && (
-        <div className="relative mt-1 max-w-[min(300px,44vw)] select-none rounded-xl border border-border bg-card/95 p-2.5 text-[11px] leading-relaxed text-foreground shadow-xl backdrop-blur-md">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle();
-            }}
-            className="absolute right-1.5 top-1.5 z-10 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Close"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-          <div className="pr-7">
-            {ann.preview ? <p className="text-foreground/95">{ann.preview}</p> : <p>{ann.summary}</p>}
-          </div>
-          {onMore && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMore();
-                onToggle();
-              }}
-              className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-primary/40 bg-primary/10 py-1.5 text-[10px] font-bold uppercase tracking-wide text-primary hover:bg-primary/20"
-            >
-              More
-              <ChevronRight className="h-3 w-3" />
-            </button>
-          )}
-          {ann.score != null && ann.score < 7 && (
-            <p className="mt-2 flex items-center gap-1 pr-7 text-[10px] font-semibold text-primary">
-              <Lightbulb className="h-3 w-3 shrink-0" />
-              Needs improvement
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 type ZoneLens = "balanced" | "hot" | "delta";
 
 function SectionZones({
@@ -518,8 +249,6 @@ function SectionZones({
   siteIsUser,
   deltaLensTint,
   compareDiffMode,
-  zoneTooltipFor,
-  onZoneMore,
 }: {
   annotations: Annotation[];
   show: boolean;
@@ -534,9 +263,6 @@ function SectionZones({
   deltaLensTint?: boolean;
   /** VIEW Compare: green = competitor does better, red = you do better (uses comp−user delta). */
   compareDiffMode?: boolean;
-  /** Hover/click interactions on section bands (Compare + visual overlays). */
-  zoneTooltipFor?: (ann: Annotation) => { title: string; lines: string[] } | null;
-  onZoneMore?: (ann: Annotation) => void;
 }) {
   if (!show) return null;
   return (
@@ -615,9 +341,6 @@ function SectionZones({
                 Hot zone
               </div>
             )}
-            {zoneTooltipFor && onZoneMore && (
-              <SectionZoneInteractiveHitbox ann={a} zoneTooltipFor={zoneTooltipFor} onZoneMore={onZoneMore} />
-            )}
           </div>
         );
       })}
@@ -630,15 +353,12 @@ function SectionZones({
 function ScreenshotFrame({
   site,
   showZones,
-  showPins,
   expandedPin,
-  setExpandedPin,
   zoom,
   overlayMode,
   sectionNavTick,
   zoneLens,
   deltaByKey,
-  onSectionMore,
   problemIndicators,
   eyeOrderByKey,
   competitorScores,
@@ -647,23 +367,19 @@ function ScreenshotFrame({
   heatmapGapPairByKey,
   heatmapGapOnCompetitorOnly,
   attentionOverlay,
-  zoneTooltipFor,
-  onZoneMore,
   simulateOverlayRows,
   simulateAiLabelsSlot,
+  simulateAiLabelsHeader,
 }: {
   site: SiteEntry;
   showZones: boolean;
-  showPins: boolean;
   expandedPin: string | null;
-  setExpandedPin: (k: string | null) => void;
   zoom: number;
   overlayMode: ToolbarOverlayMode;
   /** Increments on each section chip click so re-selecting the same tab still scrolls. */
   sectionNavTick: number;
   zoneLens: ZoneLens;
   deltaByKey?: Record<string, number | null>;
-  onSectionMore?: (ann: Annotation) => void;
   problemIndicators?: boolean;
   eyeOrderByKey?: Record<string, number>;
   competitorScores?: Record<string, number | null>;
@@ -671,8 +387,6 @@ function ScreenshotFrame({
   compareDiffMode?: boolean;
   heatmapGapPairByKey?: Record<string, { user: number | null; comp: number | null }>;
   heatmapGapOnCompetitorOnly?: boolean;
-  zoneTooltipFor?: (ann: Annotation) => { title: string; lines: string[] } | null;
-  onZoneMore?: (ann: Annotation) => void;
   /** Analyze → Attention: Claude Vision heatmap + toggle. */
   attentionOverlay?: {
     zones: AttentionZone[] | null;
@@ -685,6 +399,8 @@ function ScreenshotFrame({
   simulateOverlayRows?: Array<{ sectionKey: string; pillText: string }> | null;
   /** SIMULATE-linked AI annotation labels (your screenshot, Split/Compare + SIMULATE tab). */
   simulateAiLabelsSlot?: ReactNode;
+  /** Thin hint strip above the screenshot scroll area (AI insights). */
+  simulateAiLabelsHeader?: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [first5sFoldPct, setFirst5sFoldPct] = useState<number | null>(null);
@@ -730,6 +446,9 @@ function ScreenshotFrame({
   if (!site.screenshotUrl) return <div className="flex items-center justify-center min-h-[200px] text-sm text-muted-foreground bg-muted/20 rounded-xl">No screenshot for {site.domain}</div>;
   return (
     <div className="relative flex min-h-0 min-w-0 w-full flex-1 flex-col">
+      {simulateAiLabelsHeader ? (
+        <div className="pointer-events-none flex h-7 shrink-0 items-center px-1 text-[12px] leading-none text-muted-foreground">{simulateAiLabelsHeader}</div>
+      ) : null}
       {attentionOverlay && overlayMode === "attention" && !attentionOverlay.loading && (
         <div
           className="pointer-events-auto absolute top-1.5 right-1.5 z-[28] inline-flex items-center gap-0 rounded-lg border border-border/90 bg-background/85 p-0.5 shadow-md backdrop-blur-sm dark:bg-background/80"
@@ -801,8 +520,6 @@ function ScreenshotFrame({
           siteIsUser={site.isUser}
           deltaLensTint={deltaLensTint}
           compareDiffMode={compareDiffMode}
-          zoneTooltipFor={zoneTooltipFor}
-          onZoneMore={onZoneMore}
         />
         <CompareOverlayLayer
           mode={layerMode}
@@ -818,14 +535,6 @@ function ScreenshotFrame({
           heatmapGapOnCompetitorOnly={heatmapGapOnCompetitorOnly}
           siteIsUser={site.isUser}
           attention={attForLayer}
-          onAttentionZoneMore={
-            onZoneMore && showZones && layerMode === "attention"
-              ? () => {
-                  const ann = site.annotations.find((a) => a.sectionKey === "hero") ?? site.annotations[0];
-                  onZoneMore(ann);
-                }
-              : undefined
-          }
         />
         {site.isUser && simulateOverlayRows && simulateOverlayRows.length > 0 && (
           <>
@@ -859,17 +568,6 @@ function ScreenshotFrame({
             <p className="text-[10px] text-muted-foreground max-w-[240px] leading-snug">Claude Vision is scoring visual hierarchy. This can take up to a minute.</p>
           </div>
         )}
-        {showPins &&
-          site.annotations.map((ann) => (
-            <AnnotationPin
-              key={ann.sectionKey}
-              ann={ann}
-              expanded={expandedPin === ann.sectionKey}
-              onToggle={() => setExpandedPin(expandedPin === ann.sectionKey ? null : ann.sectionKey)}
-              side={site.isUser ? "left" : "right"}
-              onMore={onSectionMore ? () => onSectionMore(ann) : undefined}
-            />
-          ))}
       </div>
       </div>
     </div>
@@ -1193,7 +891,6 @@ export function ScreenshotCompare({
   const [sectionNavTick, setSectionNavTick] = useState(0);
   const [zoneLens, setZoneLens] = useState<ZoneLens>("balanced");
   const [sectionDeepDive, setSectionDeepDive] = useState<SectionDeepDivePayload | null>(null);
-  const [showPins, setShowPins] = useState(true);
   const [showZones, setShowZones] = useState(true);
   const [fullWidth, setFullWidth] = useState(false);
   const [viewMode, setViewMode] = useState<ToolbarViewMode>("compare");
@@ -1517,6 +1214,7 @@ export function ScreenshotCompare({
   const [simulateChecked, setSimulateChecked] = useState<Record<string, boolean>>({});
   const [decisionPanelTab, setDecisionPanelTab] = useState<DecisionPanelTab>("simulate");
   const [aiTipsVisible, setAiTipsVisible] = useState(true);
+  const [aiLabelHintsDismissed, setAiLabelHintsDismissed] = useState(false);
   const competitorOverallScores = useMemo(
     () => sites.filter((s) => !s.isUser).map((s) => s.overallScore).filter((n): n is number => n != null),
     [sites]
@@ -1541,24 +1239,6 @@ export function ScreenshotCompare({
       }),
     [result, simulateItems, userSite.annotations, vsSite?.domain]
   );
-
-  /** Keep dots visible for all Analyze toolbar modes (Heatmap, Attention, etc.). */
-  const simulateAiLabelsModeActive =
-    aiTipsVisible &&
-    decisionPanelTab === "simulate" &&
-    (viewMode === "split" || viewMode === "compare");
-
-  const userSimulateAiLabelsSlot =
-    simulateAiLabelsModeActive && simulateAiLabelRows.length > 0 ? (
-      <SimulateAiLabels
-        rows={simulateAiLabelRows}
-        simulateChecked={simulateChecked}
-        onSimulateToggle={onSimulateToggle}
-        userOverall={decisionBundle.overall}
-        simulateItems={simulateItems}
-        competitorOverallScores={competitorOverallScores}
-      />
-    ) : null;
 
   const simulateOverlayRows = useMemo(() => {
     const rows = simulateItems.filter((i) => simulateChecked[i.id]);
@@ -1615,6 +1295,54 @@ export function ScreenshotCompare({
     return out;
   }, [userSite, vsSite]);
 
+  const unifiedOverlayMode: CompareOverlayLayerMode =
+    effectiveOverlay === "mobile" ? "compare" : (effectiveOverlay as CompareOverlayLayerMode);
+
+  const userAttentionZones = useMemo(() => {
+    if (!splitLeftSite || !splitRightSite) return null;
+    const data = attentionState.data;
+    if (!data) return null;
+    return splitLeftSite.isUser ? data.your?.zones ?? null : data.competitor?.zones ?? null;
+  }, [attentionState.data, splitLeftSite, splitRightSite]);
+
+  /** Unified dot → pill → card for every Analyze overlay mode. */
+  const aiLabelsModeActive = aiTipsVisible && (viewMode === "split" || viewMode === "compare");
+
+  const unifiedAiLabelRows = useMemo(
+    () =>
+      buildUnifiedAiLabelRowsForMode(simulateAiLabelRows, unifiedOverlayMode, {
+        sectionDeltaVsCompetitor,
+        attentionZones: userAttentionZones,
+        annotations: userSite.annotations.map((a) => ({
+          sectionKey: a.sectionKey,
+          top: a.top,
+          height: a.height,
+          score: a.score,
+        })),
+      }),
+    [simulateAiLabelRows, unifiedOverlayMode, sectionDeltaVsCompetitor, userAttentionZones, userSite.annotations]
+  );
+
+  const userSimulateAiLabelsHeader =
+    aiLabelsModeActive && unifiedAiLabelRows.length > 0 && !aiLabelHintsDismissed ? (
+      <span className="pointer-events-none select-none">
+        💡 {unifiedAiLabelRows.length} AI insights found — hover dots to explore
+      </span>
+    ) : null;
+
+  const userSimulateAiLabelsSlot =
+    aiLabelsModeActive && unifiedAiLabelRows.length > 0 ? (
+      <AiLabelMarkers
+        rows={unifiedAiLabelRows}
+        simulateChecked={simulateChecked}
+        onSimulateToggle={onSimulateToggle}
+        userOverall={decisionBundle.overall}
+        simulateItems={simulateItems}
+        competitorOverallScores={competitorOverallScores}
+        onFirstDotInteraction={() => setAiLabelHintsDismissed(true)}
+      />
+    ) : null;
+
   /** Right column minus left (split/compare overlays). */
   const sectionDeltaLR = useMemo(() => {
     const out: Record<string, number | null> = {};
@@ -1660,56 +1388,6 @@ export function ScreenshotCompare({
     });
     return m;
   }, [viewMode, userSite, vsSite, splitLeftSite, splitRightSite]);
-
-  const zoneTooltipForSite = useCallback(
-    (site: SiteEntry) => (ann: Annotation) => {
-      const gapRow = gapDetailForSection(ann.sectionKey, result.gaps);
-      const eyeOrd = eyeOrderByKey?.[ann.sectionKey];
-      const pairMode = viewMode === "split" || viewMode === "compare";
-      let sectionDelta: number | null = null;
-      let vsDomainTip: string | null = null;
-      let compareThisDomain: string | undefined;
-
-      if (pairMode && splitLeftSite && splitRightSite) {
-        const L = splitLeftSite.annotations.find((a) => a.sectionKey === ann.sectionKey)?.score ?? null;
-        const R = splitRightSite.annotations.find((a) => a.sectionKey === ann.sectionKey)?.score ?? null;
-        if (L != null && R != null) {
-          if (site.url === splitLeftSite.url) {
-            sectionDelta = Math.round((R - L) * 10) / 10;
-            vsDomainTip = splitRightSite.domain;
-          } else {
-            sectionDelta = Math.round((L - R) * 10) / 10;
-            vsDomainTip = splitLeftSite.domain;
-          }
-          compareThisDomain = site.domain;
-        }
-      } else {
-        sectionDelta = sectionDeltaVsCompetitor?.[ann.sectionKey] ?? null;
-        vsDomainTip = vsSite?.domain ?? null;
-      }
-
-      return buildZoneTooltipLines(ann, {
-        overlayMode: effectiveOverlay,
-        siteIsUser: site.isUser,
-        compareDiffMode: viewMode === "compare",
-        sectionDelta,
-        gapRow,
-        vsDomain: vsDomainTip,
-        compareThisDomain,
-        eyeOrd,
-      });
-    },
-    [
-      effectiveOverlay,
-      result.gaps,
-      eyeOrderByKey,
-      sectionDeltaVsCompetitor,
-      vsSite?.domain,
-      viewMode,
-      splitLeftSite,
-      splitRightSite,
-    ]
-  );
 
   const competitorScoresForUser = useMemo(() => {
     if (!vsSite) return undefined;
@@ -2164,7 +1842,7 @@ export function ScreenshotCompare({
                     ? "border-[#1D9E75]/50 bg-[#1D9E75]/10 text-[#0f6b4f] dark:text-[#8ee8c8]"
                     : "border-border text-muted-foreground hover:text-foreground"
                 )}
-                title="Show AI tips on your screenshot (SIMULATE tab, Split/Compare)"
+                title="Show AI labels on your screenshot (Split/Compare)"
                 aria-pressed={aiTipsVisible}
               >
                 <Lightbulb className="h-3.5 w-3.5 shrink-0 opacity-90" />
@@ -2174,22 +1852,6 @@ export function ScreenshotCompare({
           </div>
           <span className="hidden h-4 w-px shrink-0 bg-border/70 sm:block" aria-hidden />
           <div className="flex items-center gap-1.5">
-            <HintTooltip side="bottom" title={HINT_CONTROLS.pins.title} description={HINT_CONTROLS.pins.description} action={HINT_CONTROLS.pins.action}>
-              <button
-                type="button"
-                onClick={() => {
-                  pushToolbarHelp("ctrl-pins", HINT_CONTROLS.pins);
-                  setShowPins((v) => !v);
-                }}
-                aria-label="Pins"
-                className={cn(
-                  "inline-flex items-center justify-center rounded-lg border p-1.5 text-[11px] font-semibold transition-colors",
-                  showPins ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {showPins ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-              </button>
-            </HintTooltip>
             <HintTooltip side="bottom" title={HINT_CONTROLS.zones.title} description={HINT_CONTROLS.zones.description} action={HINT_CONTROLS.zones.action}>
               <button
                 type="button"
@@ -2382,15 +2044,12 @@ export function ScreenshotCompare({
                       <ScreenshotFrame
                         site={activeSite}
                         showZones={showZones}
-                        showPins={showPins}
                         expandedPin={expandedPin}
-                        setExpandedPin={setExpandedPin}
                         zoom={zoom}
                         overlayMode={effectiveOverlay}
                         sectionNavTick={sectionNavTick}
                         zoneLens={zoneLens}
                         deltaByKey={activeSite.isUser ? undefined : sectionDeltaByKey}
-                        onSectionMore={openSectionMore}
                         problemIndicators={showProblemIndicators}
                         eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
                         competitorScores={
@@ -2400,10 +2059,9 @@ export function ScreenshotCompare({
                         heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
                         heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
                         attentionOverlay={getAttentionOverlay(activeSite)}
-                        zoneTooltipFor={showZones ? zoneTooltipForSite(activeSite) : undefined}
-                        onZoneMore={showZones ? openSectionMore : undefined}
                         simulateOverlayRows={activeSite.isUser ? simulateOverlayRows : null}
                         simulateAiLabelsSlot={activeSite.isUser ? userSimulateAiLabelsSlot : null}
+                        simulateAiLabelsHeader={activeSite.isUser ? userSimulateAiLabelsHeader : null}
                       />
                     </div>
                   </div>
@@ -2451,15 +2109,12 @@ export function ScreenshotCompare({
                       <ScreenshotFrame
                         site={splitLeftSite}
                         showZones={showZones}
-                        showPins={showPins}
                         expandedPin={expandedPin}
-                        setExpandedPin={setExpandedPin}
                         zoom={zoom}
                         overlayMode={effectiveOverlay}
                         sectionNavTick={sectionNavTick}
                         zoneLens={zoneLens}
                         deltaByKey={viewMode === "compare" ? sectionDeltaLR : undefined}
-                        onSectionMore={openSectionMore}
                         problemIndicators={showProblemIndicators}
                         eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
                         competitorScores={
@@ -2470,10 +2125,9 @@ export function ScreenshotCompare({
                         heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
                         heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
                         attentionOverlay={getAttentionOverlay(splitLeftSite, "left")}
-                        zoneTooltipFor={showZones ? zoneTooltipForSite(splitLeftSite) : undefined}
-                        onZoneMore={showZones ? openSectionMore : undefined}
                         simulateOverlayRows={splitLeftSite.isUser ? simulateOverlayRows : null}
                         simulateAiLabelsSlot={splitLeftSite.isUser ? userSimulateAiLabelsSlot : null}
+                        simulateAiLabelsHeader={splitLeftSite.isUser ? userSimulateAiLabelsHeader : null}
                       />
                     </div>
                   </div>
@@ -2513,15 +2167,12 @@ export function ScreenshotCompare({
                       <ScreenshotFrame
                         site={splitRightSite}
                         showZones={showZones}
-                        showPins={showPins}
                         expandedPin={expandedPin}
-                        setExpandedPin={setExpandedPin}
                         zoom={zoom}
                         overlayMode={effectiveOverlay}
                         sectionNavTick={sectionNavTick}
                         zoneLens={zoneLens}
                         deltaByKey={sectionDeltaLR}
-                        onSectionMore={openSectionMore}
                         problemIndicators={showProblemIndicators}
                         eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
                         competitorScores={undefined}
@@ -2530,10 +2181,9 @@ export function ScreenshotCompare({
                         heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
                         heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
                         attentionOverlay={getAttentionOverlay(splitRightSite, "right")}
-                        zoneTooltipFor={showZones ? zoneTooltipForSite(splitRightSite) : undefined}
-                        onZoneMore={showZones ? openSectionMore : undefined}
                         simulateOverlayRows={splitRightSite.isUser ? simulateOverlayRows : null}
                         simulateAiLabelsSlot={splitRightSite.isUser ? userSimulateAiLabelsSlot : null}
+                        simulateAiLabelsHeader={splitRightSite.isUser ? userSimulateAiLabelsHeader : null}
                       />
                     </div>
                   </div>

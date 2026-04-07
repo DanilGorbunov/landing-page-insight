@@ -202,4 +202,48 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  /** AI marker dots — red/amber pulse until hovered (.seen stops animation) */
+  @keyframes ai-dot-pulse-red {
+    0% {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(226, 75, 74, 0.5);
+    }
+    70% {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 6px rgba(226, 75, 74, 0);
+    }
+    100% {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(226, 75, 74, 0);
+    }
+  }
+  @keyframes ai-dot-pulse-amber {
+    0% {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(239, 159, 39, 0.5);
+    }
+    70% {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 6px rgba(239, 159, 39, 0);
+    }
+    100% {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(239, 159, 39, 0);
+    }
+  }
+
+  .animate-ai-dot-pulse-red {
+    animation: ai-dot-pulse-red 2s ease-out infinite;
+  }
+  .animate-ai-dot-pulse-amber {
+    animation: ai-dot-pulse-amber 2s ease-out infinite;
+  }
+
+  .animate-ai-dot-pulse-red.seen,
+  .animate-ai-dot-pulse-amber.seen {
+    animation: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-ai-dot-pulse-red,
+    .animate-ai-dot-pulse-amber {
+      animation: none;
+    }
+  }
 }

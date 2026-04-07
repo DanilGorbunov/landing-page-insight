@@ -1625,7 +1625,6 @@ export function CompareOverlayLayer({
   heatmapGapOnCompetitorOnly,
   siteIsUser,
   attention,
-  onAttentionZoneMore,
 }: {
   mode: CompareOverlayLayerMode;
   annotations: Array<{ top: number; height: number; score: number | null; label: string; sectionKey?: string }>;
@@ -1642,8 +1641,6 @@ export function CompareOverlayLayer({
     visible: boolean;
     showPlaceholder: boolean;
   } | null;
-  /** Attention blobs: click → More in parent (Insight / section). */
-  onAttentionZoneMore?: (zone: AttentionZone) => void;
 }) {
   if (mode === "compare") return null;
 
@@ -1657,7 +1654,7 @@ export function CompareOverlayLayer({
   return (
     <div className="pointer-events-none absolute inset-0 z-[15]">
       {mode === "attention" && attentionResolved?.visible && attentionResolved.zones && attentionResolved.zones.length > 0 && (
-        <HeatmapOverlay zones={attentionResolved.zones} onZoneMore={onAttentionZoneMore} />
+        <HeatmapOverlay zones={attentionResolved.zones} />
       )}
       {mode === "attention" && attentionResolved?.visible && (!attentionResolved.zones || !attentionResolved.zones.length) && attentionResolved.showPlaceholder && (
         <>
