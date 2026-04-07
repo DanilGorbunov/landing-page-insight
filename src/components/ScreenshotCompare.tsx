@@ -1,4 +1,13 @@
-import { useState, useMemo, useCallback, useEffect, useRef, useLayoutEffect, type SyntheticEvent } from "react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+  type SyntheticEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { cn, getDomain, parseScoreFromReport } from "@/lib/utils";
 import type { AnalysisResult } from "@/types/api";
@@ -58,7 +67,10 @@ import {
   DecisionActionPanel,
   CompareOverlayLayer,
   type CompareOverlayLayerMode,
+  type DecisionPanelTab,
 } from "@/components/CompareDecisionPanels";
+import { SimulateAiLabels } from "@/components/SimulateAiLabels";
+import { buildSimulateAiLabelRows } from "@/lib/simulateAiLabels";
 import type { AttentionHeatmapResponse, AttentionZone } from "@/types/attention";
 import { fetchAttentionHeatmap } from "@/lib/api";
 import { normalizeAttentionResponse } from "@/lib/attentionNormalize";
@@ -81,7 +93,7 @@ import {
   annotationPreview,
   type SectionOrderKey,
 } from "@/lib/compareDecisionMetrics";
-import { buildSimulateItems, getSimulateOverlayPercentRect } from "@/lib/simulateWhatIf";
+import { buildSimulateItems, fillMissingSectionSimulateItems, getSimulateOverlayPercentRect } from "@/lib/simulateWhatIf";
 import type { SectionDeepDivePayload } from "@/components/CompareDecisionPanels";
 import {
   type ToolbarContext,
@@ -638,6 +650,7 @@ function ScreenshotFrame({
   zoneTooltipFor,
   onZoneMore,
   simulateOverlayRows,
+  simulateAiLabelsSlot,
 }: {
   site: SiteEntry;
   showZones: boolean;
@@ -670,6 +683,8 @@ function ScreenshotFrame({
   } | null;
   /** What-if Simulator: green dashed zones on your screenshot when items are checked. */
   simulateOverlayRows?: Array<{ sectionKey: string; pillText: string }> | null;
+  /** SIMULATE-linked AI annotation labels (your screenshot, Split/Compare + SIMULATE tab). */
+  simulateAiLabelsSlot?: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [first5sFoldPct, setFirst5sFoldPct] = useState<number | null>(null);
@@ -834,6 +849,7 @@ function ScreenshotFrame({
             })}
           </>
         )}
+        {simulateAiLabelsSlot}
         {attentionOverlay?.loading && overlayMode === "attention" && (
           <div className="pointer-events-none absolute inset-0 z-[24] flex flex-col items-center justify-center gap-2 rounded-xl bg-background/75 backdrop-blur-sm px-4 text-center transition-opacity duration-300">
             <span className="text-2xl" aria-hidden>
@@ -1495,10 +1511,12 @@ export function ScreenshotCompare({
   }, [result, sites, userSite, activeSite.domain]);
 
   const simulateItems = useMemo(
-    () => buildSimulateItems(result, decisionBundle.gapItems),
+    () => fillMissingSectionSimulateItems(buildSimulateItems(result, decisionBundle.gapItems), result),
     [result, decisionBundle.gapItems]
   );
   const [simulateChecked, setSimulateChecked] = useState<Record<string, boolean>>({});
+  const [decisionPanelTab, setDecisionPanelTab] = useState<DecisionPanelTab>("simulate");
+  const [aiTipsVisible, setAiTipsVisible] = useState(true);
   const competitorOverallScores = useMemo(
     () => sites.filter((s) => !s.isUser).map((s) => s.overallScore).filter((n): n is number => n != null),
     [sites]
@@ -1506,6 +1524,42 @@ export function ScreenshotCompare({
   const onSimulateToggle = useCallback((id: string, checked: boolean) => {
     setSimulateChecked((prev) => ({ ...prev, [id]: checked }));
   }, []);
+
+  const simulateAiLabelRows = useMemo(
+    () =>
+      buildSimulateAiLabelRows(result, simulateItems, {
+        scoresBySection: Object.fromEntries(userSite.annotations.map((a) => [a.sectionKey, a.score])) as Record<
+          string,
+          number | null
+        >,
+        summariesBySection: Object.fromEntries(userSite.annotations.map((a) => [a.sectionKey, a.summary])),
+        vsDomain: vsSite?.domain ?? null,
+        ctaAnnotation: (() => {
+          const c = userSite.annotations.find((a) => a.sectionKey === "CTA");
+          return c ? { top: c.top, height: c.height } : null;
+        })(),
+      }),
+    [result, simulateItems, userSite.annotations, vsSite?.domain]
+  );
+
+  /** Keep dots visible for all Analyze toolbar modes (Heatmap, Attention, etc.). */
+  const simulateAiLabelsModeActive =
+    aiTipsVisible &&
+    decisionPanelTab === "simulate" &&
+    (viewMode === "split" || viewMode === "compare");
+
+  const userSimulateAiLabelsSlot =
+    simulateAiLabelsModeActive && simulateAiLabelRows.length > 0 ? (
+      <SimulateAiLabels
+        rows={simulateAiLabelRows}
+        simulateChecked={simulateChecked}
+        onSimulateToggle={onSimulateToggle}
+        userOverall={decisionBundle.overall}
+        simulateItems={simulateItems}
+        competitorOverallScores={competitorOverallScores}
+      />
+    ) : null;
+
   const simulateOverlayRows = useMemo(() => {
     const rows = simulateItems.filter((i) => simulateChecked[i.id]);
     const byKey = new Map<string, { sectionKey: string; pillText: string }>();
@@ -1848,6 +1902,8 @@ export function ScreenshotCompare({
       simulateChecked={simulateChecked}
       onSimulateToggle={onSimulateToggle}
       competitorOverallScores={competitorOverallScores}
+      panelTab={decisionPanelTab}
+      onPanelTabChange={setDecisionPanelTab}
     />
   );
 
@@ -2098,6 +2154,23 @@ export function ScreenshotCompare({
                 <Columns2 className="h-3.5 w-3.5" />
               </button>
             </HintTooltip>
+            {sites.length >= 2 ? (
+              <button
+                type="button"
+                onClick={() => setAiTipsVisible((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors max-md:hidden",
+                  aiTipsVisible
+                    ? "border-[#1D9E75]/50 bg-[#1D9E75]/10 text-[#0f6b4f] dark:text-[#8ee8c8]"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                )}
+                title="Show AI tips on your screenshot (SIMULATE tab, Split/Compare)"
+                aria-pressed={aiTipsVisible}
+              >
+                <Lightbulb className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                AI Tips
+              </button>
+            ) : null}
           </div>
           <span className="hidden h-4 w-px shrink-0 bg-border/70 sm:block" aria-hidden />
           <div className="flex items-center gap-1.5">
@@ -2330,6 +2403,7 @@ export function ScreenshotCompare({
                         zoneTooltipFor={showZones ? zoneTooltipForSite(activeSite) : undefined}
                         onZoneMore={showZones ? openSectionMore : undefined}
                         simulateOverlayRows={activeSite.isUser ? simulateOverlayRows : null}
+                        simulateAiLabelsSlot={activeSite.isUser ? userSimulateAiLabelsSlot : null}
                       />
                     </div>
                   </div>
@@ -2399,6 +2473,7 @@ export function ScreenshotCompare({
                         zoneTooltipFor={showZones ? zoneTooltipForSite(splitLeftSite) : undefined}
                         onZoneMore={showZones ? openSectionMore : undefined}
                         simulateOverlayRows={splitLeftSite.isUser ? simulateOverlayRows : null}
+                        simulateAiLabelsSlot={splitLeftSite.isUser ? userSimulateAiLabelsSlot : null}
                       />
                     </div>
                   </div>
@@ -2458,6 +2533,7 @@ export function ScreenshotCompare({
                         zoneTooltipFor={showZones ? zoneTooltipForSite(splitRightSite) : undefined}
                         onZoneMore={showZones ? openSectionMore : undefined}
                         simulateOverlayRows={splitRightSite.isUser ? simulateOverlayRows : null}
+                        simulateAiLabelsSlot={splitRightSite.isUser ? userSimulateAiLabelsSlot : null}
                       />
                     </div>
                   </div>

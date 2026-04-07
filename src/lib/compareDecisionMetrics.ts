@@ -447,6 +447,26 @@ export function annotationBulletPoints(text: string, maxBullets: number): string
   return out.slice(0, maxBullets);
 }
 
+/**
+ * Section deep-dive body below "Watch" bullets: skip the duplicated "What works" prose.
+ * Returns text from the first improvement-focused heading onward, or empty if there is nothing left.
+ */
+export function annotationSectionDeepDiveBodyBelowWatch(fullText: string, watchPoints: string[]): string {
+  const base = annotationDisplayBody(fullText);
+  if (!base) return "";
+  if (watchPoints.length === 0) return base;
+
+  const splitRe =
+    /\b(what\s+to\s+improve|what\s+to\s+fix|improvements?\s*:|gaps?\s*:|issues?\s*:|weaknesses?\s*:|risks?\s*:|recommendations?\s*:)/i;
+  const m = base.match(splitRe);
+  if (m != null && m.index != null && m.index >= 0) {
+    return base.slice(m.index).trim();
+  }
+
+  // No second section — bullets already summarize the opening; avoid repeating the same block.
+  return "";
+}
+
 /** Always-on insight above the fold (Problem → 3-second result). */
 export function heroThreeSecondInsight(heroScore: number | null, mainIssue: string): { problem: string; result: string } {
   if (heroScore != null && heroScore < 6) {

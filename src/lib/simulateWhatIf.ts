@@ -4,8 +4,9 @@
 import type { AnalysisResult, CriticalGap } from "@/types/api";
 import type { GapRankItem } from "@/lib/compareDecisionMetrics";
 import { inferSectionKeyFromGapArea, type SectionOrderKey } from "@/lib/compareDecisionMetrics";
+import { parseScoreFromReport } from "@/lib/utils";
 
-const SECTION_ORDER: SectionOrderKey[] = ["hero", "value proposition", "features", "social proof", "CTA"];
+export const SECTION_ORDER: SectionOrderKey[] = ["hero", "value proposition", "features", "social proof", "CTA"];
 
 const GAP_RANK_LABEL_TO_KEY: Record<string, SectionOrderKey> = {
   "Hero & messaging": "hero",
@@ -161,6 +162,32 @@ export function buildSimulateItems(result: AnalysisResult, gapItems: GapRankItem
           effort: "Med",
         },
       ];
+}
+
+/**
+ * Ensures each core section has a simulator row so AI dots can toggle “Add to plan” for every zone (incl. strong scores).
+ */
+export function fillMissingSectionSimulateItems(items: SimulateImprovementItem[], result: AnalysisResult): SimulateImprovementItem[] {
+  const seen = new Set(items.map((i) => i.sectionKey));
+  const extra: SimulateImprovementItem[] = [];
+  for (const key of SECTION_ORDER) {
+    if (seen.has(key)) continue;
+    const raw = result.userAnalysis?.[key] ?? "";
+    const approx = parseScoreFromReport(raw);
+    const strong = approx != null && approx >= 8;
+    extra.push({
+      id: `maintain-${key}-${hashStr(key + raw).slice(0, 8)}`,
+      sectionKey: key,
+      sectionLabel: SECTION_LABEL[key],
+      oneLineFix: strong
+        ? `Keep ${SECTION_LABEL[key]} performing — benchmark-aligned.`
+        : `Tune ${SECTION_LABEL[key]} vs competitors — clarity and proof.`,
+      points: strong ? 0.15 : approx != null && approx < 6 ? 0.9 : 0.45,
+      effort: key === "hero" || key === "CTA" ? "Med" : "Low",
+    });
+    seen.add(key);
+  }
+  return [...items, ...extra].sort((a, b) => b.points - a.points);
 }
 
 function hashStr(s: string): string {

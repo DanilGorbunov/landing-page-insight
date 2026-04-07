@@ -8,6 +8,9 @@ function getEnv(key: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-/** API base URL (no trailing slash). Defaults to localhost:3000 in dev. */
+/**
+ * API base URL (no trailing slash). In dev, empty = same origin so Vite can proxy `/api` → backend :3000.
+ * Override with VITE_API_BASE_URL (e.g. full Railway URL) when needed.
+ */
 export const VITE_API_BASE_URL =
-  getEnv("VITE_API_BASE_URL") || (import.meta.env.DEV ? "http://localhost:3000" : "");
+  getEnv("VITE_API_BASE_URL") || (import.meta.env.DEV ? "" : "");

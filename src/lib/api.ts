@@ -42,6 +42,14 @@ export async function startAnalysis(
         "Backend not found (404). On Vercel: set VITE_API_BASE_URL to your Railway backend URL in Project → Settings → Environment Variables, then redeploy."
       );
     }
+    /** Vite dev proxy returns 502 when nothing listens on the upstream port (default :3000). */
+    if (res.status === 502 || res.status === 503) {
+      throw new Error(
+        import.meta.env.DEV
+          ? "API server isn’t running. In another terminal run: npm run dev:backend (or npm run dev:all for frontend + API)."
+          : "Analysis service is temporarily unavailable. Try again in a moment."
+      );
+    }
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `Analysis failed: ${res.status}`);
   }
@@ -114,7 +122,6 @@ export async function fetchAttentionHeatmap(body: {
 }
 
 export async function fetchRecentComparisonsFromApi(limit = 3): Promise<HistoryEntry[]> {
-  if (!API_BASE) return [];
   try {
     const res = await fetchWithTimeout(`${API_BASE}/api/recent-comparisons?limit=${limit}`, {
       ...DEFAULT_FETCH_OPTIONS,

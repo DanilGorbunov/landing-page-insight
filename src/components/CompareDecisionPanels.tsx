@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState, useEffect, useRef } from "react";
+import { Fragment, useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { cn, getDomain } from "@/lib/utils";
 import { HeatmapOverlay } from "@/components/HeatmapOverlay";
 import type { AttentionZone } from "@/types/attention";
@@ -17,6 +17,7 @@ import {
   topActionPlanRows,
   type ActionPlanRow,
   annotationDisplayBody,
+  annotationSectionDeepDiveBodyBelowWatch,
   inferSectionKeyFromGapArea,
   type SectionOrderKey,
 } from "@/lib/compareDecisionMetrics";
@@ -380,7 +381,7 @@ export type SectionDeepDivePayload = {
   watchPoints: string[];
 };
 
-type DecisionPanelTab = "insight" | "simulate" | "scores";
+export type DecisionPanelTab = "insight" | "simulate" | "scores";
 
 const DECISION_PANEL_TABS: { id: DecisionPanelTab; label: string }[] = [
   { id: "simulate", label: "SIMULATE" },
@@ -643,6 +644,8 @@ export function DecisionActionPanel({
   simulateChecked = {},
   onSimulateToggle,
   competitorOverallScores = [],
+  panelTab: controlledPanelTab,
+  onPanelTabChange,
 }: {
   result: AnalysisResult;
   activeSite: SiteLite;
@@ -724,8 +727,20 @@ export function DecisionActionPanel({
   onSimulateToggle?: (id: string, checked: boolean) => void;
   /** Competitor overall scores (/10) for projected rank. */
   competitorOverallScores?: number[];
+  /** Optional controlled tab (syncs with screenshot AI labels visibility). */
+  panelTab?: DecisionPanelTab;
+  onPanelTabChange?: (tab: DecisionPanelTab) => void;
 }) {
-  const [panelTab, setPanelTab] = useState<DecisionPanelTab>("simulate");
+  const [internalPanelTab, setInternalPanelTab] = useState<DecisionPanelTab>("simulate");
+  const isTabControlled = controlledPanelTab !== undefined;
+  const panelTab = isTabControlled ? controlledPanelTab! : internalPanelTab;
+  const setPanelTab = useCallback(
+    (t: DecisionPanelTab) => {
+      if (!isTabControlled) setInternalPanelTab(t);
+      onPanelTabChange?.(t);
+    },
+    [isTabControlled, onPanelTabChange]
+  );
   const [heroOpen, setHeroOpen] = useState(true);
   const [behaviorOpen, setBehaviorOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
@@ -836,6 +851,15 @@ export function DecisionActionPanel({
     [simulateItems, userOverall, competitorOverallScores]
   );
 
+  /** Below Watch bullets: omit duplicated "What works" block; show only improvement-focused tail when present. */
+  const sectionDeepDiveExtraBody = useMemo(
+    () =>
+      sectionDeepDive
+        ? annotationSectionDeepDiveBodyBelowWatch(sectionDeepDive.fullText, sectionDeepDive.watchPoints)
+        : "",
+    [sectionDeepDive]
+  );
+
   /** Balanced lens (or Analyze overlay): show standard problem + 3s insight. Visual/Hot/Delta replace with filtered views. */
   const defaultInsightProblemCard =
     toolbarContext.analyzeMode !== null || toolbarContext.zoneLens === "balanced";
@@ -915,62 +939,62 @@ export function DecisionActionPanel({
       </div>
 
       <div ref={panelScrollRef} className="p-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0">
-        {toolbarHelpCards.length > 0 && (
-          <div className="flex min-w-0 flex-col gap-2">
-            {toolbarHelpCards.map((card) => (
-              <div
-                key={card.id}
-                className="rounded-lg border border-primary/25 bg-primary/[0.06] px-3 py-2.5 text-left shadow-sm dark:border-primary/35 dark:bg-primary/10"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs font-bold text-foreground">{card.title}</p>
-                  <button
-                    type="button"
-                    onClick={() => onDismissToolbarHelp?.(card.id)}
-                    className="shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Dismiss"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <p className="mt-1.5 text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Why it matters</p>
-                <p className="text-[11px] leading-snug text-muted-foreground">{card.problem}</p>
-                <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">What it is</p>
-                <p className="text-[11px] leading-snug text-foreground/95">{card.description}</p>
-                <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-primary">How to use</p>
-                <p className="text-[11px] leading-snug text-muted-foreground">{card.action}</p>
-              </div>
-            ))}
-          </div>
-        )}
-        {(panelHeader.title || panelHeader.subtitle) && (
-          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 transition-opacity duration-150">
-            {panelHeader.title && <p className="text-[11px] font-bold text-primary">{panelHeader.title}</p>}
-            {panelHeader.subtitle && (
-              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{panelHeader.subtitle}</p>
-            )}
-          </div>
-        )}
-        {attentionInsight && toolbarContext.analyzeMode === "attention" && (
-          <AttentionAnalysisPanel
-            loading={attentionInsight.loading}
-            error={attentionInsight.error}
-            your={attentionInsight.your}
-            competitor={attentionInsight.competitor}
-            comparison={attentionInsight.comparison}
-            competitorName={attentionInsight.competitorName}
-            showUpgradePrompt={attentionInsight.showUpgradePrompt}
-            onDismissUpgrade={attentionInsight.onDismissUpgrade}
-          />
-        )}
-        {showFilterEmpty && (
-          <div className="rounded-lg border border-primary/25 bg-primary/[0.07] px-3 py-2 text-[11px] text-foreground">
-            No {formatToolbarContextForEmpty(toolbarContext)} issues found in this section — that&apos;s a good sign ✓
-          </div>
-        )}
         <Fragment key={toolbarContextKey}>
         {panelTab === "insight" && (
           <div className="space-y-3">
+            {toolbarHelpCards.length > 0 && (
+              <div className="flex min-w-0 flex-col gap-2">
+                {toolbarHelpCards.map((card) => (
+                  <div
+                    key={card.id}
+                    className="rounded-lg border border-primary/25 bg-primary/[0.06] px-3 py-2.5 text-left shadow-sm dark:border-primary/35 dark:bg-primary/10"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-bold text-foreground">{card.title}</p>
+                      <button
+                        type="button"
+                        onClick={() => onDismissToolbarHelp?.(card.id)}
+                        className="shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Dismiss"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <p className="mt-1.5 text-[9px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-200">Why it matters</p>
+                    <p className="text-[11px] leading-snug text-muted-foreground">{card.problem}</p>
+                    <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">What it is</p>
+                    <p className="text-[11px] leading-snug text-foreground/95">{card.description}</p>
+                    <p className="mt-2 text-[9px] font-bold uppercase tracking-wide text-primary">How to use</p>
+                    <p className="text-[11px] leading-snug text-muted-foreground">{card.action}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(panelHeader.title || panelHeader.subtitle) && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 transition-opacity duration-150">
+                {panelHeader.title && <p className="text-[11px] font-bold text-primary">{panelHeader.title}</p>}
+                {panelHeader.subtitle && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{panelHeader.subtitle}</p>
+                )}
+              </div>
+            )}
+            {attentionInsight && toolbarContext.analyzeMode === "attention" && (
+              <AttentionAnalysisPanel
+                loading={attentionInsight.loading}
+                error={attentionInsight.error}
+                your={attentionInsight.your}
+                competitor={attentionInsight.competitor}
+                comparison={attentionInsight.comparison}
+                competitorName={attentionInsight.competitorName}
+                showUpgradePrompt={attentionInsight.showUpgradePrompt}
+                onDismissUpgrade={attentionInsight.onDismissUpgrade}
+              />
+            )}
+            {showFilterEmpty && (
+              <div className="rounded-lg border border-primary/25 bg-primary/[0.07] px-3 py-2 text-[11px] text-foreground">
+                No {formatToolbarContextForEmpty(toolbarContext)} issues found in this section — that&apos;s a good sign ✓
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Insight</p>
               <div className="flex items-center gap-1">
@@ -997,6 +1021,50 @@ export function DecisionActionPanel({
                 </button>
               </div>
             </div>
+            {hideCompetitorRefs && (
+              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+                <p className="text-[11px] font-semibold text-foreground">Your site only</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                  Single view — competitor comparison is hidden. Use Original, Split, or Slider to see vs{" "}
+                  {vsDomain ?? "a competitor"}.
+                </p>
+              </div>
+            )}
+            {!hideCompetitorRefs && statusBanner && (
+              <CompareHeaderStatus
+                variant="overview"
+                userScore={statusBanner.userScore}
+                rank={statusBanner.rank}
+                totalRanked={statusBanner.totalRanked}
+                losing={statusBanner.losing}
+                conversion={statusBanner.conversion}
+                mainIssue={statusBanner.mainIssue}
+              />
+            )}
+            {quickWin && !hideCompetitorRefs && onQuickWinDismiss && onQuickWinPlan && (
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-950 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-50">
+                <span className="min-w-0 flex-1 leading-snug">
+                  <span className="font-bold">Quick Win:</span>{" "}
+                  <span className="font-semibold">{quickWin.label}</span> — {quickWin.fixOne} → est.{" "}
+                  <span className="font-bold tabular-nums">+{quickWin.impact}%</span> impact
+                </span>
+                <button
+                  type="button"
+                  onClick={onQuickWinPlan}
+                  className="shrink-0 rounded-full border border-amber-600/40 bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-950 hover:bg-amber-200 dark:border-amber-400/50 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-900/80"
+                >
+                  Fix this →
+                </button>
+                <button
+                  type="button"
+                  onClick={onQuickWinDismiss}
+                  className="shrink-0 rounded-md p-1 text-amber-800 hover:bg-amber-200/80 dark:text-amber-200 dark:hover:bg-amber-900/60"
+                  aria-label="Dismiss quick win"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             {sectionDeepDive && (
               <div
                 id={`compare-section-dive-${sectionDeepDive.sectionKey}`}
@@ -1045,11 +1113,19 @@ export function DecisionActionPanel({
                     </ul>
                   </div>
                 )}
-                <div className="rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
-                  <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
-                    {annotationDisplayBody(sectionDeepDive.fullText) || "—"}
-                  </p>
-                </div>
+                {sectionDeepDiveExtraBody ? (
+                  <div className="rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
+                    <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
+                      {sectionDeepDiveExtraBody}
+                    </p>
+                  </div>
+                ) : sectionDeepDive.watchPoints.length === 0 ? (
+                  <div className="rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
+                    <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
+                      {annotationDisplayBody(sectionDeepDive.fullText) || "—"}
+                    </p>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => copyLine(annotationDisplayBody(sectionDeepDive.fullText))}
@@ -1109,50 +1185,6 @@ export function DecisionActionPanel({
 
         {panelTab === "simulate" && (
           <div className="space-y-3">
-            {hideCompetitorRefs && (
-              <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
-                <p className="text-[11px] font-semibold text-foreground">Your site only</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
-                  Single view — competitor comparison is hidden. Use Original, Split, or Slider to see vs{" "}
-                  {vsDomain ?? "a competitor"}.
-                </p>
-              </div>
-            )}
-            {!hideCompetitorRefs && statusBanner && (
-              <CompareHeaderStatus
-                variant="overview"
-                userScore={statusBanner.userScore}
-                rank={statusBanner.rank}
-                totalRanked={statusBanner.totalRanked}
-                losing={statusBanner.losing}
-                conversion={statusBanner.conversion}
-                mainIssue={statusBanner.mainIssue}
-              />
-            )}
-            {quickWin && !hideCompetitorRefs && onQuickWinDismiss && onQuickWinPlan && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-950 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-50">
-                <span className="min-w-0 flex-1 leading-snug">
-                  <span className="font-bold">Quick Win:</span>{" "}
-                  <span className="font-semibold">{quickWin.label}</span> — {quickWin.fixOne} → est.{" "}
-                  <span className="font-bold tabular-nums">+{quickWin.impact}%</span> impact
-                </span>
-                <button
-                  type="button"
-                  onClick={onQuickWinPlan}
-                  className="shrink-0 rounded-full border border-amber-600/40 bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-950 hover:bg-amber-200 dark:border-amber-400/50 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-900/80"
-                >
-                  Fix this →
-                </button>
-                <button
-                  type="button"
-                  onClick={onQuickWinDismiss}
-                  className="shrink-0 rounded-md p-1 text-amber-800 hover:bg-amber-200/80 dark:text-amber-200 dark:hover:bg-amber-900/60"
-                  aria-label="Dismiss quick win"
-                >
-                  ×
-                </button>
-              </div>
-            )}
             <div className="rounded-lg border border-primary/25 bg-gradient-to-b from-primary/[0.07] to-transparent px-3 py-3 space-y-3">
               <div className="flex items-center gap-2">
                 <FlaskConical className="h-4 w-4 text-primary shrink-0" aria-hidden />
@@ -1220,31 +1252,46 @@ export function DecisionActionPanel({
                           checked ? "border-[#1D9E75]/50 bg-[#1D9E75]/[0.06]" : "border-border bg-muted/15"
                         )}
                       >
-                        <label className="flex cursor-pointer items-start gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => onSimulateToggle?.(item.id, e.target.checked)}
-                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-center gap-1.5 gap-y-1">
-                              <span className="text-[11px] font-bold text-foreground">{item.sectionLabel}</span>
-                              <span className="inline-flex items-center rounded-full border border-[#1D9E75]/40 bg-[#1D9E75]/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#0f6b4f] dark:text-[#5ed9a8]">
-                                +{item.points.toFixed(1)} pts
+                        <div className="flex items-start gap-1">
+                          <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => onSimulateToggle?.(item.id, e.target.checked)}
+                              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary transition-transform duration-200 ease-out checked:scale-110"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-1.5 gap-y-1">
+                                <span className="text-[11px] font-bold text-foreground">{item.sectionLabel}</span>
+                                <span className="inline-flex items-center rounded-full border border-[#1D9E75]/40 bg-[#1D9E75]/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#0f6b4f] dark:text-[#5ed9a8]">
+                                  +{item.points.toFixed(1)} pts
+                                </span>
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                                    effortSimulateClass(item.effort)
+                                  )}
+                                >
+                                  {item.effort}
+                                </span>
                               </span>
-                              <span
-                                className={cn(
-                                  "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase",
-                                  effortSimulateClass(item.effort)
-                                )}
-                              >
-                                {item.effort}
-                              </span>
+                              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{item.oneLineFix}</span>
                             </span>
-                            <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{item.oneLineFix}</span>
-                          </span>
-                        </label>
+                          </label>
+                          {checked ? (
+                            <button
+                              type="button"
+                              className="mt-0.5 shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                              aria-label={`Remove ${item.sectionLabel} from plan`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                onSimulateToggle?.(item.id, false);
+                              }}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
                       </li>
                     );
                   })}
