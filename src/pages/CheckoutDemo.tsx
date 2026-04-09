@@ -12,6 +12,7 @@ import {
   type FullInsightsPayload,
 } from "@/lib/reportSession";
 import { enableFullInsightsHistoryPersistence } from "@/lib/analysisHistory";
+import { auditPathForUrl } from "@/lib/auditSlug";
 
 const PLANS: Record<string, string> = {
   free: "Free",
@@ -87,7 +88,7 @@ export default function CheckoutDemo() {
     });
     enableFullInsightsHistoryPersistence();
     setBusy(false);
-    navigate("/full-insights?section=compare", { replace: true });
+    navigate(auditPathForUrl(payload.url, "section=compare"), { replace: true });
   };
 
   return (

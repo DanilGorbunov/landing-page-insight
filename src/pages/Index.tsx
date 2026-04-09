@@ -6,6 +6,7 @@ import { startAnalysis, fetchRecentComparisonsFromApi, type JobLiveState } from 
 import { saveToHistory, getHistory, getHistoryCount, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
 import { getDefaultRecentComparisons } from "@/lib/demoRecentComparisons";
 import { REPORT_RETURN_KEY, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
+import { auditPathForUrl } from "@/lib/auditSlug";
 
 type Screen = "input" | "progress" | "dashboard";
 
@@ -30,7 +31,7 @@ const Index = () => {
       planName: meta?.planName ?? "Analysis",
       paidAt: paidAtOverride ?? meta?.paidAt ?? new Date().toISOString(),
     });
-    navigate("/full-insights?section=compare");
+    navigate(auditPathForUrl(normalized, "section=compare"));
   }, [navigate]);
 
   // Auto-start analysis when navigated here with ?url= param (e.g. from Monitor "Re-check")
@@ -63,7 +64,9 @@ const Index = () => {
             paidAt: meta?.paidAt ?? data.savedEntry?.analyzedAt ?? new Date().toISOString(),
           });
           sessionStorage.removeItem(REPORT_RETURN_KEY);
-          navigate("/full-insights?section=compare", { replace: true });
+          navigate(auditPathForUrl(data.url.startsWith("http") ? data.url : `https://${data.url}`, "section=compare"), {
+            replace: true,
+          });
           return;
         }
       }

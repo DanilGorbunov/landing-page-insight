@@ -8,6 +8,7 @@ import { readFullInsightsPayload } from "@/lib/reportSession";
 import { getHistoryCount } from "@/lib/analysisHistory";
 import { weightedOverallFromSections } from "@/lib/insightsProjection";
 import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
+import { auditSectionHref } from "@/lib/auditSlug";
 import type { AnalysisResult } from "@/types/api";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
@@ -64,7 +65,7 @@ export default function MonitorPage() {
       return;
     }
     if (FULL_INSIGHTS_SECTION_IDS.has(id)) {
-      navigate(`/full-insights?section=${encodeURIComponent(id)}`);
+      navigate(auditSectionHref(id, url));
     }
   };
 
@@ -100,7 +101,7 @@ export default function MonitorPage() {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/90 backdrop-blur px-4 md:px-6">
           <div className="min-w-0 flex items-center gap-2 text-sm">
-            <Link to="/full-insights?section=compare" className="text-muted-foreground hover:text-foreground truncate">
+            <Link to={auditSectionHref("compare", url)} className="text-muted-foreground hover:text-foreground truncate">
               Dashboard
             </Link>
             <span className="text-muted-foreground/60" aria-hidden>

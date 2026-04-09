@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useLayoutEffect, useCallback } from "react";
-import { useNavigate, Link, useSearchParams } from "react-router-dom";
+import { useNavigate, Link, useSearchParams, useParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -17,6 +17,8 @@ import {
   writeFullInsightsPayload,
   readFullInsightsUnlockMeta,
 } from "@/lib/reportSession";
+import { getAuditPage } from "@/lib/auditPageStore";
+import { auditPathForUrl, auditSlugFromUrl, auditSectionHref } from "@/lib/auditSlug";
 import { downloadFullInsightsPdf } from "@/lib/fullReportPdf";
 import { getHistory, type HistoryEntry } from "@/lib/analysisHistory";
 import { PerformanceGauges } from "@/components/PerformanceGauges";
@@ -216,7 +218,7 @@ function OverviewSection({ result, url }: { result: AnalysisResult; url: string 
           ) : null}
         </div>
         <Link
-          to="/full-insights?section=compare"
+          to={auditSectionHref("compare", url)}
           className="inline-flex shrink-0 items-center justify-center gap-2 self-start rounded-full bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-all hover:brightness-110 sm:self-center"
         >
           Open Compare
@@ -491,10 +493,21 @@ const SECTION_LABELS: Record<string, string> = {
 
 export default function AuditDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { slug: slugParam } = useParams<{ slug?: string }>();
+  const slug = slugParam ? decodeURIComponent(slugParam) : undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const isSharedView = searchParams.get("shared") === "true";
   const [sessionRevision, setSessionRevision] = useState(0);
-  const payload = useMemo(() => readFullInsightsPayload(), [sessionRevision]);
+  const payload = useMemo(() => {
+    const sp = readFullInsightsPayload();
+    if (!slug) return sp;
+    const normalized = slug.toLowerCase();
+    const fromStore = getAuditPage(slug);
+    if (fromStore?.result) return fromStore;
+    if (sp?.result && auditSlugFromUrl(sp.url) === normalized) return sp;
+    return null;
+  }, [slug, sessionRevision]);
   const [activeSection, setActiveSection] = useState(() => {
     const s = new URLSearchParams(window.location.search).get("section");
     if (s === "competitors") return "overview";
@@ -535,14 +548,35 @@ export default function AuditDashboard() {
     setCompareToolbarHost(compareToolbarHostRef.current);
   }, [activeSection]);
 
+  useEffect(() => {
+    if (location.pathname !== "/full-insights") return;
+    const p = readFullInsightsPayload();
+    if (!p?.result) return;
+    const q = location.search.startsWith("?") ? location.search.slice(1) : location.search;
+    navigate(auditPathForUrl(p.url, q), { replace: true });
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (!slug) return;
+    const fromStore = getAuditPage(slug);
+    if (fromStore?.result) {
+      writeFullInsightsPayload(fromStore);
+      setSessionRevision((n) => n + 1);
+    }
+  }, [slug]);
+
   if (!payload?.result) {
+    const missingSlug = Boolean(slug);
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background px-6 py-16">
         <div className="max-w-md w-full rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-          <h1 className="text-lg font-semibold text-foreground">No report loaded</h1>
+          <h1 className="text-lg font-semibold text-foreground">
+            {missingSlug ? "Audit not found" : "No report loaded"}
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-            This page shows your audit dashboard after an analysis. Run a check from the home page — your results open
-            here automatically.
+            {missingSlug
+              ? `No saved report for “${slug}”. Run an analysis for that site on the home page — it will get a shareable /audit/ link.`
+              : "This page shows your audit dashboard after an analysis. Run a check from the home page — your results open here automatically."}
           </p>
           <Link
             to="/"
@@ -570,19 +604,25 @@ export default function AuditDashboard() {
     return byDomain?.id ?? null;
   }, [url, result.jobId, sessionRevision]);
 
-  const handleOpenHistoryEntry = useCallback((entry: HistoryEntry) => {
-    const current = readFullInsightsPayload();
-    const meta = readFullInsightsUnlockMeta();
-    writeFullInsightsPayload({
-      url: `https://${entry.domain}`,
-      result: entry.result,
-      planId: meta?.planId ?? current?.planId ?? "analysis",
-      planName: meta?.planName ?? current?.planName ?? "Analysis",
-      paidAt: entry.analyzedAt,
-    });
-    setCompareSiteIdx(0);
-    setSessionRevision((n) => n + 1);
-  }, []);
+  const handleOpenHistoryEntry = useCallback(
+    (entry: HistoryEntry) => {
+      const current = readFullInsightsPayload();
+      const meta = readFullInsightsUnlockMeta();
+      const nextUrl = `https://${entry.domain}`;
+      writeFullInsightsPayload({
+        url: nextUrl,
+        result: entry.result,
+        planId: meta?.planId ?? current?.planId ?? "analysis",
+        planName: meta?.planName ?? current?.planName ?? "Analysis",
+        paidAt: entry.analyzedAt,
+      });
+      setCompareSiteIdx(0);
+      setSessionRevision((n) => n + 1);
+      const q = searchParams.toString();
+      navigate(auditPathForUrl(nextUrl, q), { replace: true });
+    },
+    [navigate, searchParams]
+  );
 
   const handleCompareToolbarBack = useCallback(() => {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -645,7 +685,8 @@ export default function AuditDashboard() {
 
   const handleShare = () => {
     try {
-      const u = new URL(window.location.href);
+      const path = auditPathForUrl(url, searchParams.toString());
+      const u = new URL(path, window.location.origin);
       u.searchParams.set("shared", "true");
       void navigator.clipboard.writeText(u.toString());
       toast.success("Report link copied to clipboard");

@@ -112,7 +112,7 @@ export const HINT_CONTROLS = {
   },
   rightPanelToggle: {
     title: "Analysis panel",
-    description: "Hide or show the right column (SIMULATE, Insight, Scores).",
+    description: "Hide or show the right analysis column.",
     problem: "The panel uses horizontal space when you only need the screenshots.",
     action: "Use the chevron in the panel header (left of the tabs), or Wide layout in the toolbar.",
   },

@@ -48,7 +48,6 @@ import {
   DecisionActionPanel,
   CompareOverlayLayer,
   type CompareOverlayLayerMode,
-  type DecisionPanelTab,
 } from "@/components/CompareDecisionPanels";
 import { AiLabelMarkers } from "@/components/AiLabelMarkers";
 import { HeatmapOverlay } from "@/components/HeatmapOverlay";
@@ -484,9 +483,25 @@ function ScreenshotFrame({
 
 // ─── Slider compare ─────────────────────────────────────────────────────────────
 
-function SliderCompare({ left, right, leftLabel, rightLabel }: { left: SiteEntry; right: SiteEntry; leftLabel: string; rightLabel: string }) {
+function SliderCompare({
+  left,
+  right,
+  leftLabel,
+  rightLabel,
+  leftZoom,
+  rightZoom,
+}: {
+  left: SiteEntry;
+  right: SiteEntry;
+  leftLabel: string;
+  rightLabel: string;
+  /** Independent column zoom — combined for one aligned stack (average keeps the divider meaningful). */
+  leftZoom: number;
+  rightZoom: number;
+}) {
   const [pct, setPct] = useState(50);
   if (!left.screenshotUrl || !right.screenshotUrl) return null;
+  const stackZoom = (leftZoom + rightZoom) / 2;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
       <HintTooltip
@@ -506,7 +521,10 @@ function SliderCompare({ left, right, leftLabel, rightLabel }: { left: SiteEntry
         />
       </HintTooltip>
       <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-background select-none scrollbar-hide">
-        <div className="relative min-h-[120px]">
+        <div
+          className="relative min-h-[120px] inline-block min-w-full origin-top transition-transform duration-150 ease-out"
+          style={{ transform: `scale(${stackZoom})`, transformOrigin: "top center" }}
+        >
           <img src={right.screenshotUrl} alt={rightLabel} className="w-full h-auto block" draggable={false} />
           <img src={left.screenshotUrl} alt={leftLabel} className="absolute top-0 left-0 w-full h-auto pointer-events-none" style={{ clipPath: `inset(0 ${100 - pct}% 0 0)` }} draggable={false} />
           <div className="absolute top-0 bottom-0 w-0.5 bg-primary shadow-[0_0_12px_rgba(0,0,0,0.4)] z-30 pointer-events-none" style={{ left: `${pct}%`, transform: "translateX(-50%)" }} />
@@ -587,6 +605,75 @@ function AiTipsColumnButton({
         <span className={compact ? "max-[420px]:sr-only" : ""}>AI Tips</span>
       </button>
     </HintTooltip>
+  );
+}
+
+/** Zoom — left of Heatmap on each column; state is keyed by site URL in the parent. */
+function ZoomColumnControls({
+  zoomIdx,
+  onZoomOut,
+  onZoomIn,
+  pushToolbarHelp,
+  compact,
+}: {
+  zoomIdx: number;
+  onZoomOut: () => void;
+  onZoomIn: () => void;
+  pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
+  compact?: boolean;
+}) {
+  const zoom = ZOOM_LEVELS[zoomIdx] ?? 1;
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border p-0.5">
+      <HintTooltip
+        side="bottom"
+        title={HINT_CONTROLS.zoomOut.title}
+        description={HINT_CONTROLS.zoomOut.description}
+        action={HINT_CONTROLS.zoomOut.action}
+        disabled={zoomIdx === 0}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            pushToolbarHelp("ctrl-zoom-out", HINT_CONTROLS.zoomOut);
+            onZoomOut();
+          }}
+          disabled={zoomIdx === 0}
+          className={cn("rounded p-1 hover:bg-muted disabled:opacity-40", compact && "p-0.5")}
+          aria-label="Zoom out"
+        >
+          <ZoomOut className={cn(compact ? "h-2.5 w-2.5" : "h-3 w-3")} />
+        </button>
+      </HintTooltip>
+      <span
+        className={cn(
+          "font-mono font-bold text-center text-muted-foreground tabular-nums",
+          compact ? "w-8 text-[9px]" : "w-10 text-[10px]"
+        )}
+      >
+        {Math.round(zoom * 100)}%
+      </span>
+      <HintTooltip
+        side="bottom"
+        title={HINT_CONTROLS.zoomIn.title}
+        description={HINT_CONTROLS.zoomIn.description}
+        action={HINT_CONTROLS.zoomIn.action}
+        disabled={zoomIdx >= ZOOM_LEVELS.length - 1}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            pushToolbarHelp("ctrl-zoom-in", HINT_CONTROLS.zoomIn);
+            onZoomIn();
+          }}
+          disabled={zoomIdx >= ZOOM_LEVELS.length - 1}
+          className={cn("rounded p-1 hover:bg-muted disabled:opacity-40", compact && "p-0.5")}
+          aria-label="Zoom in"
+        >
+          <ZoomIn className={cn(compact ? "h-2.5 w-2.5" : "h-3 w-3")} />
+        </button>
+      </HintTooltip>
+    </div>
   );
 }
 
@@ -671,6 +758,7 @@ function SplitSiteColumnPicker({
   onSelect,
   compact,
   aiTips,
+  zoom,
   heatmap,
   wideLayout,
 }: {
@@ -683,6 +771,13 @@ function SplitSiteColumnPicker({
   aiTips?: {
     active: boolean;
     onToggle: () => void;
+    pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
+  };
+  /** Per-site zoom — left of Heatmap. */
+  zoom?: {
+    zoomIdx: number;
+    onZoomOut: () => void;
+    onZoomIn: () => void;
     pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
   };
   /** Heatmap toggle to the right of the URL row (per site). */
@@ -767,7 +862,7 @@ function SplitSiteColumnPicker({
     </div>
   );
 
-  if (!wideLayout && !heatmap && !aiTips) return picker;
+  if (!wideLayout && !heatmap && !aiTips && !zoom) return picker;
 
   return (
     <div className="flex w-full min-w-0 items-center justify-between gap-2">
@@ -778,6 +873,15 @@ function SplitSiteColumnPicker({
             active={aiTips.active}
             onToggle={aiTips.onToggle}
             pushToolbarHelp={aiTips.pushToolbarHelp}
+            compact={compact}
+          />
+        ) : null}
+        {zoom ? (
+          <ZoomColumnControls
+            zoomIdx={zoom.zoomIdx}
+            onZoomOut={zoom.onZoomOut}
+            onZoomIn={zoom.onZoomIn}
+            pushToolbarHelp={zoom.pushToolbarHelp}
             compact={compact}
           />
         ) : null}
@@ -865,7 +969,8 @@ export function ScreenshotCompare({
   /** Split/Compare: start with a 2-column grid of all competitors; pick one to open full screenshot on the right. */
   const [rightPaneMode, setRightPaneMode] = useState<"grid" | "detail">("grid");
   const splitIdxInitRef = useRef(false);
-  const [zoomIdx, setZoomIdx] = useState(0);
+  /** Per-site screenshot zoom (keyed by URL so columns stay independent). */
+  const [zoomIdxByUrl, setZoomIdxByUrl] = useState<Record<string, number>>({});
   /** Null = neutral (no analyze mode selected); layer behaves as baseline "compare" (no tint). */
   const [analyzeMode, setAnalyzeMode] = useState<ToolbarOverlayMode | null>(null);
   const effectiveOverlay: ToolbarOverlayMode = analyzeMode ?? "compare";
@@ -891,12 +996,34 @@ export function ScreenshotCompare({
     setHeatmapEnabledUrls((prev) => (prev.includes(siteUrl) ? prev.filter((u) => u !== siteUrl) : [...prev, siteUrl]));
   }, []);
 
+  const zoomIdxFor = (siteUrl: string) => zoomIdxByUrl[siteUrl] ?? 0;
+  const zoomLevelFor = (siteUrl: string) => ZOOM_LEVELS[zoomIdxFor(siteUrl)] ?? 1;
+  const bumpZoom = useCallback((siteUrl: string, delta: -1 | 1) => {
+    setZoomIdxByUrl((m) => {
+      const cur = m[siteUrl] ?? 0;
+      const next = delta < 0 ? Math.max(0, cur - 1) : Math.min(ZOOM_LEVELS.length - 1, cur + 1);
+      if (next === cur) return m;
+      return { ...m, [siteUrl]: next };
+    });
+  }, []);
+
+  const zoomColumnProps = (siteUrl: string) => ({
+    zoomIdx: zoomIdxFor(siteUrl),
+    onZoomOut: () => {
+      pushToolbarHelp("ctrl-zoom-out", HINT_CONTROLS.zoomOut);
+      bumpZoom(siteUrl, -1);
+    },
+    onZoomIn: () => {
+      pushToolbarHelp("ctrl-zoom-in", HINT_CONTROLS.zoomIn);
+      bumpZoom(siteUrl, 1);
+    },
+    pushToolbarHelp,
+  });
+
   useEffect(() => {
     if (heatmapEnabledUrls.length > 0) setAnalyzeMode("attention");
     else setAnalyzeMode(null);
   }, [heatmapEnabledUrls]);
-
-  const zoom = ZOOM_LEVELS[zoomIdx] ?? 1;
 
   useEffect(() => {
     if (viewMode === "single") setWideSoloSide(null);
@@ -1202,7 +1329,6 @@ export function ScreenshotCompare({
     [result, decisionBundle.gapItems]
   );
   const [simulateChecked, setSimulateChecked] = useState<Record<string, boolean>>({});
-  const [decisionPanelTab, setDecisionPanelTab] = useState<DecisionPanelTab>("simulate");
   const [aiTipsVisible, setAiTipsVisible] = useState(true);
   const competitorOverallScores = useMemo(
     () => sites.filter((s) => !s.isUser).map((s) => s.overallScore).filter((n): n is number => n != null),
@@ -1643,8 +1769,6 @@ export function ScreenshotCompare({
       simulateChecked={simulateChecked}
       onSimulateToggle={onSimulateToggle}
       competitorOverallScores={competitorOverallScores}
-      panelTab={decisionPanelTab}
-      onPanelTabChange={setDecisionPanelTab}
       onCollapseRightPanel={() => {
         pushToolbarHelp("right-panel-close", HINT_CONTROLS.rightPanelToggle);
         setFullWidth(true);
@@ -1741,38 +1865,6 @@ export function ScreenshotCompare({
             ) : null}
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-1.5 justify-end shrink-0">
-          <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5">
-            <HintTooltip side="bottom" title={HINT_CONTROLS.zoomOut.title} description={HINT_CONTROLS.zoomOut.description} action={HINT_CONTROLS.zoomOut.action} disabled={zoomIdx === 0}>
-              <button
-                type="button"
-                onClick={() => {
-                  pushToolbarHelp("ctrl-zoom-out", HINT_CONTROLS.zoomOut);
-                  setZoomIdx((i) => Math.max(0, i - 1));
-                }}
-                disabled={zoomIdx === 0}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40"
-              >
-                <ZoomOut className="h-3 w-3" />
-              </button>
-            </HintTooltip>
-            <span className="text-[10px] font-mono font-bold w-10 text-center text-muted-foreground">{Math.round(zoom * 100)}%</span>
-            <HintTooltip side="bottom" title={HINT_CONTROLS.zoomIn.title} description={HINT_CONTROLS.zoomIn.description} action={HINT_CONTROLS.zoomIn.action} disabled={zoomIdx >= ZOOM_LEVELS.length - 1}>
-              <button
-                type="button"
-                onClick={() => {
-                  pushToolbarHelp("ctrl-zoom-in", HINT_CONTROLS.zoomIn);
-                  setZoomIdx((i) => Math.min(ZOOM_LEVELS.length - 1, i + 1));
-                }}
-                disabled={zoomIdx >= ZOOM_LEVELS.length - 1}
-                className="p-1 rounded hover:bg-muted disabled:opacity-40"
-              >
-                <ZoomIn className="h-3 w-3" />
-              </button>
-            </HintTooltip>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -1856,6 +1948,7 @@ export function ScreenshotCompare({
                           onToggle: () => setAiTipsVisible((v) => !v),
                           pushToolbarHelp,
                         }}
+                        zoom={zoomColumnProps(activeSite.url)}
                         heatmap={{
                           active: heatmapEnabledUrls.includes(activeSite.url),
                           onToggle: () => toggleHeatmapUrl(activeSite.url),
@@ -1873,7 +1966,7 @@ export function ScreenshotCompare({
                         site={activeSite}
                         showZones={showZones}
                         expandedPin={expandedPin}
-                        zoom={zoom}
+                        zoom={zoomLevelFor(activeSite.url)}
                         overlayMode={effectiveOverlay}
                         sectionNavTick={sectionNavTick}
                         zoneLens={zoneLens}
@@ -1916,6 +2009,7 @@ export function ScreenshotCompare({
                               onToggle: () => setAiTipsVisible((v) => !v),
                               pushToolbarHelp,
                             }}
+                            zoom={zoomColumnProps(splitLeftSite.url)}
                             heatmap={{
                               active: heatmapEnabledUrls.includes(splitLeftSite.url),
                               onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
@@ -1933,7 +2027,7 @@ export function ScreenshotCompare({
                             site={splitLeftSite}
                             showZones={showZones}
                             expandedPin={expandedPin}
-                            zoom={zoom}
+                            zoom={zoomLevelFor(splitLeftSite.url)}
                             overlayMode={effectiveOverlay}
                             sectionNavTick={sectionNavTick}
                             zoneLens={zoneLens}
@@ -2033,6 +2127,7 @@ export function ScreenshotCompare({
                                   onToggle: () => setAiTipsVisible((v) => !v),
                                   pushToolbarHelp,
                                 }}
+                                zoom={zoomColumnProps(splitRightSite.url)}
                                 heatmap={{
                                   active: heatmapEnabledUrls.includes(splitRightSite.url),
                                   onToggle: () => toggleHeatmapUrl(splitRightSite.url),
@@ -2050,7 +2145,7 @@ export function ScreenshotCompare({
                                 site={splitRightSite}
                                 showZones={showZones}
                                 expandedPin={expandedPin}
-                                zoom={zoom}
+                                zoom={zoomLevelFor(splitRightSite.url)}
                                 overlayMode={effectiveOverlay}
                                 sectionNavTick={sectionNavTick}
                                 zoneLens={zoneLens}
@@ -2086,6 +2181,7 @@ export function ScreenshotCompare({
                             onToggle: () => setAiTipsVisible((v) => !v),
                             pushToolbarHelp,
                           }}
+                          zoom={zoomColumnProps(splitLeftSite.url)}
                           heatmap={{
                             active: heatmapEnabledUrls.includes(splitLeftSite.url),
                             onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
@@ -2103,7 +2199,7 @@ export function ScreenshotCompare({
                           site={splitLeftSite}
                           showZones={showZones}
                           expandedPin={expandedPin}
-                          zoom={zoom}
+                          zoom={zoomLevelFor(splitLeftSite.url)}
                           overlayMode={effectiveOverlay}
                           sectionNavTick={sectionNavTick}
                           zoneLens={zoneLens}
@@ -2138,6 +2234,7 @@ export function ScreenshotCompare({
                             onToggle: () => setAiTipsVisible((v) => !v),
                             pushToolbarHelp,
                           }}
+                          zoom={zoomColumnProps(splitRightSite.url)}
                           heatmap={{
                             active: heatmapEnabledUrls.includes(splitRightSite.url),
                             onToggle: () => toggleHeatmapUrl(splitRightSite.url),
@@ -2155,7 +2252,7 @@ export function ScreenshotCompare({
                           site={splitRightSite}
                           showZones={showZones}
                           expandedPin={expandedPin}
-                          zoom={zoom}
+                          zoom={zoomLevelFor(splitRightSite.url)}
                           overlayMode={effectiveOverlay}
                           sectionNavTick={sectionNavTick}
                           zoneLens={zoneLens}
@@ -2202,6 +2299,7 @@ export function ScreenshotCompare({
                                 pushToolbarHelp={pushToolbarHelp}
                                 compact
                               />
+                              <ZoomColumnControls {...zoomColumnProps(splitLeftSite.url)} compact />
                               <HeatmapColumnButton
                                 active={heatmapEnabledUrls.includes(splitLeftSite.url)}
                                 onToggle={() => toggleHeatmapUrl(splitLeftSite.url)}
@@ -2233,6 +2331,7 @@ export function ScreenshotCompare({
                                 pushToolbarHelp={pushToolbarHelp}
                                 compact
                               />
+                              <ZoomColumnControls {...zoomColumnProps(splitRightSite.url)} compact />
                               <HeatmapColumnButton
                                 active={heatmapEnabledUrls.includes(splitRightSite.url)}
                                 onToggle={() => toggleHeatmapUrl(splitRightSite.url)}
@@ -2253,6 +2352,8 @@ export function ScreenshotCompare({
                           right={splitRightSite}
                           leftLabel={splitLeftSite.domain}
                           rightLabel={splitRightSite.domain}
+                          leftZoom={zoomLevelFor(splitLeftSite.url)}
+                          rightZoom={zoomLevelFor(splitRightSite.url)}
                         />
                       </>
                     ) : wideSoloSide === "left" ? (
@@ -2271,6 +2372,7 @@ export function ScreenshotCompare({
                               onToggle: () => setAiTipsVisible((v) => !v),
                               pushToolbarHelp,
                             }}
+                            zoom={zoomColumnProps(splitLeftSite.url)}
                             heatmap={{
                               active: heatmapEnabledUrls.includes(splitLeftSite.url),
                               onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
@@ -2288,7 +2390,7 @@ export function ScreenshotCompare({
                             site={splitLeftSite}
                             showZones={showZones}
                             expandedPin={expandedPin}
-                            zoom={zoom}
+                            zoom={zoomLevelFor(splitLeftSite.url)}
                             overlayMode={effectiveOverlay}
                             sectionNavTick={sectionNavTick}
                             zoneLens={zoneLens}
@@ -2323,6 +2425,7 @@ export function ScreenshotCompare({
                               onToggle: () => setAiTipsVisible((v) => !v),
                               pushToolbarHelp,
                             }}
+                            zoom={zoomColumnProps(splitRightSite.url)}
                             heatmap={{
                               active: heatmapEnabledUrls.includes(splitRightSite.url),
                               onToggle: () => toggleHeatmapUrl(splitRightSite.url),
@@ -2340,7 +2443,7 @@ export function ScreenshotCompare({
                             site={splitRightSite}
                             showZones={showZones}
                             expandedPin={expandedPin}
-                            zoom={zoom}
+                            zoom={zoomLevelFor(splitRightSite.url)}
                             overlayMode={effectiveOverlay}
                             sectionNavTick={sectionNavTick}
                             zoneLens={zoneLens}

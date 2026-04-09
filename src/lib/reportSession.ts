@@ -1,5 +1,7 @@
 import type { AnalysisResult } from "@/types/api";
 import type { HistoryEntry } from "@/lib/analysisHistory";
+import { saveAuditPage } from "@/lib/auditPageStore";
+import { auditSlugFromUrl } from "@/lib/auditSlug";
 
 export const REPORT_RETURN_KEY = "landinglens_report_return";
 export const FULL_INSIGHTS_KEY = "landinglens_full_insights";
@@ -32,6 +34,8 @@ export function readReportReturnPayload(): ReportReturnPayload | null {
 
 export function writeFullInsightsPayload(data: FullInsightsPayload): void {
   sessionStorage.setItem(FULL_INSIGHTS_KEY, JSON.stringify(data));
+  const slug = auditSlugFromUrl(data.url);
+  if (slug) saveAuditPage(slug, data);
 }
 
 export function readFullInsightsPayload(): FullInsightsPayload | null {
