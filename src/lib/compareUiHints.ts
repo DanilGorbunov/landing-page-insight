@@ -70,7 +70,7 @@ export const HINT_ANALYZE: Record<string, ToolbarHintContent> = {
   },
   first5s: {
     title: "First 5 seconds",
-    description: "Dims everything below the fold to simulate first impression.",
+    description: "Use this mode to focus review on what appears above the fold (no darkening overlay).",
     problem: "Visitors may leave before they understand your value proposition.",
     action: "Make sure the value prop is clear without scrolling.",
   },
@@ -89,12 +89,6 @@ export const HINT_ANALYZE: Record<string, ToolbarHintContent> = {
 };
 
 export const HINT_LENS: Record<string, ToolbarHintContent> = {
-  hot: {
-    title: "Hot zones",
-    description: "Highlights sections scoring below 7 — likely weak spots.",
-    problem: "Low-scoring sections are easy to miss when scanning the whole page.",
-    action: "Open a pin or the right panel for priority fixes.",
-  },
   delta: {
     title: "Δ vs you",
     description: "Shows per-section score deltas vs your site (on the competitor screenshot).",
@@ -116,11 +110,23 @@ export const HINT_CONTROLS = {
     problem: "Without bands it’s unclear which part of the page each score refers to.",
     action: "Pair with Hot lens or Split mode for problem context.",
   },
+  rightPanelToggle: {
+    title: "Analysis panel",
+    description: "Hide or show the right column (SIMULATE, Insight, Scores).",
+    problem: "The panel uses horizontal space when you only need the screenshots.",
+    action: "Use the chevron in the panel header (left of the tabs), or Wide layout in the toolbar.",
+  },
   wide: {
     title: "Wide layout",
     description: "Hides the right action panel so screenshots use the full width. Turn off to show the panel again.",
     problem: "Narrow columns hide small UI details on large monitors.",
     action: "Useful for fine detail on large displays.",
+  },
+  aiTips: {
+    title: "AI Tips",
+    description: "Shows AI tip pills on screenshots in Split / Compare — per-section suggestions on each shot.",
+    problem: "Insights stay in the side panel until you turn on labels on the screenshots.",
+    action: "Toggle for all columns at once; works in Split or Compare view.",
   },
   zoomOut: {
     title: "Zoom out",

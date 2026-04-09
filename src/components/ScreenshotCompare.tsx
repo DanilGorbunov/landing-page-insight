@@ -17,9 +17,6 @@ import {
   Maximize2,
   Minimize2,
   Lightbulb,
-  LayoutGrid,
-  GalleryHorizontal,
-  Columns2,
   ZoomIn,
   ZoomOut,
   ExternalLink,
@@ -28,16 +25,10 @@ import {
   Minus,
   BarChart3,
   MousePointer2,
-  Type,
-  Flame,
-  ArrowLeftRight,
-  Shield,
-  BookOpen,
-  Timer,
-  Target,
   ChevronDown,
   Check,
-  Image,
+  Plus,
+  RefreshCw,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -46,13 +37,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HintTooltip } from "@/components/HintTooltip";
 import {
-  HINT_VIEW,
-  HINT_VIEW_SLIDER,
   HINT_ANALYZE,
-  HINT_LENS,
   HINT_CONTROLS,
   hintSiteTab,
   type ToolbarHintContent,
@@ -64,8 +51,10 @@ import {
   type DecisionPanelTab,
 } from "@/components/CompareDecisionPanels";
 import { AiLabelMarkers } from "@/components/AiLabelMarkers";
+import { HeatmapOverlay } from "@/components/HeatmapOverlay";
 import { buildSimulateAiLabelRows } from "@/lib/simulateAiLabels";
 import { buildUnifiedAiLabelRowsForMode } from "@/lib/unifiedAiLabels";
+import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AttentionHeatmapResponse, AttentionZone } from "@/types/attention";
 import { fetchAttentionHeatmap } from "@/lib/api";
 import { normalizeAttentionResponse } from "@/lib/attentionNormalize";
@@ -88,7 +77,13 @@ import {
   annotationPreview,
   type SectionOrderKey,
 } from "@/lib/compareDecisionMetrics";
-import { buildSimulateItems, fillMissingSectionSimulateItems, getSimulateOverlayPercentRect } from "@/lib/simulateWhatIf";
+import {
+  buildSimulateItems,
+  fillMissingSectionSimulateItems,
+  getSimulateOverlayPercentRect,
+  type SimulateImprovementItem,
+} from "@/lib/simulateWhatIf";
+import type { SimulateAiLabelRow } from "@/lib/simulateAiLabels";
 import type { SectionDeepDivePayload } from "@/components/CompareDecisionPanels";
 import {
   type ToolbarContext,
@@ -96,7 +91,6 @@ import {
   getRightPanelHeader,
   formatToolbarContextForEmpty,
   sectionPassesToolbarFilters,
-  countHotSections,
 } from "@/lib/compareToolbarContext";
 
 // ─── Constants ──────────────────────────────────────────────────────────────────
@@ -110,6 +104,16 @@ const SECTION_ZONES: Record<string, { top: number; height: number; label: string
 };
 
 const SECTION_KEYS = ["hero", "value proposition", "features", "social proof", "CTA"] as const;
+
+/** When section text has no parseable X/10, show these baseline scores on the screenshot chips. */
+const SCREENSHOT_SECTION_FALLBACK_SCORES: Record<(typeof SECTION_KEYS)[number], number> = {
+  hero: 7.0,
+  "value proposition": 6.0,
+  features: 8.0,
+  "social proof": 8.0,
+  CTA: 6.0,
+};
+
 const ZOOM_LEVELS = [1, 1.25, 1.5, 1.75] as const;
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -158,6 +162,14 @@ function extractFirstSentence(text: string): string {
   return m ? m[0].trim() : c.slice(0, 120).trim();
 }
 
+function sectionScoreForScreenshot(
+  analysis: Record<string, string>,
+  key: (typeof SECTION_KEYS)[number]
+): number {
+  const parsed = parseScoreFromReport(analysis[key]);
+  return parsed ?? SCREENSHOT_SECTION_FALLBACK_SCORES[key];
+}
+
 function buildAnnotations(analysis: Record<string, string>): Annotation[] {
   return SECTION_KEYS.map((key) => {
     const zone = SECTION_ZONES[key];
@@ -165,7 +177,7 @@ function buildAnnotations(analysis: Record<string, string>): Annotation[] {
     return {
       sectionKey: key,
       label: zone.label,
-      score: parseScoreFromReport(text),
+      score: sectionScoreForScreenshot(analysis, key),
       summary: text ? extractFirstSentence(text) : "No data",
       preview: text ? annotationPreview(text, 360) : "",
       fullText: text,
@@ -201,14 +213,6 @@ type ToolbarOverlayMode = CompareOverlayLayerMode | "mobile";
 
 const CIRCLED_EYE_ORDER = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩", "⑪", "⑫"];
 
-/** Section chip bottom bar: reflects user-site score band for that section (same as before). */
-function chipUnderlineClass(score: number | null) {
-  if (score == null) return "bg-muted-foreground/40 dark:bg-muted-foreground/50";
-  if (score < 7) return "bg-red-500";
-  if (score < 8) return "bg-amber-500";
-  return "bg-primary";
-}
-
 function matchesSectionKey(lbl: string, key: string): boolean {
   const h = lbl.toLowerCase(), k = key.toLowerCase();
   if (k === "hero") return h.includes("hero");
@@ -219,24 +223,7 @@ function matchesSectionKey(lbl: string, key: string): boolean {
   return false;
 }
 
-function sectionPriorityFromGap(
-  sectionKey: string,
-  gaps: CriticalGap[] | undefined,
-  userSectionScore: number | null
-): "P1" | "P2" | "P3" {
-  const g = gaps?.find((gap) => matchesSectionKey(gap.area, sectionKey));
-  if (g?.priority === "P1") return "P1";
-  if (g?.priority === "P2") return "P2";
-  if (userSectionScore != null && userSectionScore < 6) return "P1";
-  if (userSectionScore != null && userSectionScore < 7.5) return "P2";
-  return "P3";
-}
-
-function gapDetailForSection(sectionKey: string, gaps: CriticalGap[] | undefined): CriticalGap | undefined {
-  return gaps?.find((gap) => matchesSectionKey(gap.area, sectionKey));
-}
-
-type ZoneLens = "balanced" | "hot" | "delta";
+type ZoneLens = "balanced" | "delta";
 
 function SectionZones({
   annotations,
@@ -247,7 +234,6 @@ function SectionZones({
   eyeOrderByKey,
   competitorScores,
   siteIsUser,
-  deltaLensTint,
   compareDiffMode,
 }: {
   annotations: Annotation[];
@@ -259,8 +245,6 @@ function SectionZones({
   /** Competitor section scores — used on your screenshot for “they do this better”. */
   competitorScores?: Record<string, number | null>;
   siteIsUser?: boolean;
-  /** Competitor-only: green/red full-zone tint for Δ vs You. */
-  deltaLensTint?: boolean;
   /** VIEW Compare: green = competitor does better, red = you do better (uses comp−user delta). */
   compareDiffMode?: boolean;
 }) {
@@ -269,7 +253,6 @@ function SectionZones({
     <>
       {annotations.map((a) => {
         const sc = a.score;
-        const isHot = zoneLens === "hot" && sc != null && sc < 7;
         const showDelta = zoneLens === "delta" && deltaByKey && deltaByKey[a.sectionKey] != null;
         const delta = showDelta ? deltaByKey![a.sectionKey]! : null;
         const lowScoreProblem = Boolean(problemIndicators && sc != null && sc < 7);
@@ -279,45 +262,34 @@ function SectionZones({
         const compSc = competitorScores?.[a.sectionKey];
         const theyBetter =
           Boolean(siteIsUser) && sc != null && compSc != null && compSc - sc >= 1.5;
-        const dTint =
-          deltaLensTint && deltaByKey && deltaByKey[a.sectionKey] != null ? deltaByKey[a.sectionKey]! : null;
         const cd = compareDiffMode && deltaByKey && deltaByKey[a.sectionKey] != null ? deltaByKey[a.sectionKey]! : null;
         const compareDiffClass =
           compareDiffMode && cd != null
             ? cd > 0.08
-              ? "border-primary/50 bg-primary/20 z-[2]"
+              ? "border-primary/55 z-[2] bg-transparent"
               : cd < -0.08
-                ? "border-red-500/50 bg-red-500/20 z-[2]"
-                : "border-border/60 bg-muted/20 z-[1]"
+                ? "border-red-500/55 z-[2] bg-transparent"
+                : "border-border/70 z-[1] bg-transparent"
             : null;
         return (
           <div
             key={a.sectionKey}
             className={cn(
-              "absolute left-0 right-0 pointer-events-none transition-colors rounded-lg",
+              "absolute left-0 right-0 pointer-events-none transition-colors rounded-lg bg-transparent",
               !compareDiffMode && !lowScoreProblem && "border-t border-b",
               compareDiffMode && compareDiffClass,
               !compareDiffMode &&
                 (sc != null && sc >= 7.5
-                  ? "border-primary/25 bg-primary/[0.08]"
+                  ? "border-primary/35"
                   : sc != null && sc >= 5
-                    ? "border-amber-500/25 bg-amber-500/[0.08]"
+                    ? "border-amber-500/35"
                     : sc != null
-                      ? "border-red-500/30 bg-red-500/[0.1]"
-                      : "border-muted-foreground/10 bg-muted/5"),
-              !compareDiffMode && lowScoreProblem && "z-[4] border-2 border-dashed border-red-500 dark:border-red-400",
-              isHot && "ring-2 ring-red-500/40 ring-inset animate-pulse z-[1]"
+                      ? "border-red-500/40"
+                      : "border-muted-foreground/25"),
+              !compareDiffMode && lowScoreProblem && "z-[4] border-2 border-dashed border-red-500 dark:border-red-400"
             )}
             style={{ top: `${a.top}%`, height: `${a.height}%` }}
           >
-            {dTint != null && dTint !== 0 && (
-              <div
-                className={cn(
-                  "absolute inset-0 rounded-lg z-[3]",
-                  dTint > 0 ? "bg-primary/20 dark:bg-primary/25" : "bg-red-500/20 dark:bg-red-500/25"
-                )}
-              />
-            )}
             {delta != null && (
               <div className="absolute right-1.5 bottom-1.5 pointer-events-none rounded-md px-1.5 py-0.5 text-[9px] font-bold bg-background/95 border border-border shadow-sm backdrop-blur-sm z-[5]">
                 <span className={delta > 0 ? "text-primary" : delta < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}>
@@ -334,11 +306,6 @@ function SectionZones({
             {theyBetter && (
               <div className="absolute right-1 top-1 z-[6] max-w-[min(100%,140px)] rounded-md border border-primary/40 bg-primary/15 px-1.5 py-0.5 text-[8px] font-bold leading-tight text-primary shadow-sm backdrop-blur-sm dark:text-primary">
                 ↑ They do this better
-              </div>
-            )}
-            {isHot && !theyBetter && (
-              <div className="absolute right-1 top-1 z-[2] rounded bg-red-600/95 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white shadow">
-                Hot zone
               </div>
             )}
           </div>
@@ -362,14 +329,12 @@ function ScreenshotFrame({
   problemIndicators,
   eyeOrderByKey,
   competitorScores,
-  deltaLensTint,
   compareDiffMode,
   heatmapGapPairByKey,
   heatmapGapOnCompetitorOnly,
   attentionOverlay,
   simulateOverlayRows,
   simulateAiLabelsSlot,
-  simulateAiLabelsHeader,
 }: {
   site: SiteEntry;
   showZones: boolean;
@@ -383,7 +348,6 @@ function ScreenshotFrame({
   problemIndicators?: boolean;
   eyeOrderByKey?: Record<string, number>;
   competitorScores?: Record<string, number | null>;
-  deltaLensTint?: boolean;
   compareDiffMode?: boolean;
   heatmapGapPairByKey?: Record<string, { user: number | null; comp: number | null }>;
   heatmapGapOnCompetitorOnly?: boolean;
@@ -399,23 +363,11 @@ function ScreenshotFrame({
   simulateOverlayRows?: Array<{ sectionKey: string; pillText: string }> | null;
   /** SIMULATE-linked AI annotation labels (your screenshot, Split/Compare + SIMULATE tab). */
   simulateAiLabelsSlot?: ReactNode;
-  /** Thin hint strip above the screenshot scroll area (AI insights). */
-  simulateAiLabelsHeader?: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [first5sFoldPct, setFirst5sFoldPct] = useState<number | null>(null);
 
   const layerMode: CompareOverlayLayerMode = overlayMode === "mobile" ? "compare" : overlayMode;
   const mobileFrame = overlayMode === "mobile";
-  const attForLayer =
-    layerMode === "attention" && attentionOverlay
-      ? {
-          zones: attentionOverlay.zones,
-          visible: attentionOverlay.layerVisible,
-          showPlaceholder: attentionOverlay.showPlaceholder,
-        }
-      : null;
-
   const scrollToExpandedSection = useCallback(() => {
     const key = expandedPin;
     if (!key || !scrollRef.current) return;
@@ -430,10 +382,7 @@ function ScreenshotFrame({
   }, [expandedPin]);
 
   const onImageLoad = useCallback(
-    (e: SyntheticEvent<HTMLImageElement>) => {
-      const img = e.currentTarget;
-      const h = img.naturalHeight;
-      setFirst5sFoldPct(h > 0 ? Math.min(100, (600 / h) * 100) : null);
+    (_e: SyntheticEvent<HTMLImageElement>) => {
       scrollToExpandedSection();
     },
     [scrollToExpandedSection]
@@ -446,52 +395,9 @@ function ScreenshotFrame({
   if (!site.screenshotUrl) return <div className="flex items-center justify-center min-h-[200px] text-sm text-muted-foreground bg-muted/20 rounded-xl">No screenshot for {site.domain}</div>;
   return (
     <div className="relative flex min-h-0 min-w-0 w-full flex-1 flex-col">
-      {simulateAiLabelsHeader ? (
-        <div className="pointer-events-none flex h-7 shrink-0 items-center px-1 text-[12px] leading-none text-muted-foreground">{simulateAiLabelsHeader}</div>
-      ) : null}
-      {attentionOverlay && overlayMode === "attention" && !attentionOverlay.loading && (
-        <div
-          className="pointer-events-auto absolute top-1.5 right-1.5 z-[28] inline-flex items-center gap-0 rounded-lg border border-border/90 bg-background/85 p-0.5 shadow-md backdrop-blur-sm dark:bg-background/80"
-          role="tablist"
-          aria-label="Screenshot view"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!attentionOverlay.layerVisible}
-            title="Original"
-            aria-label="Original screenshot"
-            onClick={() => attentionOverlay.onLayerVisibleChange(false)}
-            className={cn(
-              "inline-flex size-6 items-center justify-center rounded-md transition-colors",
-              !attentionOverlay.layerVisible
-                ? "text-amber-700 dark:text-amber-400"
-                : "text-muted-foreground/75 hover:text-foreground"
-            )}
-          >
-            <Image className="h-2.5 w-2.5 shrink-0" strokeWidth={2.25} aria-hidden />
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={attentionOverlay.layerVisible}
-            title="Heatmap"
-            aria-label="Heatmap overlay"
-            onClick={() => attentionOverlay.onLayerVisibleChange(true)}
-            className={cn(
-              "inline-flex size-6 items-center justify-center rounded-md transition-colors",
-              attentionOverlay.layerVisible
-                ? "text-amber-700 dark:text-amber-400"
-                : "text-muted-foreground/75 hover:text-foreground"
-            )}
-          >
-            <MousePointer2 className="h-2.5 w-2.5 shrink-0" strokeWidth={2.25} aria-hidden />
-          </button>
-        </div>
-      )}
       <div
         ref={scrollRef}
-        className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-muted/20 scrollbar-hide"
+        className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-background scrollbar-hide"
         style={{ cursor: zoom > 1 ? "grab" : undefined }}
       >
       <div
@@ -518,7 +424,6 @@ function ScreenshotFrame({
           eyeOrderByKey={eyeOrderByKey}
           competitorScores={competitorScores}
           siteIsUser={site.isUser}
-          deltaLensTint={deltaLensTint}
           compareDiffMode={compareDiffMode}
         />
         <CompareOverlayLayer
@@ -530,12 +435,18 @@ function ScreenshotFrame({
             label: a.label,
             sectionKey: a.sectionKey,
           }))}
-          first5sTopPct={layerMode === "first5s" ? first5sFoldPct : null}
           heatmapGapPairByKey={heatmapGapPairByKey}
           heatmapGapOnCompetitorOnly={heatmapGapOnCompetitorOnly}
           siteIsUser={site.isUser}
-          attention={attForLayer}
+          attention={null}
         />
+        {overlayMode === "attention" &&
+          attentionOverlay &&
+          attentionOverlay.layerVisible &&
+          attentionOverlay.zones &&
+          attentionOverlay.zones.length > 0 && (
+            <HeatmapOverlay zones={attentionOverlay.zones} />
+          )}
         {site.isUser && simulateOverlayRows && simulateOverlayRows.length > 0 && (
           <>
             {simulateOverlayRows.map((row) => {
@@ -547,7 +458,7 @@ function ScreenshotFrame({
               return (
                 <div
                   key={row.sectionKey}
-                  className="pointer-events-none absolute left-2 right-2 z-[20] rounded-lg border-2 border-dashed border-[#1D9E75] bg-[rgba(29,158,117,0.08)] transition-opacity duration-300 ease-out"
+                  className="pointer-events-none absolute left-2 right-2 z-[20] rounded-lg border-2 border-dashed border-[#1D9E75] bg-transparent transition-opacity duration-300 ease-out"
                   style={{ top: `${rect.top}%`, height: `${rect.height}%` }}
                 >
                   <span className="absolute left-2 top-2 max-w-[min(100%,calc(100%-1rem))] truncate rounded-full border border-[#1D9E75]/40 bg-[#1D9E75]/18 px-2 py-0.5 text-[10px] font-semibold text-[#0d5c44] shadow-sm dark:text-[#8ee8c8]">
@@ -560,12 +471,9 @@ function ScreenshotFrame({
         )}
         {simulateAiLabelsSlot}
         {attentionOverlay?.loading && overlayMode === "attention" && (
-          <div className="pointer-events-none absolute inset-0 z-[24] flex flex-col items-center justify-center gap-2 rounded-xl bg-background/75 backdrop-blur-sm px-4 text-center transition-opacity duration-300">
-            <span className="text-2xl" aria-hidden>
-              🧠
-            </span>
-            <p className="text-xs font-semibold text-foreground">Analyzing attention patterns…</p>
-            <p className="text-[10px] text-muted-foreground max-w-[240px] leading-snug">Claude Vision is scoring visual hierarchy. This can take up to a minute.</p>
+          <div className="pointer-events-none absolute right-2 top-2 z-[24] flex max-w-[200px] flex-col gap-0.5 rounded-lg border border-border bg-background/95 px-2 py-1.5 text-left shadow-sm">
+            <p className="text-[10px] font-semibold text-foreground">Analyzing attention…</p>
+            <p className="text-[9px] leading-snug text-muted-foreground">Claude Vision — up to a minute.</p>
           </div>
         )}
       </div>
@@ -597,7 +505,7 @@ function SliderCompare({ left, right, leftLabel, rightLabel }: { left: SiteEntry
           aria-label="Comparison: drag the divider between screenshots"
         />
       </HintTooltip>
-      <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-muted/30 select-none scrollbar-hide">
+      <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-background select-none scrollbar-hide">
         <div className="relative min-h-[120px]">
           <img src={right.screenshotUrl} alt={rightLabel} className="w-full h-auto block" draggable={false} />
           <img src={left.screenshotUrl} alt={leftLabel} className="absolute top-0 left-0 w-full h-auto pointer-events-none" style={{ clipPath: `inset(0 ${100 - pct}% 0 0)` }} draggable={false} />
@@ -645,21 +553,154 @@ function SiteTab({ site, active, onClick, delta }: { site: SiteEntry; active: bo
   );
 }
 
+/** AI tip labels on screenshots — same control beside each URL row (global on/off). */
+function AiTipsColumnButton({
+  active,
+  onToggle,
+  pushToolbarHelp,
+  compact,
+}: {
+  active: boolean;
+  onToggle: () => void;
+  pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
+  compact?: boolean;
+}) {
+  return (
+    <HintTooltip side="bottom" title={HINT_CONTROLS.aiTips.title} description={HINT_CONTROLS.aiTips.description} action={HINT_CONTROLS.aiTips.action}>
+      <button
+        type="button"
+        onClick={() => {
+          pushToolbarHelp("ctrl-ai-tips", HINT_CONTROLS.aiTips);
+          onToggle();
+        }}
+        aria-pressed={active}
+        aria-label="AI Tips"
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-lg border font-semibold transition-colors",
+          compact ? "gap-0.5 px-1.5 py-1 text-[9px]" : "gap-1 px-2.5 py-1.5 text-[11px]",
+          active
+            ? "border-[#1D9E75]/50 bg-[#1D9E75]/10 text-[#0f6b4f] dark:text-[#8ee8c8]"
+            : "border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        )}
+      >
+        <Lightbulb className={cn("shrink-0 opacity-90", compact ? "h-3 w-3" : "h-3.5 w-3.5")} aria-hidden />
+        <span className={compact ? "max-[420px]:sr-only" : ""}>AI Tips</span>
+      </button>
+    </HintTooltip>
+  );
+}
+
+/** Analyze → Heatmap — same control beside each site URL row (per-site visibility). */
+function HeatmapColumnButton({
+  active,
+  onToggle,
+  pushToolbarHelp,
+  compact,
+}: {
+  active: boolean;
+  onToggle: () => void;
+  pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
+  compact?: boolean;
+}) {
+  return (
+    <HintTooltip
+      side="bottom"
+      title={HINT_ANALYZE.attention.title}
+      description={HINT_ANALYZE.attention.description}
+      action={HINT_ANALYZE.attention.action}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          pushToolbarHelp("analyze-attention", HINT_ANALYZE.attention);
+          onToggle();
+        }}
+        aria-pressed={active}
+        aria-label="Heatmap"
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-lg border font-semibold transition-colors",
+          compact ? "gap-0.5 px-1.5 py-1 text-[9px]" : "gap-1 px-2.5 py-1.5 text-[11px]",
+          active
+            ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+            : "border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        )}
+      >
+        <MousePointer2 className={cn("shrink-0", compact ? "h-3 w-3" : "h-3.5 w-3.5")} aria-hidden />
+        <span className={compact ? "max-[360px]:sr-only" : ""}>Heatmap</span>
+      </button>
+    </HintTooltip>
+  );
+}
+
+/** Wide layout toggle — same control beside each site URL row above screenshots (lg+ panel). */
+function WideLayoutButton({
+  fullWidth,
+  onToggle,
+  pushToolbarHelp,
+  compact,
+}: {
+  fullWidth: boolean;
+  onToggle: () => void;
+  pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
+  /** Match SplitSiteColumnPicker `compact` sizing. */
+  compact?: boolean;
+}) {
+  return (
+    <HintTooltip side="bottom" title={HINT_CONTROLS.wide.title} description={HINT_CONTROLS.wide.description} action={HINT_CONTROLS.wide.action}>
+      <button
+        type="button"
+        onClick={() => {
+          pushToolbarHelp("ctrl-wide", HINT_CONTROLS.wide);
+          onToggle();
+        }}
+        aria-label={fullWidth ? "Normal width" : "Wide layout"}
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-lg border border-border font-semibold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+          compact ? "size-7" : "size-8"
+        )}
+      >
+        {fullWidth ? <Minimize2 className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} /> : <Maximize2 className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />}
+      </button>
+    </HintTooltip>
+  );
+}
+
 function SplitSiteColumnPicker({
   sites,
   valueIdx,
   onSelect,
   compact,
+  aiTips,
+  heatmap,
+  wideLayout,
 }: {
   sites: SiteEntry[];
   valueIdx: number;
   onSelect: (idx: number) => void;
   /** Tighter pill for stacked layout above section chips. */
   compact?: boolean;
+  /** AI Tips on screenshots — global toggle, same button on every column. */
+  aiTips?: {
+    active: boolean;
+    onToggle: () => void;
+    pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
+  };
+  /** Heatmap toggle to the right of the URL row (per site). */
+  heatmap?: {
+    active: boolean;
+    onToggle: () => void;
+    pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
+  };
+  /** Wide layout control to the right of the URL row (same for every column). */
+  wideLayout?: {
+    fullWidth: boolean;
+    onToggle: () => void;
+    pushToolbarHelp: (id: string, hint: ToolbarHintContent) => void;
+  };
 }) {
   const site = sites[valueIdx];
   if (!site) return null;
-  return (
+  const picker = (
     <div
       className={cn(
         "inline-flex max-w-full min-w-0 items-center rounded-lg border border-border font-semibold text-muted-foreground transition-colors hover:text-foreground",
@@ -725,139 +766,53 @@ function SplitSiteColumnPicker({
       </DropdownMenu>
     </div>
   );
-}
 
-/** Section score chips (Hero, CTA, …). Scores reflect `chipSite` (column being viewed). */
-function SectionChipsStrip({
-  chipSite,
-  sortedSectionKeys,
-  zoneLens,
-  expandedPin,
-  onSelectSection,
-  userSite,
-  vsSite,
-  activeSite,
-  tooltipCompareDomain,
-  result,
-  compact,
-}: {
-  chipSite: SiteEntry;
-  sortedSectionKeys: readonly string[];
-  zoneLens: ZoneLens;
-  expandedPin: string | null;
-  onSelectSection: (key: string) => void;
-  userSite: SiteEntry;
-  vsSite: SiteEntry | null;
-  activeSite: SiteEntry;
-  tooltipCompareDomain: string | null;
-  result: AnalysisResult;
-  /** Shorter labels + minimal vertical padding (row under URL). */
-  compact?: boolean;
-}) {
+  if (!wideLayout && !heatmap && !aiTips) return picker;
+
   return (
-    <div className="flex w-max min-w-0 max-w-none flex-nowrap items-center gap-1.5">
-      {sortedSectionKeys.map((key) => {
-        const ann = chipSite.annotations.find((a) => a.sectionKey === key);
-        const uSc = userSite.annotations.find((a) => a.sectionKey === key)?.score ?? null;
-        const compSc =
-          vsSite?.annotations.find((a) => a.sectionKey === key)?.score ??
-          (!activeSite.isUser ? activeSite.annotations.find((a) => a.sectionKey === key)?.score : null);
-        const gapPts = uSc != null && compSc != null ? Math.round((uSc - compSc) * 10) / 10 : null;
-        const priority = sectionPriorityFromGap(key, result.gaps, uSc);
-        const insightLine = userSite.annotations.find((a) => a.sectionKey === key)?.summary ?? "—";
-        const gapRow = gapDetailForSection(key, result.gaps);
-        const chipUser = chipUnderlineClass(uSc);
-        const greySectionChip =
-          (zoneLens === "hot" && uSc != null && uSc >= 7) ||
-          (zoneLens === "delta" && uSc != null && compSc != null && !(compSc > uSc));
-        return (
-          <Tooltip key={key} delayDuration={200}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={() => onSelectSection(key)}
-                className={cn(
-                  "group relative inline-flex shrink-0 items-center whitespace-nowrap rounded-lg border font-semibold transition-colors",
-                  compact ? "gap-0.5 px-2 pb-1.5 pt-1 text-[10px]" : "gap-1 px-2.5 pb-2 pt-1.5 text-[11px]",
-                  expandedPin === key
-                    ? "border-amber-500/60 bg-amber-500/10 shadow-sm dark:border-amber-500/60 dark:bg-amber-500/10"
-                    : "border-border hover:border-border/80 hover:bg-muted/40",
-                  greySectionChip && "opacity-45 grayscale"
-                )}
-              >
-                <span className="inline-flex items-baseline gap-0.5">
-                  <span
-                    className={cn(
-                      expandedPin === key
-                        ? "text-amber-950 dark:text-amber-100"
-                        : "text-muted-foreground group-hover:text-foreground"
-                    )}
-                  >
-                    {compact ? SECTION_ZONES[key].short : SECTION_ZONES[key].label}
-                  </span>
-                  {ann?.score != null && (
-                    <span className={cn("tabular-nums font-bold", sColor(ann.score))}>{ann.score.toFixed(1)}</span>
-                  )}
-                </span>
-                <span className={cn("absolute bottom-0 left-1 right-1 h-[2px] rounded-full", chipUser)} aria-hidden />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              sideOffset={8}
-              className="w-[280px] max-w-[80vw] border-border bg-gray-900 p-3 text-white shadow-xl dark:bg-gray-950"
-            >
-              <p className="text-[11px] font-semibold text-white">
-                You {uSc != null ? uSc.toFixed(1) : "—"} vs {tooltipCompareDomain ?? "competitor"}{" "}
-                {compSc != null ? compSc.toFixed(1) : "—"}
-              </p>
-              <p className="mt-1 text-[10px] text-gray-200">
-                Gap:{" "}
-                {gapPts == null ? (
-                  "—"
-                ) : (
-                  <span className="font-bold tabular-nums">
-                    {gapPts > 0 ? "+" : ""}
-                    {gapPts.toFixed(1)} pts
-                  </span>
-                )}
-              </p>
-              <p className="mt-1.5">
-                <span
-                  className={cn(
-                    "inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase",
-                    priority === "P1"
-                      ? "bg-red-500/30 text-red-100"
-                      : priority === "P2"
-                        ? "bg-amber-500/30 text-amber-100"
-                        : "bg-slate-500/30 text-slate-100"
-                  )}
-                >
-                  {priority}
-                </span>
-              </p>
-              <p className="mt-2 text-[10px] leading-snug text-gray-300">{insightLine}</p>
-              {gapRow && (
-                <div className="mt-2 border-t border-white/15 pt-2 space-y-1">
-                  <p className="text-[10px] leading-snug text-amber-100/95">
-                    <span className="font-bold">Issue: </span>
-                    {gapRow.problem}
-                  </p>
-                  <p className="text-[10px] leading-snug text-emerald-100/95">
-                    <span className="font-bold">Fix: </span>
-                    {gapRow.recommendation}
-                  </p>
-                </div>
-              )}
-            </TooltipContent>
-          </Tooltip>
-        );
-      })}
+    <div className="flex w-full min-w-0 items-center justify-between gap-2">
+      <div className="min-w-0 flex-1 overflow-hidden">{picker}</div>
+      <div className="flex shrink-0 items-center gap-1">
+        {aiTips ? (
+          <AiTipsColumnButton
+            active={aiTips.active}
+            onToggle={aiTips.onToggle}
+            pushToolbarHelp={aiTips.pushToolbarHelp}
+            compact={compact}
+          />
+        ) : null}
+        {heatmap ? (
+          <HeatmapColumnButton
+            active={heatmap.active}
+            onToggle={heatmap.onToggle}
+            pushToolbarHelp={heatmap.pushToolbarHelp}
+            compact={compact}
+          />
+        ) : null}
+        {wideLayout ? (
+          <WideLayoutButton
+            fullWidth={wideLayout.fullWidth}
+            onToggle={wideLayout.onToggle}
+            pushToolbarHelp={wideLayout.pushToolbarHelp}
+            compact={compact}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────────
+
+/** Back + history switcher at the start of the compare toolbar (e.g. full insights header). */
+export interface CompareToolbarNavProps {
+  currentDomain: string;
+  /** Matches `HistoryEntry.id` for the open report when found in history (avoids disabling wrong row if domain repeats). */
+  currentHistoryEntryId: string | null;
+  historyEntries: HistoryEntry[];
+  onBack: () => void;
+  onSelectHistoryEntry: (entry: HistoryEntry) => void;
+}
 
 interface Props {
   result: AnalysisResult;
@@ -867,6 +822,11 @@ interface Props {
   onCompareSiteIdxChange?: (idx: number) => void;
   /** When set, the VIEW + ANALYZE toolbar is portaled into this node (e.g. dashboard header). */
   compareToolbarSlot?: HTMLElement | null;
+  compareToolbarNav?: CompareToolbarNavProps | null;
+  /** Icon-only re-audit action shown near back/history controls in compare toolbar. */
+  onReaudit?: () => void;
+  /** Shown as icon-only control after the analysis history dropdown when `compareToolbarNav` is set. */
+  onNewAnalysis?: () => void;
 }
 
 export function ScreenshotCompare({
@@ -875,6 +835,9 @@ export function ScreenshotCompare({
   compareSiteIdx: controlledIdx,
   onCompareSiteIdxChange,
   compareToolbarSlot,
+  compareToolbarNav,
+  onReaudit,
+  onNewAnalysis,
 }: Props) {
   const [internalIdx, setInternalIdx] = useState(0);
   const controlled = controlledIdx !== undefined && onCompareSiteIdxChange !== undefined;
@@ -889,18 +852,25 @@ export function ScreenshotCompare({
   const [expandedPin, setExpandedPin] = useState<string | null>(null);
   /** Bumps on each section chip click so the preview scrolls even when re-selecting the same section. */
   const [sectionNavTick, setSectionNavTick] = useState(0);
-  const [zoneLens, setZoneLens] = useState<ZoneLens>("balanced");
+  const zoneLens: ZoneLens = "balanced";
   const [sectionDeepDive, setSectionDeepDive] = useState<SectionDeepDivePayload | null>(null);
-  const [showZones, setShowZones] = useState(true);
+  /** Section bands always on (Zones toggle removed). */
+  const showZones = true;
   const [fullWidth, setFullWidth] = useState(false);
+  /** Split / compare / slider: show only one column at a time (like Single); toggled per-site Wide control. Does not hide the analysis panel. */
+  const [wideSoloSide, setWideSoloSide] = useState<"left" | "right" | null>(null);
   const [viewMode, setViewMode] = useState<ToolbarViewMode>("compare");
   const [splitLeftIdx, setSplitLeftIdx] = useState(0);
   const [splitRightIdx, setSplitRightIdx] = useState(1);
+  /** Split/Compare: start with a 2-column grid of all competitors; pick one to open full screenshot on the right. */
+  const [rightPaneMode, setRightPaneMode] = useState<"grid" | "detail">("grid");
   const splitIdxInitRef = useRef(false);
   const [zoomIdx, setZoomIdx] = useState(0);
   /** Null = neutral (no analyze mode selected); layer behaves as baseline "compare" (no tint). */
   const [analyzeMode, setAnalyzeMode] = useState<ToolbarOverlayMode | null>(null);
   const effectiveOverlay: ToolbarOverlayMode = analyzeMode ?? "compare";
+  /** Per-site: attention heatmap on that screenshot; when non-empty, analyze mode is attention (fetch + panel). */
+  const [heatmapEnabledUrls, setHeatmapEnabledUrls] = useState<string[]>([]);
 
   const [fixMode, setFixMode] = useState(false);
   const [simplifyCEO, setSimplifyCEO] = useState(false);
@@ -917,35 +887,31 @@ export function ScreenshotCompare({
   const dismissToolbarHelp = useCallback((id: string) => {
     setToolbarHelpCards((prev) => prev.filter((c) => c.id !== id));
   }, []);
-  const [narrowViewport, setNarrowViewport] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const fn = () => setNarrowViewport(mq.matches);
-    mq.addEventListener("change", fn);
-    return () => mq.removeEventListener("change", fn);
+  const toggleHeatmapUrl = useCallback((siteUrl: string) => {
+    setHeatmapEnabledUrls((prev) => (prev.includes(siteUrl) ? prev.filter((u) => u !== siteUrl) : [...prev, siteUrl]));
   }, []);
+
+  useEffect(() => {
+    if (heatmapEnabledUrls.length > 0) setAnalyzeMode("attention");
+    else setAnalyzeMode(null);
+  }, [heatmapEnabledUrls]);
+
   const zoom = ZOOM_LEVELS[zoomIdx] ?? 1;
 
-  const moreMenuLooksActive = Boolean(
-    zoneLens === "delta" ||
-      (analyzeMode &&
-        (analyzeMode === "trust" ||
-          analyzeMode === "readability" ||
-          (narrowViewport && ["attention", "copy", "first5s"].includes(analyzeMode))))
-  );
+  useEffect(() => {
+    if (viewMode === "single") setWideSoloSide(null);
+  }, [viewMode]);
 
   const sites: SiteEntry[] = useMemo(() => {
     const list: SiteEntry[] = [];
     const ud = getDomain(url), ua = result.userAnalysis ?? {};
-    const us = SECTION_KEYS.map((k) => parseScoreFromReport(ua[k])).filter((n): n is number => n != null);
-    const uavg = us.length ? Math.round((us.reduce((a, b) => a + b, 0) / us.length) * 10) / 10 : null;
+    const us = SECTION_KEYS.map((k) => sectionScoreForScreenshot(ua, k));
+    const uavg = Math.round((us.reduce((a, b) => a + b, 0) / us.length) * 10) / 10;
     list.push({ url, domain: ud, isUser: true, screenshotUrl: result.targetScreenshotUrl ?? null, analysis: ua, annotations: buildAnnotations(ua), overallScore: result.synthesis?.overall_score ?? uavg });
     for (const comp of result.competitors ?? []) {
       const cd = getDomain(comp.url), ca = comp.analysis ?? {};
-      const cs = SECTION_KEYS.map((k) => parseScoreFromReport(ca[k])).filter((n): n is number => n != null);
-      const cavg = cs.length ? Math.round((cs.reduce((a, b) => a + b, 0) / cs.length) * 10) / 10 : null;
+      const cs = SECTION_KEYS.map((k) => sectionScoreForScreenshot(ca, k));
+      const cavg = Math.round((cs.reduce((a, b) => a + b, 0) / cs.length) * 10) / 10;
       list.push({ url: comp.url, domain: cd, isUser: false, screenshotUrl: comp.screenshotUrl ?? null, analysis: ca, annotations: buildAnnotations(ca), overallScore: cavg });
     }
     return list;
@@ -1049,6 +1015,7 @@ export function ScreenshotCompare({
   const getAttentionOverlay = useCallback(
     (site: SiteEntry, splitColumn?: "left" | "right") => {
       if (effectiveOverlay !== "attention") return undefined;
+      if (!heatmapEnabledUrls.includes(site.url)) return undefined;
       if (viewMode === "slider") return undefined;
       const data = attentionState.data;
       const loading = attentionState.loading;
@@ -1064,11 +1031,10 @@ export function ScreenshotCompare({
         layerVisible: attentionLayerVisible[layerKey] !== false,
         onLayerVisibleChange: (v: boolean) => setAttentionLayerVisible((prev) => ({ ...prev, [layerKey]: v })),
         loading,
-        /** Demo + API zones always drive HeatmapOverlay; legacy gradient placeholder off. */
         showPlaceholder: false,
       };
     },
-    [effectiveOverlay, viewMode, attentionState, attentionLayerVisible, splitLeftSite?.url]
+    [effectiveOverlay, viewMode, attentionState, attentionLayerVisible, splitLeftSite?.url, heatmapEnabledUrls]
   );
 
   const attentionInsight = useMemo(() => {
@@ -1139,6 +1105,27 @@ export function ScreenshotCompare({
   }, [sitesKey]);
 
   useEffect(() => {
+    setRightPaneMode("grid");
+  }, [sitesKey]);
+
+  useEffect(() => {
+    if (!controlled) return;
+    if (controlledIdx === 0) {
+      setRightPaneMode("grid");
+      return;
+    }
+    setRightPaneMode("detail");
+    setSplitRightIdx(controlledIdx!);
+  }, [controlled, controlledIdx]);
+
+  useEffect(() => {
+    if (rightPaneMode !== "grid") return;
+    const leftUrl = splitLeftSite?.url;
+    if (!leftUrl) return;
+    setHeatmapEnabledUrls((prev) => prev.filter((u) => u === leftUrl));
+  }, [rightPaneMode, splitLeftSite?.url]);
+
+  useEffect(() => {
     if (sites.length < 2) return;
     if (!splitIdxInitRef.current) {
       setSplitLeftIdx(0);
@@ -1188,6 +1175,9 @@ export function ScreenshotCompare({
 
     const losing = rank != null && rank.rank > 1 && sites.length > 1;
 
+    const narrativeDomain =
+      activeSite.isUser && sites.length > 1 ? sites[1]!.domain : activeSite.domain;
+
     return {
       heroText,
       heroScore,
@@ -1199,13 +1189,13 @@ export function ScreenshotCompare({
       rank,
       losing,
       gapItems: biggestGaps(userBySection, compSites),
-      winNarrative: buildCompetitorWinNarrative(result, activeSite.domain),
-      stealThree: stealTopThree(result, activeSite.domain),
+      winNarrative: buildCompetitorWinNarrative(result, narrativeDomain),
+      stealThree: stealTopThree(result, narrativeDomain),
       abVariants: abVariantsFromResult(result),
       dataCoverage: dataCoveragePct(result.targetScreenshotUrl ?? null, heroText),
       gapConfidence: result.gaps?.[0]?.confidence,
     };
-  }, [result, sites, userSite, activeSite.domain]);
+  }, [result, sites, userSite, activeSite.domain, activeSite.isUser]);
 
   const simulateItems = useMemo(
     () => fillMissingSectionSimulateItems(buildSimulateItems(result, decisionBundle.gapItems), result),
@@ -1214,7 +1204,6 @@ export function ScreenshotCompare({
   const [simulateChecked, setSimulateChecked] = useState<Record<string, boolean>>({});
   const [decisionPanelTab, setDecisionPanelTab] = useState<DecisionPanelTab>("simulate");
   const [aiTipsVisible, setAiTipsVisible] = useState(true);
-  const [aiLabelHintsDismissed, setAiLabelHintsDismissed] = useState(false);
   const competitorOverallScores = useMemo(
     () => sites.filter((s) => !s.isUser).map((s) => s.overallScore).filter((n): n is number => n != null),
     [sites]
@@ -1259,14 +1248,6 @@ export function ScreenshotCompare({
     activeSite.overallScore != null &&
     activeSite.overallScore > userSite.overallScore;
 
-  const sortedSectionKeys = useMemo(() => {
-    return [...SECTION_KEYS].sort((a, b) => {
-      const sa = userSite.annotations.find((x) => x.sectionKey === a)?.score ?? 999;
-      const sb = userSite.annotations.find((x) => x.sectionKey === b)?.score ?? 999;
-      return sa - sb;
-    });
-  }, [userSite]);
-
   const centerInsight = useMemo(
     () => heroThreeSecondInsight(decisionBundle.heroScore, decisionBundle.conversion.mainIssue),
     [decisionBundle.heroScore, decisionBundle.conversion.mainIssue]
@@ -1298,50 +1279,109 @@ export function ScreenshotCompare({
   const unifiedOverlayMode: CompareOverlayLayerMode =
     effectiveOverlay === "mobile" ? "compare" : (effectiveOverlay as CompareOverlayLayerMode);
 
-  const userAttentionZones = useMemo(() => {
-    if (!splitLeftSite || !splitRightSite) return null;
-    const data = attentionState.data;
-    if (!data) return null;
-    return splitLeftSite.isUser ? data.your?.zones ?? null : data.competitor?.zones ?? null;
-  }, [attentionState.data, splitLeftSite, splitRightSite]);
+  /** Attention API: left screenshot → your zones, right → competitor zones. */
+  const attentionZonesForSite = useCallback(
+    (site: SiteEntry) => {
+      if (effectiveOverlay !== "attention") return null;
+      const data = attentionState.data;
+      if (!data || !splitLeftSite || !splitRightSite) return null;
+      if (site.url === splitLeftSite.url) return data.your?.zones ?? null;
+      if (site.url === splitRightSite.url) return data.competitor?.zones ?? null;
+      return null;
+    },
+    [effectiveOverlay, attentionState.data, splitLeftSite, splitRightSite]
+  );
+
+  /** Per-section user − site scores (positive ⇒ user leads); used to filter competitor AI tips in heatmap mode. */
+  const sectionDeltaUserMinusSite = useCallback(
+    (site: SiteEntry) => {
+      const o: Record<string, number | null> = {};
+      for (const k of SECTION_KEYS) {
+        const u = userSite.annotations.find((a) => a.sectionKey === k)?.score ?? null;
+        const t = site.annotations.find((a) => a.sectionKey === k)?.score ?? null;
+        o[k] = u != null && t != null ? Math.round((u - t) * 10) / 10 : null;
+      }
+      return o;
+    },
+    [userSite.annotations]
+  );
 
   /** Unified dot → pill → card for every Analyze overlay mode. */
   const aiLabelsModeActive = aiTipsVisible && (viewMode === "split" || viewMode === "compare");
 
-  const unifiedAiLabelRows = useMemo(
-    () =>
-      buildUnifiedAiLabelRowsForMode(simulateAiLabelRows, unifiedOverlayMode, {
-        sectionDeltaVsCompetitor,
-        attentionZones: userAttentionZones,
-        annotations: userSite.annotations.map((a) => ({
+  const buildRowsAndItemsForSite = useCallback(
+    (site: SiteEntry): { rows: SimulateAiLabelRow[]; items: SimulateImprovementItem[] } => {
+      if (site.isUser) {
+        return { rows: simulateAiLabelRows, items: simulateItems };
+      }
+      const compResult: AnalysisResult = {
+        ...result,
+        userAnalysis: site.analysis,
+        gaps: undefined,
+        uxHints: undefined,
+        copySuggestions: undefined,
+        competitors: [],
+      };
+      const rawItems = fillMissingSectionSimulateItems(buildSimulateItems(compResult, []), compResult);
+      const items = rawItems.map((it) => ({ ...it, id: `c:${encodeURIComponent(site.url)}:${it.id}` }));
+      const rows = buildSimulateAiLabelRows(compResult, items, {
+        scoresBySection: Object.fromEntries(site.annotations.map((a) => [a.sectionKey, a.score])) as Record<
+          string,
+          number | null
+        >,
+        summariesBySection: Object.fromEntries(site.annotations.map((a) => [a.sectionKey, a.summary])),
+        vsDomain: userSite.domain,
+        ctaAnnotation: (() => {
+          const c = site.annotations.find((a) => a.sectionKey === "CTA");
+          return c ? { top: c.top, height: c.height } : null;
+        })(),
+      });
+      return { rows, items };
+    },
+    [result, simulateAiLabelRows, simulateItems, userSite.domain]
+  );
+
+  const aiLabelsSlotForSite = useCallback(
+    (site: SiteEntry) => {
+      if (!aiLabelsModeActive) return null;
+      const { rows: baseRows, items: siteItems } = buildRowsAndItemsForSite(site);
+      const deltaForUnified = site.isUser ? sectionDeltaVsCompetitor : sectionDeltaUserMinusSite(site);
+      const unifiedRows = buildUnifiedAiLabelRowsForMode(baseRows, unifiedOverlayMode, {
+        sectionDeltaVsCompetitor: deltaForUnified,
+        attentionZones: attentionZonesForSite(site),
+        annotations: site.annotations.map((a) => ({
           sectionKey: a.sectionKey,
           top: a.top,
           height: a.height,
           score: a.score,
         })),
-      }),
-    [simulateAiLabelRows, unifiedOverlayMode, sectionDeltaVsCompetitor, userAttentionZones, userSite.annotations]
+        competitorPerspective: !site.isUser,
+      });
+      if (unifiedRows.length === 0) return null;
+      return (
+        <AiLabelMarkers
+          rows={unifiedRows}
+          simulateChecked={simulateChecked}
+          onSimulateToggle={onSimulateToggle}
+          userOverall={site.isUser ? decisionBundle.overall : site.overallScore ?? null}
+          simulateItems={siteItems}
+          competitorOverallScores={competitorOverallScores}
+        />
+      );
+    },
+    [
+      aiLabelsModeActive,
+      buildRowsAndItemsForSite,
+      sectionDeltaVsCompetitor,
+      sectionDeltaUserMinusSite,
+      attentionZonesForSite,
+      unifiedOverlayMode,
+      simulateChecked,
+      onSimulateToggle,
+      decisionBundle.overall,
+      competitorOverallScores,
+    ]
   );
-
-  const userSimulateAiLabelsHeader =
-    aiLabelsModeActive && unifiedAiLabelRows.length > 0 && !aiLabelHintsDismissed ? (
-      <span className="pointer-events-none select-none">
-        💡 {unifiedAiLabelRows.length} AI insights found — hover dots to explore
-      </span>
-    ) : null;
-
-  const userSimulateAiLabelsSlot =
-    aiLabelsModeActive && unifiedAiLabelRows.length > 0 ? (
-      <AiLabelMarkers
-        rows={unifiedAiLabelRows}
-        simulateChecked={simulateChecked}
-        onSimulateToggle={onSimulateToggle}
-        userOverall={decisionBundle.overall}
-        simulateItems={simulateItems}
-        competitorOverallScores={competitorOverallScores}
-        onFirstDotInteraction={() => setAiLabelHintsDismissed(true)}
-      />
-    ) : null;
 
   /** Right column minus left (split/compare overlays). */
   const sectionDeltaLR = useMemo(() => {
@@ -1407,13 +1447,6 @@ export function ScreenshotCompare({
     return m;
   }, [splitRightSite]);
 
-  const tooltipCompareDomain = vsSite?.domain ?? (!activeSite.isUser ? activeSite.domain : null);
-
-  const hotSectionCount = useMemo(
-    () => countHotSections(userSite.annotations.map((a) => a.score)),
-    [userSite.annotations]
-  );
-
   const quickWin = useMemo(() => {
     if (!vsSite || quickWinDismissed) return null;
     let best: { key: (typeof SECTION_KEYS)[number]; gap: number } | null = null;
@@ -1470,7 +1503,38 @@ export function ScreenshotCompare({
   const selectSplitRight = useCallback((i: number) => {
     if (sites.length < 2) return;
     setSplitRightIdx(i);
+    setRightPaneMode("detail");
   }, [sites.length]);
+
+  const competitorSiteEntries = useMemo(
+    () =>
+      sites
+        .map((site, siteIndex) => ({ site, siteIndex }))
+        .filter((x) => !x.site.isUser),
+    [sites]
+  );
+
+  const showCompetitorPickGrid =
+    (viewMode === "split" || viewMode === "compare") &&
+    wideSoloSide === null &&
+    rightPaneMode === "grid" &&
+    competitorSiteEntries.length > 0;
+
+  const pickCompetitorFromGrid = useCallback(
+    (siteIndex: number) => {
+      setSplitRightIdx(siteIndex);
+      setRightPaneMode("detail");
+      setExpandedPin(null);
+      setActiveIdx(siteIndex);
+    },
+    [setActiveIdx]
+  );
+
+  const backToCompetitorGrid = useCallback(() => {
+    setRightPaneMode("grid");
+    setActiveIdx(0);
+    setExpandedPin(null);
+  }, [setActiveIdx]);
 
   const handlePrev = useCallback(() => {
     const next = activeIdx > 0 ? activeIdx - 1 : sites.length - 1;
@@ -1561,7 +1625,6 @@ export function ScreenshotCompare({
       toolbarFilteredSectionCount={toolbarFilteredSectionCount}
       sectionDeltaVsCompetitor={sectionDeltaVsCompetitor}
       vsDomain={vsSite?.domain ?? null}
-      hotSectionCount={hotSectionCount}
       lensAnnotations={userSite.annotations}
       lensVs={
         vsSite
@@ -1582,6 +1645,10 @@ export function ScreenshotCompare({
       competitorOverallScores={competitorOverallScores}
       panelTab={decisionPanelTab}
       onPanelTabChange={setDecisionPanelTab}
+      onCollapseRightPanel={() => {
+        pushToolbarHelp("right-panel-close", HINT_CONTROLS.rightPanelToggle);
+        setFullWidth(true);
+      }}
     />
   );
 
@@ -1589,296 +1656,93 @@ export function ScreenshotCompare({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
-          {/* ANALYZE — Heatmap → HOT → Gap heat … → First 5s → More */}
+          {/* ANALYZE — Back + History */}
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-            <HintTooltip
-              side="bottom"
-              title={HINT_ANALYZE.attention.title}
-              description={HINT_ANALYZE.attention.description}
-              action={HINT_ANALYZE.attention.action}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  pushToolbarHelp("analyze-attention", HINT_ANALYZE.attention);
-                  setAnalyzeMode((prev) => (prev === "attention" ? null : "attention"));
-                }}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors max-md:hidden",
-                  analyzeMode === "attention"
-                    ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <MousePointer2 className="h-3.5 w-3.5" />
-                Heatmap
-              </button>
-            </HintTooltip>
-
-            <HintTooltip
-              side="bottom"
-              title={HINT_LENS.hot.title}
-              description={HINT_LENS.hot.description}
-              action={HINT_LENS.hot.action}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  pushToolbarHelp("lens-hot", HINT_LENS.hot);
-                  setZoneLens((prev) => (prev === "hot" ? "balanced" : "hot"));
-                }}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                  zoneLens === "hot"
-                    ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Flame className="h-3.5 w-3.5 shrink-0" />
-                HOT{hotSectionCount > 0 ? ` (${hotSectionCount})` : ""}
-              </button>
-            </HintTooltip>
-
-            {(
-              [
-                { id: "heatmap" as const, label: "Gap heat", icon: BarChart3, narrow: false },
-                { id: "copy" as const, label: "Copy", icon: Type, narrow: true },
-                { id: "conversion" as const, label: "Conversion", icon: Target, narrow: false },
-                { id: "first5s" as const, label: "First 5s", icon: Timer, narrow: true },
-              ] as const
-            ).map(({ id, label, icon: I, narrow }) => {
-              const hint = HINT_ANALYZE[id];
-              return (
-                <HintTooltip key={id} side="bottom" title={hint.title} description={hint.description} action={hint.action}>
+            {compareToolbarNav ? (
+              <div className="mr-1 flex shrink-0 items-center gap-1 border-r border-border/70 pr-2">
+                <button
+                  type="button"
+                  onClick={compareToolbarNav.onBack}
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  aria-label="Back"
+                >
+                  <ChevronLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                </button>
+                {onReaudit ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      pushToolbarHelp(`analyze-${id}`, hint);
-                      setAnalyzeMode((prev) => (prev === id ? null : id));
-                    }}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors",
-                      analyzeMode === id
-                        ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                        : "border-border text-muted-foreground hover:text-foreground",
-                      narrow && "max-md:hidden"
-                    )}
+                    onClick={onReaudit}
+                    aria-label="Re-audit from scratch"
+                    title="Re-audit from scratch"
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                   >
-                    <I className="h-3.5 w-3.5" />
-                    {label}
+                    <RefreshCw className="h-4 w-4" strokeWidth={2.25} aria-hidden />
                   </button>
-                </HintTooltip>
-              );
-            })}
-
-            <DropdownMenu>
-              <Tooltip delayDuration={280}>
-                <TooltipTrigger asChild>
+                ) : null}
+                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      onClick={() => pushToolbarHelp("more-menu", HINT_CONTROLS.moreMenu)}
-                      className={cn(
-                        "inline-flex items-center gap-0.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                        moreMenuLooksActive && "border-amber-500/50 bg-amber-500/5 text-amber-800 dark:text-amber-300"
-                      )}
+                      className="inline-flex max-w-[min(11rem,36vw)] items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-left text-[11px] font-semibold text-foreground transition-colors hover:bg-muted/50"
+                      aria-label="Analysis history"
                     >
-                      More
-                      <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                      <span className="min-w-0 truncate">{compareToolbarNav.currentDomain}</span>
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
                     </button>
                   </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[min(320px,calc(100vw-2rem))] space-y-1.5 p-3 text-left">
-                  <p className="text-xs font-semibold leading-snug text-foreground">{HINT_CONTROLS.moreMenu.title}</p>
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">{HINT_CONTROLS.moreMenu.description}</p>
-                  <p className="mt-1 border-t border-border pt-2 text-[11px] leading-relaxed text-foreground/95">
-                    <span className="font-medium">Action: </span>
-                    <span className="text-muted-foreground">{HINT_CONTROLS.moreMenu.action}</span>
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent align="start" className="w-48">
-                <div className="md:hidden">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      pushToolbarHelp("analyze-attention", HINT_ANALYZE.attention);
-                      setAnalyzeMode((p) => (p === "attention" ? null : "attention"));
-                    }}
+                  <DropdownMenuContent align="start" className="max-h-[min(320px,60vh)] w-[min(280px,calc(100vw-2rem))] overflow-y-auto">
+                    {compareToolbarNav.historyEntries.length === 0 ? (
+                      <div className="px-2 py-2 text-xs leading-snug text-muted-foreground">
+                        No saved analyses yet. Run a check from the home page.
+                      </div>
+                    ) : (
+                      compareToolbarNav.historyEntries.map((e) => {
+                        const isCurrent =
+                          compareToolbarNav.currentHistoryEntryId != null &&
+                          e.id === compareToolbarNav.currentHistoryEntryId;
+                        return (
+                          <DropdownMenuItem
+                            key={e.id}
+                            disabled={isCurrent}
+                            onClick={() => compareToolbarNav.onSelectHistoryEntry(e)}
+                            className="flex cursor-pointer items-center gap-2"
+                          >
+                            <span
+                              className={cn(
+                                "min-w-0 flex-1 truncate font-medium",
+                                isCurrent && "text-primary"
+                              )}
+                            >
+                              {e.domain}
+                            </span>
+                            {e.score != null && (
+                              <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
+                                {e.score.toFixed(1)}
+                              </span>
+                            )}
+                          </DropdownMenuItem>
+                        );
+                      })
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {onNewAnalysis ? (
+                  <button
+                    type="button"
+                    onClick={onNewAnalysis}
+                    aria-label="New Analysis"
+                    title="New Analysis"
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                   >
-                    <MousePointer2 className="h-3.5 w-3.5 mr-2" />
-                    Heatmap
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      pushToolbarHelp("analyze-copy", HINT_ANALYZE.copy);
-                      setAnalyzeMode((p) => (p === "copy" ? null : "copy"));
-                    }}
-                  >
-                    <Type className="h-3.5 w-3.5 mr-2" />
-                    Copy
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      pushToolbarHelp("analyze-first5s", HINT_ANALYZE.first5s);
-                      setAnalyzeMode((p) => (p === "first5s" ? null : "first5s"));
-                    }}
-                  >
-                    <Timer className="h-3.5 w-3.5 mr-2" />
-                    First 5s
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </div>
-                <DropdownMenuItem
-                  disabled={sites.length < 2}
-                  title={`${HINT_VIEW_SLIDER.title}: ${HINT_VIEW_SLIDER.description} ${HINT_VIEW_SLIDER.action}`}
-                  onClick={() => {
-                    pushToolbarHelp("view-slider", HINT_VIEW_SLIDER);
-                    setViewMode("slider");
-                  }}
-                >
-                  <ArrowLeftRight className="h-3.5 w-3.5 mr-2" />
-                  Slider
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  title={`${HINT_ANALYZE.trust.title}: ${HINT_ANALYZE.trust.description}`}
-                  onClick={() => {
-                    pushToolbarHelp("analyze-trust", HINT_ANALYZE.trust);
-                    setAnalyzeMode((p) => (p === "trust" ? null : "trust"));
-                  }}
-                >
-                  <Shield className="h-3.5 w-3.5 mr-2" />
-                  Trust
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  title={`${HINT_ANALYZE.readability.title}: ${HINT_ANALYZE.readability.description}`}
-                  onClick={() => {
-                    pushToolbarHelp("analyze-readability", HINT_ANALYZE.readability);
-                    setAnalyzeMode((p) => (p === "readability" ? null : "readability"));
-                  }}
-                >
-                  <BookOpen className="h-3.5 w-3.5 mr-2" />
-                  Read
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={activeSite.isUser}
-                  title={`${HINT_LENS.delta.title}: ${HINT_LENS.delta.description}`}
-                  onClick={() => {
-                    pushToolbarHelp("lens-delta", HINT_LENS.delta);
-                    setZoneLens((p) => (p === "delta" ? "balanced" : "delta"));
-                  }}
-                  className="gap-2 font-semibold"
-                >
-                  <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
-                  <span className="flex-1">Δ VS YOU</span>
-                  {zoneLens === "delta" && <Check className="h-3.5 w-3.5 shrink-0" />}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 justify-end shrink-0">
-          <div className="flex items-center gap-1.5">
-            <HintTooltip side="bottom" title={HINT_VIEW.single.title} description={HINT_VIEW.single.description} action={HINT_VIEW.single.action}>
-              <button
-                type="button"
-                onClick={() => {
-                  pushToolbarHelp("view-single", HINT_VIEW.single);
-                  setViewMode("single");
-                }}
-                aria-label="Single"
-                className={cn(
-                  "inline-flex items-center justify-center rounded-lg border p-1.5 text-[11px] font-semibold transition-colors",
-                  viewMode === "single" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-              </button>
-            </HintTooltip>
-            <HintTooltip side="bottom" title={HINT_VIEW.split.title} description={HINT_VIEW.split.description} action={HINT_VIEW.split.action} disabled={sites.length < 2}>
-              <button
-                type="button"
-                disabled={sites.length < 2}
-                onClick={() => {
-                  pushToolbarHelp("view-split", HINT_VIEW.split);
-                  setViewMode("split");
-                }}
-                aria-label="Split"
-                className={cn(
-                  "inline-flex items-center justify-center rounded-lg border p-1.5 text-[11px] font-semibold transition-colors",
-                  viewMode === "split" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
-                  sites.length < 2 && "opacity-40 cursor-not-allowed"
-                )}
-              >
-                <GalleryHorizontal className="h-3.5 w-3.5" />
-              </button>
-            </HintTooltip>
-            <HintTooltip side="bottom" title={HINT_VIEW.compare.title} description={HINT_VIEW.compare.description} action={HINT_VIEW.compare.action} disabled={sites.length < 2}>
-              <button
-                type="button"
-                disabled={sites.length < 2}
-                onClick={() => {
-                  pushToolbarHelp("view-compare", HINT_VIEW.compare);
-                  setViewMode("compare");
-                }}
-                aria-label="Compare"
-                className={cn(
-                  "inline-flex items-center justify-center rounded-lg border p-1.5 text-[11px] font-semibold transition-colors",
-                  viewMode === "compare" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground",
-                  sites.length < 2 && "opacity-40 cursor-not-allowed"
-                )}
-              >
-                <Columns2 className="h-3.5 w-3.5" />
-              </button>
-            </HintTooltip>
-            {sites.length >= 2 ? (
-              <button
-                type="button"
-                onClick={() => setAiTipsVisible((v) => !v)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors max-md:hidden",
-                  aiTipsVisible
-                    ? "border-[#1D9E75]/50 bg-[#1D9E75]/10 text-[#0f6b4f] dark:text-[#8ee8c8]"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                )}
-                title="Show AI labels on your screenshot (Split/Compare)"
-                aria-pressed={aiTipsVisible}
-              >
-                <Lightbulb className="h-3.5 w-3.5 shrink-0 opacity-90" />
-                AI Tips
-              </button>
-            ) : null}
-          </div>
-          <span className="hidden h-4 w-px shrink-0 bg-border/70 sm:block" aria-hidden />
-          <div className="flex items-center gap-1.5">
-            <HintTooltip side="bottom" title={HINT_CONTROLS.zones.title} description={HINT_CONTROLS.zones.description} action={HINT_CONTROLS.zones.action}>
-              <button
-                type="button"
-                onClick={() => {
-                  pushToolbarHelp("ctrl-zones", HINT_CONTROLS.zones);
-                  setShowZones((v) => !v);
-                }}
-                className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold", showZones ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground")}
-              >
-                Zones
-              </button>
-            </HintTooltip>
-            <HintTooltip side="bottom" title={HINT_CONTROLS.wide.title} description={HINT_CONTROLS.wide.description} action={HINT_CONTROLS.wide.action}>
-              <button
-                type="button"
-                onClick={() => {
-                  pushToolbarHelp("ctrl-wide", HINT_CONTROLS.wide);
-                  setFullWidth((v) => !v);
-                }}
-                aria-label={fullWidth ? "Normal width" : "Wide"}
-                className="inline-flex items-center justify-center rounded-lg border border-border p-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              >
-                {fullWidth ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-              </button>
-            </HintTooltip>
-          </div>
-          <span className="hidden h-4 w-px shrink-0 bg-border/70 sm:block" aria-hidden />
           <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5">
             <HintTooltip side="bottom" title={HINT_CONTROLS.zoomOut.title} description={HINT_CONTROLS.zoomOut.description} action={HINT_CONTROLS.zoomOut.action} disabled={zoomIdx === 0}>
               <button
@@ -1967,78 +1831,42 @@ export function ScreenshotCompare({
       <div
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden min-w-0",
-          !fullWidth && "lg:flex-row lg:items-stretch"
+          "lg:flex-row lg:items-stretch",
+          fullWidth ? "lg:gap-0" : "lg:gap-4"
         )}
       >
-        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-0 lg:max-h-full lg:self-stretch">
+        <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden lg:min-w-0 lg:max-h-full lg:self-stretch">
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-            {viewMode === "slider" && (
-              <div className="w-full min-w-0 shrink-0 overflow-x-auto scrollbar-hide">
-                <SectionChipsStrip
-                  compact
-                  chipSite={activeSite}
-                  sortedSectionKeys={sortedSectionKeys}
-                  zoneLens={zoneLens}
-                  expandedPin={expandedPin}
-                  onSelectSection={(key) => {
-                    setExpandedPin(key);
-                    setSectionNavTick((n) => n + 1);
-                  }}
-                  userSite={userSite}
-                  vsSite={vsSite}
-                  activeSite={activeSite}
-                  tooltipCompareDomain={tooltipCompareDomain}
-                  result={result}
-                />
-              </div>
-            )}
-
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {viewMode === "single" &&
                 (activeSite.screenshotUrl ? (
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                    <div
-                      className={cn(
-                        "grid w-full min-w-0 shrink-0 items-start gap-x-2 gap-y-1",
-                        controlled ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"
-                      )}
-                    >
-                      {controlled && (
-                        <div className="min-w-0">
-                          <SplitSiteColumnPicker
-                            compact
-                            sites={sites}
-                            valueIdx={activeIdx}
-                            onSelect={(idx) => {
-                              pushToolbarHelp("vs-column-single", HINT_CONTROLS.vsSelect);
-                              setActiveIdx(idx);
-                            }}
-                          />
-                        </div>
-                      )}
-                      <div
-                        className={cn(
-                          "flex min-w-0 justify-end overflow-x-auto scrollbar-hide",
-                          !controlled && "col-span-full"
-                        )}
-                      >
-                        <SectionChipsStrip
-                          compact
-                          chipSite={activeSite}
-                          sortedSectionKeys={sortedSectionKeys}
-                          zoneLens={zoneLens}
-                          expandedPin={expandedPin}
-                          onSelectSection={(key) => {
-                            setExpandedPin(key);
-                            setSectionNavTick((n) => n + 1);
-                          }}
-                          userSite={userSite}
-                          vsSite={vsSite}
-                          activeSite={activeSite}
-                          tooltipCompareDomain={tooltipCompareDomain}
-                          result={result}
-                        />
-                      </div>
+                    <div className="min-w-0 shrink-0">
+                      <SplitSiteColumnPicker
+                        compact
+                        sites={sites}
+                        valueIdx={activeIdx}
+                        onSelect={(idx) => {
+                          if (controlled) pushToolbarHelp("vs-column-single", HINT_CONTROLS.vsSelect);
+                          setActiveIdx(idx);
+                          setExpandedPin(null);
+                        }}
+                        aiTips={{
+                          active: aiTipsVisible,
+                          onToggle: () => setAiTipsVisible((v) => !v),
+                          pushToolbarHelp,
+                        }}
+                        heatmap={{
+                          active: heatmapEnabledUrls.includes(activeSite.url),
+                          onToggle: () => toggleHeatmapUrl(activeSite.url),
+                          pushToolbarHelp,
+                        }}
+                        wideLayout={{
+                          fullWidth,
+                          onToggle: () => setFullWidth((v) => !v),
+                          pushToolbarHelp,
+                        }}
+                      />
                     </div>
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                       <ScreenshotFrame
@@ -2055,13 +1883,11 @@ export function ScreenshotCompare({
                         competitorScores={
                           showProblemIndicators && activeSite.isUser && vsSite ? competitorScoresForUser : undefined
                         }
-                        deltaLensTint={zoneLens === "delta" && !activeSite.isUser}
                         heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
                         heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
                         attentionOverlay={getAttentionOverlay(activeSite)}
                         simulateOverlayRows={activeSite.isUser ? simulateOverlayRows : null}
-                        simulateAiLabelsSlot={activeSite.isUser ? userSimulateAiLabelsSlot : null}
-                        simulateAiLabelsHeader={activeSite.isUser ? userSimulateAiLabelsHeader : null}
+                        simulateAiLabelsSlot={aiLabelsSlotForSite(activeSite)}
                       />
                     </div>
                   </div>
@@ -2072,10 +1898,181 @@ export function ScreenshotCompare({
                 ))}
 
               {(viewMode === "split" || viewMode === "compare") && splitLeftSite && splitRightSite && (
-                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden md:flex-row md:items-stretch md:gap-3">
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                    <div className="grid w-full min-w-0 shrink-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
-                      <div className="min-w-0">
+                <>
+                  {wideSoloSide === null ? (
+                    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden md:flex-row md:items-stretch md:gap-3">
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                        <div className="min-w-0 shrink-0">
+                          <SplitSiteColumnPicker
+                            compact
+                            sites={sites}
+                            valueIdx={safeLeft}
+                            onSelect={(idx) => {
+                              pushToolbarHelp("vs-column-left", HINT_CONTROLS.vsSelect);
+                              selectSplitLeft(idx);
+                            }}
+                            aiTips={{
+                              active: aiTipsVisible,
+                              onToggle: () => setAiTipsVisible((v) => !v),
+                              pushToolbarHelp,
+                            }}
+                            heatmap={{
+                              active: heatmapEnabledUrls.includes(splitLeftSite.url),
+                              onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
+                              pushToolbarHelp,
+                            }}
+                            wideLayout={{
+                              fullWidth: false,
+                              onToggle: () => setWideSoloSide((s) => (s === "left" ? null : "left")),
+                              pushToolbarHelp,
+                            }}
+                          />
+                        </div>
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                          <ScreenshotFrame
+                            site={splitLeftSite}
+                            showZones={showZones}
+                            expandedPin={expandedPin}
+                            zoom={zoom}
+                            overlayMode={effectiveOverlay}
+                            sectionNavTick={sectionNavTick}
+                            zoneLens={zoneLens}
+                            deltaByKey={viewMode === "compare" ? sectionDeltaLR : undefined}
+                            problemIndicators={showProblemIndicators}
+                            eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                            competitorScores={
+                              showProblemIndicators && splitLeftSite.isUser ? competitorScoresForSplitLeft : undefined
+                            }
+                            compareDiffMode={viewMode === "compare"}
+                            heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                            heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                            attentionOverlay={getAttentionOverlay(splitLeftSite, "left")}
+                            simulateOverlayRows={splitLeftSite.isUser ? simulateOverlayRows : null}
+                            simulateAiLabelsSlot={aiLabelsSlotForSite(splitLeftSite)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                        {showCompetitorPickGrid ? (
+                          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                            <div className="min-w-0 shrink-0">
+                              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                                Competitors
+                              </p>
+                              <p className="mt-0.5 text-[10px] text-muted-foreground leading-snug">
+                                Tap a site to open the full screenshot beside yours.
+                              </p>
+                            </div>
+                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-muted/15 p-2 scrollbar-hide">
+                              <div className="grid grid-cols-2 gap-2">
+                                {competitorSiteEntries.map(({ site, siteIndex }) => (
+                                  <button
+                                    key={site.url}
+                                    type="button"
+                                    onClick={() => {
+                                      pushToolbarHelp(`competitor-grid-${site.domain}`, HINT_CONTROLS.vsSelect);
+                                      pickCompetitorFromGrid(siteIndex);
+                                    }}
+                                    className={cn(
+                                      "flex flex-col gap-1.5 rounded-lg border border-border bg-card p-2 text-left transition-colors",
+                                      "hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                                    )}
+                                  >
+                                    <div className="relative aspect-[9/20] max-h-[min(200px,40vh)] w-full overflow-hidden rounded-md border border-border/80 bg-background">
+                                      {site.screenshotUrl ? (
+                                        <img
+                                          src={site.screenshotUrl}
+                                          alt=""
+                                          className="h-full w-full object-cover object-top"
+                                          loading="lazy"
+                                          draggable={false}
+                                        />
+                                      ) : (
+                                        <div className="flex h-full items-center justify-center px-2 text-center text-[10px] text-muted-foreground">
+                                          No screenshot
+                                        </div>
+                                      )}
+                                    </div>
+                                    <span className="text-[11px] font-semibold text-foreground truncate">{site.domain}</span>
+                                    <span className={cn("text-[10px] font-mono font-bold tabular-nums", sColor(site.overallScore))}>
+                                      {site.overallScore != null ? `${site.overallScore.toFixed(1)}/10` : "—"}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {competitorSiteEntries.length > 0 && (
+                              <div className="min-w-0 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    pushToolbarHelp("competitor-grid-back", HINT_CONTROLS.vsSelect);
+                                    backToCompetitorGrid();
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-[10px] font-semibold text-foreground transition-colors hover:bg-muted/50"
+                                >
+                                  <ChevronLeft className="h-3 w-3" aria-hidden />
+                                  All competitors
+                                </button>
+                              </div>
+                            )}
+                            <div className="min-w-0 shrink-0">
+                              <SplitSiteColumnPicker
+                                compact
+                                sites={sites}
+                                valueIdx={safeRight}
+                                onSelect={(idx) => {
+                                  pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
+                                  selectSplitRight(idx);
+                                }}
+                                aiTips={{
+                                  active: aiTipsVisible,
+                                  onToggle: () => setAiTipsVisible((v) => !v),
+                                  pushToolbarHelp,
+                                }}
+                                heatmap={{
+                                  active: heatmapEnabledUrls.includes(splitRightSite.url),
+                                  onToggle: () => toggleHeatmapUrl(splitRightSite.url),
+                                  pushToolbarHelp,
+                                }}
+                                wideLayout={{
+                                  fullWidth: false,
+                                  onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
+                                  pushToolbarHelp,
+                                }}
+                              />
+                            </div>
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                              <ScreenshotFrame
+                                site={splitRightSite}
+                                showZones={showZones}
+                                expandedPin={expandedPin}
+                                zoom={zoom}
+                                overlayMode={effectiveOverlay}
+                                sectionNavTick={sectionNavTick}
+                                zoneLens={zoneLens}
+                                deltaByKey={sectionDeltaLR}
+                                problemIndicators={showProblemIndicators}
+                                eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                                competitorScores={undefined}
+                                compareDiffMode={viewMode === "compare"}
+                                heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                                heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                                attentionOverlay={getAttentionOverlay(splitRightSite, "right")}
+                                simulateOverlayRows={splitRightSite.isUser ? simulateOverlayRows : null}
+                                simulateAiLabelsSlot={aiLabelsSlotForSite(splitRightSite)}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : wideSoloSide === "left" ? (
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                      <div className="min-w-0 shrink-0">
                         <SplitSiteColumnPicker
                           compact
                           sites={sites}
@@ -2084,56 +2081,50 @@ export function ScreenshotCompare({
                             pushToolbarHelp("vs-column-left", HINT_CONTROLS.vsSelect);
                             selectSplitLeft(idx);
                           }}
-                        />
-                      </div>
-                      <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
-                        <SectionChipsStrip
-                          compact
-                          chipSite={splitLeftSite}
-                          sortedSectionKeys={sortedSectionKeys}
-                          zoneLens={zoneLens}
-                          expandedPin={expandedPin}
-                          onSelectSection={(key) => {
-                            setExpandedPin(key);
-                            setSectionNavTick((n) => n + 1);
+                          aiTips={{
+                            active: aiTipsVisible,
+                            onToggle: () => setAiTipsVisible((v) => !v),
+                            pushToolbarHelp,
                           }}
-                          userSite={userSite}
-                          vsSite={vsSite}
-                          activeSite={activeSite}
-                          tooltipCompareDomain={tooltipCompareDomain}
-                          result={result}
+                          heatmap={{
+                            active: heatmapEnabledUrls.includes(splitLeftSite.url),
+                            onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
+                            pushToolbarHelp,
+                          }}
+                          wideLayout={{
+                            fullWidth: true,
+                            onToggle: () => setWideSoloSide((s) => (s === "left" ? null : "left")),
+                            pushToolbarHelp,
+                          }}
+                        />
+                      </div>
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                        <ScreenshotFrame
+                          site={splitLeftSite}
+                          showZones={showZones}
+                          expandedPin={expandedPin}
+                          zoom={zoom}
+                          overlayMode={effectiveOverlay}
+                          sectionNavTick={sectionNavTick}
+                          zoneLens={zoneLens}
+                          deltaByKey={viewMode === "compare" ? sectionDeltaLR : undefined}
+                          problemIndicators={showProblemIndicators}
+                          eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                          competitorScores={
+                            showProblemIndicators && splitLeftSite.isUser ? competitorScoresForSplitLeft : undefined
+                          }
+                          compareDiffMode={viewMode === "compare"}
+                          heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                          heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                          attentionOverlay={getAttentionOverlay(splitLeftSite, "left")}
+                          simulateOverlayRows={splitLeftSite.isUser ? simulateOverlayRows : null}
+                          simulateAiLabelsSlot={aiLabelsSlotForSite(splitLeftSite)}
                         />
                       </div>
                     </div>
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                      <ScreenshotFrame
-                        site={splitLeftSite}
-                        showZones={showZones}
-                        expandedPin={expandedPin}
-                        zoom={zoom}
-                        overlayMode={effectiveOverlay}
-                        sectionNavTick={sectionNavTick}
-                        zoneLens={zoneLens}
-                        deltaByKey={viewMode === "compare" ? sectionDeltaLR : undefined}
-                        problemIndicators={showProblemIndicators}
-                        eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
-                        competitorScores={
-                          showProblemIndicators && splitLeftSite.isUser ? competitorScoresForSplitLeft : undefined
-                        }
-                        deltaLensTint={false}
-                        compareDiffMode={viewMode === "compare"}
-                        heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
-                        heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
-                        attentionOverlay={getAttentionOverlay(splitLeftSite, "left")}
-                        simulateOverlayRows={splitLeftSite.isUser ? simulateOverlayRows : null}
-                        simulateAiLabelsSlot={splitLeftSite.isUser ? userSimulateAiLabelsSlot : null}
-                        simulateAiLabelsHeader={splitLeftSite.isUser ? userSimulateAiLabelsHeader : null}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                    <div className="grid w-full min-w-0 shrink-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1">
-                      <div className="min-w-0">
+                  ) : (
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                      <div className="min-w-0 shrink-0">
                         <SplitSiteColumnPicker
                           compact
                           sites={sites}
@@ -2142,52 +2133,47 @@ export function ScreenshotCompare({
                             pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
                             selectSplitRight(idx);
                           }}
-                        />
-                      </div>
-                      <div className="flex min-w-0 justify-end overflow-x-auto scrollbar-hide">
-                        <SectionChipsStrip
-                          compact
-                          chipSite={splitRightSite}
-                          sortedSectionKeys={sortedSectionKeys}
-                          zoneLens={zoneLens}
-                          expandedPin={expandedPin}
-                          onSelectSection={(key) => {
-                            setExpandedPin(key);
-                            setSectionNavTick((n) => n + 1);
+                          aiTips={{
+                            active: aiTipsVisible,
+                            onToggle: () => setAiTipsVisible((v) => !v),
+                            pushToolbarHelp,
                           }}
-                          userSite={userSite}
-                          vsSite={vsSite}
-                          activeSite={activeSite}
-                          tooltipCompareDomain={tooltipCompareDomain}
-                          result={result}
+                          heatmap={{
+                            active: heatmapEnabledUrls.includes(splitRightSite.url),
+                            onToggle: () => toggleHeatmapUrl(splitRightSite.url),
+                            pushToolbarHelp,
+                          }}
+                          wideLayout={{
+                            fullWidth: true,
+                            onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
+                            pushToolbarHelp,
+                          }}
+                        />
+                      </div>
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                        <ScreenshotFrame
+                          site={splitRightSite}
+                          showZones={showZones}
+                          expandedPin={expandedPin}
+                          zoom={zoom}
+                          overlayMode={effectiveOverlay}
+                          sectionNavTick={sectionNavTick}
+                          zoneLens={zoneLens}
+                          deltaByKey={sectionDeltaLR}
+                          problemIndicators={showProblemIndicators}
+                          eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                          competitorScores={undefined}
+                          compareDiffMode={viewMode === "compare"}
+                          heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                          heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                          attentionOverlay={getAttentionOverlay(splitRightSite, "right")}
+                          simulateOverlayRows={splitRightSite.isUser ? simulateOverlayRows : null}
+                          simulateAiLabelsSlot={aiLabelsSlotForSite(splitRightSite)}
                         />
                       </div>
                     </div>
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                      <ScreenshotFrame
-                        site={splitRightSite}
-                        showZones={showZones}
-                        expandedPin={expandedPin}
-                        zoom={zoom}
-                        overlayMode={effectiveOverlay}
-                        sectionNavTick={sectionNavTick}
-                        zoneLens={zoneLens}
-                        deltaByKey={sectionDeltaLR}
-                        problemIndicators={showProblemIndicators}
-                        eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
-                        competitorScores={undefined}
-                        deltaLensTint={zoneLens === "delta"}
-                        compareDiffMode={viewMode === "compare"}
-                        heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
-                        heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
-                        attentionOverlay={getAttentionOverlay(splitRightSite, "right")}
-                        simulateOverlayRows={splitRightSite.isUser ? simulateOverlayRows : null}
-                        simulateAiLabelsSlot={splitRightSite.isUser ? userSimulateAiLabelsSlot : null}
-                        simulateAiLabelsHeader={splitRightSite.isUser ? userSimulateAiLabelsHeader : null}
-                      />
-                    </div>
-                  </div>
-                </div>
+                  )}
+                </>
               )}
 
               {viewMode === "slider" &&
@@ -2196,12 +2182,182 @@ export function ScreenshotCompare({
                 splitLeftSite.screenshotUrl &&
                 splitRightSite.screenshotUrl && (
                   <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-                    <SliderCompare
-                      left={splitLeftSite}
-                      right={splitRightSite}
-                      leftLabel={splitLeftSite.domain}
-                      rightLabel={splitRightSite.domain}
-                    />
+                    {wideSoloSide === null ? (
+                      <>
+                        <div className="flex min-w-0 shrink-0 gap-2 md:gap-3">
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <a
+                              href={splitLeftSite.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wide text-foreground hover:underline decoration-primary/60 underline-offset-2"
+                              title={splitLeftSite.url}
+                            >
+                              {splitLeftSite.domain}
+                            </a>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <AiTipsColumnButton
+                                active={aiTipsVisible}
+                                onToggle={() => setAiTipsVisible((v) => !v)}
+                                pushToolbarHelp={pushToolbarHelp}
+                                compact
+                              />
+                              <HeatmapColumnButton
+                                active={heatmapEnabledUrls.includes(splitLeftSite.url)}
+                                onToggle={() => toggleHeatmapUrl(splitLeftSite.url)}
+                                pushToolbarHelp={pushToolbarHelp}
+                                compact
+                              />
+                              <WideLayoutButton
+                                fullWidth={false}
+                                onToggle={() => setWideSoloSide((s) => (s === "left" ? null : "left"))}
+                                pushToolbarHelp={pushToolbarHelp}
+                                compact
+                              />
+                            </div>
+                          </div>
+                          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                            <a
+                              href={splitRightSite.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="min-w-0 flex-1 truncate text-[10px] font-semibold uppercase tracking-wide text-foreground hover:underline decoration-primary/60 underline-offset-2"
+                              title={splitRightSite.url}
+                            >
+                              {splitRightSite.domain}
+                            </a>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <AiTipsColumnButton
+                                active={aiTipsVisible}
+                                onToggle={() => setAiTipsVisible((v) => !v)}
+                                pushToolbarHelp={pushToolbarHelp}
+                                compact
+                              />
+                              <HeatmapColumnButton
+                                active={heatmapEnabledUrls.includes(splitRightSite.url)}
+                                onToggle={() => toggleHeatmapUrl(splitRightSite.url)}
+                                pushToolbarHelp={pushToolbarHelp}
+                                compact
+                              />
+                              <WideLayoutButton
+                                fullWidth={false}
+                                onToggle={() => setWideSoloSide((s) => (s === "right" ? null : "right"))}
+                                pushToolbarHelp={pushToolbarHelp}
+                                compact
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <SliderCompare
+                          left={splitLeftSite}
+                          right={splitRightSite}
+                          leftLabel={splitLeftSite.domain}
+                          rightLabel={splitRightSite.domain}
+                        />
+                      </>
+                    ) : wideSoloSide === "left" ? (
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                        <div className="min-w-0 shrink-0">
+                          <SplitSiteColumnPicker
+                            compact
+                            sites={sites}
+                            valueIdx={safeLeft}
+                            onSelect={(idx) => {
+                              pushToolbarHelp("vs-column-left", HINT_CONTROLS.vsSelect);
+                              selectSplitLeft(idx);
+                            }}
+                            aiTips={{
+                              active: aiTipsVisible,
+                              onToggle: () => setAiTipsVisible((v) => !v),
+                              pushToolbarHelp,
+                            }}
+                            heatmap={{
+                              active: heatmapEnabledUrls.includes(splitLeftSite.url),
+                              onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
+                              pushToolbarHelp,
+                            }}
+                            wideLayout={{
+                              fullWidth: true,
+                              onToggle: () => setWideSoloSide((s) => (s === "left" ? null : "left")),
+                              pushToolbarHelp,
+                            }}
+                          />
+                        </div>
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                          <ScreenshotFrame
+                            site={splitLeftSite}
+                            showZones={showZones}
+                            expandedPin={expandedPin}
+                            zoom={zoom}
+                            overlayMode={effectiveOverlay}
+                            sectionNavTick={sectionNavTick}
+                            zoneLens={zoneLens}
+                            deltaByKey={undefined}
+                            problemIndicators={showProblemIndicators}
+                            eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                            competitorScores={
+                              showProblemIndicators && splitLeftSite.isUser ? competitorScoresForSplitLeft : undefined
+                            }
+                            compareDiffMode={false}
+                            heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                            heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                            attentionOverlay={getAttentionOverlay(splitLeftSite, "left")}
+                            simulateOverlayRows={splitLeftSite.isUser ? simulateOverlayRows : null}
+                            simulateAiLabelsSlot={aiLabelsSlotForSite(splitLeftSite)}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                        <div className="min-w-0 shrink-0">
+                          <SplitSiteColumnPicker
+                            compact
+                            sites={sites}
+                            valueIdx={safeRight}
+                            onSelect={(idx) => {
+                              pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
+                              selectSplitRight(idx);
+                            }}
+                            aiTips={{
+                              active: aiTipsVisible,
+                              onToggle: () => setAiTipsVisible((v) => !v),
+                              pushToolbarHelp,
+                            }}
+                            heatmap={{
+                              active: heatmapEnabledUrls.includes(splitRightSite.url),
+                              onToggle: () => toggleHeatmapUrl(splitRightSite.url),
+                              pushToolbarHelp,
+                            }}
+                            wideLayout={{
+                              fullWidth: true,
+                              onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
+                              pushToolbarHelp,
+                            }}
+                          />
+                        </div>
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                          <ScreenshotFrame
+                            site={splitRightSite}
+                            showZones={showZones}
+                            expandedPin={expandedPin}
+                            zoom={zoom}
+                            overlayMode={effectiveOverlay}
+                            sectionNavTick={sectionNavTick}
+                            zoneLens={zoneLens}
+                            deltaByKey={undefined}
+                            problemIndicators={showProblemIndicators}
+                            eyeOrderByKey={showProblemIndicators ? eyeOrderByKey : undefined}
+                            competitorScores={undefined}
+                            compareDiffMode={false}
+                            heatmapGapPairByKey={effectiveOverlay === "heatmap" ? heatmapGapPairByKey : undefined}
+                            heatmapGapOnCompetitorOnly={effectiveOverlay === "heatmap"}
+                            attentionOverlay={getAttentionOverlay(splitRightSite, "right")}
+                            simulateOverlayRows={splitRightSite.isUser ? simulateOverlayRows : null}
+                            simulateAiLabelsSlot={aiLabelsSlotForSite(splitRightSite)}
+                          />
+                        </div>
+                      </div>
+                    )}
                     {effectiveOverlay === "attention" && (
                       <p className="shrink-0 text-[10px] text-center text-muted-foreground leading-snug px-2">
                         Heatmap overlays work in Single, Original, or Split. Switch view to see predicted attention on each full screenshot side by side.
@@ -2241,48 +2397,46 @@ export function ScreenshotCompare({
                 </p>
               )}
 
-              {!activeSite.isUser && userSite && (
-                <div className="rounded-xl border border-dashed border-border p-2.5 bg-muted/20">
-                  <p className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1">
-                    <BarChart3 className="h-3 w-3" />
-                    Δ vs you
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {SECTION_KEYS.map((key) => {
-                      const u = userSite.annotations.find((a) => a.sectionKey === key)?.score;
-                      const t = activeSite.annotations.find((a) => a.sectionKey === key)?.score;
-                      const d = u != null && t != null ? Math.round((t - u) * 10) / 10 : null;
-                      return (
-                        <div key={key} className="rounded-lg bg-card border border-border px-2 py-1 text-[10px]">
-                          <span className="text-muted-foreground">{SECTION_ZONES[key].short}:</span>{" "}
-                          {d == null ? (
-                            "—"
-                          ) : (
-                            <span
-                              className={cn(
-                                "font-bold",
-                                d > 0 ? "text-primary" : d < 0 ? "text-red-500" : "text-muted-foreground"
-                              )}
-                            >
-                              {d > 0 ? "+" : ""}
-                              {d.toFixed(1)}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
+          {fullWidth && (
+            <HintTooltip
+              side="left"
+              title={HINT_CONTROLS.rightPanelToggle.title}
+              description={HINT_CONTROLS.rightPanelToggle.description}
+              action={HINT_CONTROLS.rightPanelToggle.action}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  pushToolbarHelp("right-panel-open", HINT_CONTROLS.rightPanelToggle);
+                  setFullWidth(false);
+                }}
+                className="absolute right-0 top-0 z-20 hidden h-[calc(2.25rem*0.9)] w-7 translate-y-0.5 items-center justify-center rounded-l-lg border border-border border-r-0 bg-background/95 pr-0.5 text-muted-foreground shadow-md backdrop-blur-sm hover:bg-muted hover:text-foreground lg:flex"
+                aria-label="Open analysis panel"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+              </button>
+            </HintTooltip>
+          )}
         </div>
 
-        {!fullWidth && (
-          <div className="hidden min-h-0 w-[352px] max-w-[352px] shrink-0 flex-col overflow-hidden lg:flex lg:h-full lg:max-h-full lg:min-h-0 lg:self-stretch">
+        <div
+          className={cn(
+            "relative hidden min-h-0 shrink-0 flex-col overflow-hidden lg:flex",
+            "lg:h-full lg:max-h-full lg:min-h-0 lg:self-stretch",
+            "motion-safe:transition-[width,max-width,opacity] motion-safe:duration-300 motion-safe:ease-out",
+            "motion-reduce:transition-none",
+            fullWidth
+              ? "lg:pointer-events-none lg:w-0 lg:max-w-0 lg:opacity-0"
+              : "lg:w-[352px] lg:max-w-[352px] lg:opacity-100"
+          )}
+          aria-hidden={fullWidth}
+        >
+          <div className="flex h-full min-h-0 w-[352px] min-w-[352px] flex-col overflow-hidden">
             {actionPanel}
           </div>
-        )}
+        </div>
       </div>
 
       {!controlled && (

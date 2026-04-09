@@ -33,7 +33,6 @@ function faviconUrl(domain: string) {
 
 export default function MonitorPage() {
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
   const [historyCount, setHistoryCount] = useState(getHistoryCount);
 
   const payload = readFullInsightsPayload();
@@ -93,11 +92,8 @@ export default function MonitorPage() {
       <DashboardNavSidebar
         activeNavId="monitor"
         onSelect={handleNav}
-        collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed((c) => !c)}
         reportContext={reportContext}
         result={result}
-        historyCount={historyCount}
         onNewAnalysis={() => navigate("/")}
       />
 

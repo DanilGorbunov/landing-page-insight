@@ -1,5 +1,5 @@
 import type { ReadabilityData } from "@/types/api";
-import { cn } from "@/lib/utils";
+import { cn, getDomain } from "@/lib/utils";
 
 function gradeColor(grade: number | null): string {
   if (grade === null) return "text-muted-foreground";
@@ -14,11 +14,6 @@ function easeLabel(ease: number | null): string {
   if (ease >= 60) return "Standard";
   if (ease >= 40) return "Difficult";
   return "Very Difficult";
-}
-
-function getDomain(url: string) {
-  try { return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, ""); }
-  catch { return url; }
 }
 
 export function ReadabilityPanel({ data }: { data: ReadabilityData }) {

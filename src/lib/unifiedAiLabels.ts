@@ -56,9 +56,11 @@ export function buildUnifiedAiLabelRowsForMode(
     sectionDeltaVsCompetitor: Record<string, number | null>;
     attentionZones: AttentionZone[] | null | undefined;
     annotations: Array<{ sectionKey: string; top: number; height: number; score: number | null }>;
+    /** Competitor column: relax score/delta filters so Hero and other strong bands still get tips vs you. */
+    competitorPerspective?: boolean;
   }
 ): SimulateAiLabelRow[] {
-  const { sectionDeltaVsCompetitor, attentionZones, annotations } = ctx;
+  const { sectionDeltaVsCompetitor, attentionZones, annotations, competitorPerspective } = ctx;
   const byKey = new Map<string, SimulateAiLabelRow>();
   for (const r of baseRows) byKey.set(r.sectionKey, r);
 
@@ -67,32 +69,45 @@ export function buildUnifiedAiLabelRowsForMode(
     return takeWeakest(baseRows, Math.min(5, baseRows.length));
   };
 
+  /** Looser ceiling so 8.0–8.9 hero/value rows are not all stripped on competitor screenshots. */
+  const scoreCeilingCompare = competitorPerspective ? 9 : 8;
+  const scoreCeilingConversion = competitorPerspective ? 9 : 8;
+  const scoreCeilingCopy = competitorPerspective ? 7.5 : 7;
+
   switch (mode) {
     case "compare":
     case "mobile":
     case "trust":
     case "readability":
-      return ensureMin(baseRows.filter((r) => r.score < 8));
+      return ensureMin(baseRows.filter((r) => r.score < scoreCeilingCompare));
 
     case "heatmap": {
       const rows = baseRows.filter((r) => {
         const d = sectionDeltaVsCompetitor[r.sectionKey];
-        return d != null && d > 0.35;
+        if (d == null) return false;
+        if (competitorPerspective) {
+          return Math.abs(d) >= 0.12;
+        }
+        return d > 0.35;
       });
       return ensureMin(rows);
     }
 
     case "copy":
-      return ensureMin(baseRows.filter((r) => r.score < 7));
+      return ensureMin(baseRows.filter((r) => r.score < scoreCeilingCopy));
 
     case "conversion":
-      return ensureMin(baseRows.filter((r) => r.score < 8));
+      return ensureMin(baseRows.filter((r) => r.score < scoreCeilingConversion));
 
     case "first5s": {
       const rows = baseRows.filter((r) => {
         const ann = annotations.find((a) => a.sectionKey === r.sectionKey);
         if (!ann) return false;
         const center = ann.top + ann.height / 2;
+        if (competitorPerspective) {
+          // Above-the-fold / first screen (Hero ~10%, value ~26%) — old filter `center >= 36` excluded Hero entirely.
+          return center <= 42;
+        }
         return center >= 36;
       });
       return ensureMin(rows);
@@ -101,7 +116,8 @@ export function buildUnifiedAiLabelRowsForMode(
     case "attention": {
       const zones = [...(attentionZones ?? [])].filter(Boolean);
       if (zones.length === 0) {
-        return ensureMin(baseRows.filter((r) => r.score < 6.5));
+        const thresh = competitorPerspective ? 7 : 6.5;
+        return ensureMin(baseRows.filter((r) => r.score < thresh));
       }
       const low = zones
         .filter((z) => (z.intensity ?? 5) < 6)

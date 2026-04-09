@@ -17,7 +17,7 @@ export type ToolbarAnalyzeMode =
   | "readability"
   | null;
 
-export type ToolbarZoneLens = "balanced" | "hot" | "delta";
+export type ToolbarZoneLens = "balanced" | "delta";
 
 export type ToolbarContext = {
   viewMode: ToolbarViewMode;
@@ -42,10 +42,7 @@ const LENS_LABEL: Record<Exclude<ToolbarZoneLens, "balanced">, string> = {
 };
 
 /** Right panel title (below tabs). Single + balanced + no analyze → none. */
-export function getRightPanelHeader(
-  ctx: ToolbarContext,
-  opts?: { hotSectionCount?: number }
-): { title: string | null; subtitle?: string } {
+export function getRightPanelHeader(ctx: ToolbarContext): { title: string | null; subtitle?: string } {
   const { viewMode, analyzeMode, zoneLens } = ctx;
   const parts: string[] = [];
 
@@ -82,13 +79,6 @@ export function getRightPanelHeader(
     return { title: "Readability", subtitle: "Scan-friendly blocks and hierarchy" };
   }
 
-  if (zoneLens === "hot") {
-    const n = opts?.hotSectionCount ?? 0;
-    return {
-      title: n > 0 ? `🔥 Critical Issues — ${n} problems found` : "🔥 Critical Issues",
-      subtitle: n > 0 ? "Sections below 7.0 — worst first" : "All sections score 7.0 or above",
-    };
-  }
   if (zoneLens === "delta") {
     return { title: "Where competitors beat you", subtitle: "Sorted by biggest gap first" };
   }
@@ -126,9 +116,7 @@ export function sectionPassesToolbarFilters(
   const gap = userScore != null && compScore != null ? compScore - userScore : null;
 
   let lensOk = true;
-  if (zoneLens === "hot") {
-    lensOk = userScore != null && userScore < 7;
-  } else if (zoneLens === "delta") {
+  if (zoneLens === "delta") {
     lensOk = gap != null && gap > 0;
   }
 
@@ -150,6 +138,3 @@ export function sectionPassesToolbarFilters(
   return lensOk && analyzeOk;
 }
 
-export function countHotSections(scores: Array<number | null | undefined>): number {
-  return scores.filter((s): s is number => s != null && s < 7).length;
-}

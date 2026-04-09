@@ -1,5 +1,11 @@
 import type { AnalysisResult } from "@/types/api";
-import { getDomain, parseScoreFromReport, getCompetitorOverallScore, DEFAULT_SCORE } from "@/lib/utils";
+import {
+  getDomain,
+  parseScoreFromReport,
+  getCompetitorOverallScore,
+  DEFAULT_SCORE,
+  stripWwwFromHost,
+} from "@/lib/utils";
 
 const STORAGE_KEY = "ll_history";
 /** After full / extended report unlock — history entries do not expire (local demo). */
@@ -73,7 +79,8 @@ export function getHistory(): HistoryEntry[] {
   cleanExpired();
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed: HistoryEntry[] = raw ? JSON.parse(raw) : [];
+    return parsed.map((e) => ({ ...e, domain: stripWwwFromHost(e.domain) }));
   } catch {
     return [];
   }

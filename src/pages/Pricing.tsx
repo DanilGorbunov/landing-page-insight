@@ -61,7 +61,7 @@ const PLANS: Plan[] = [
       { text: "Monitor — track 3 competitors", included: true },
       { text: "Weekly email digest of competitor changes", included: true },
       { text: "Copy Generator — 3 copy variants per section", included: true },
-      { text: "HOT + Δ vs you lenses", included: true },
+      { text: "Δ vs you lens + AI screenshot markers", included: true },
       { text: "Business Impact Estimate", included: true },
       { text: "White-label (not included)", included: false },
       { text: "Team access (not included)", included: false },

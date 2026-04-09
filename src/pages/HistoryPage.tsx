@@ -11,7 +11,6 @@ import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
 
 export default function HistoryPage() {
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
   const [historyCount, setHistoryCount] = useState(getHistoryCount);
   const [historyTick, setHistoryTick] = useState(0);
 
@@ -64,11 +63,8 @@ export default function HistoryPage() {
       <DashboardNavSidebar
         activeNavId="history"
         onSelect={handleNav}
-        collapsed={collapsed}
-        onToggleCollapse={() => setCollapsed((c) => !c)}
         reportContext={reportContext}
         result={result}
-        historyCount={historyCount}
         onNewAnalysis={() => navigate("/")}
       />
 

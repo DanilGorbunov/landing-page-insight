@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, AlertTriangle, ChevronDown, ChevronUp, MinusCircle } from "lucide-react";
-import type { VisualLensSectionModel, VisualLensRow, HotLensIssue, DeltaLensItem, LensRowStatus } from "@/lib/lensPanelContent";
+import type { VisualLensSectionModel, VisualLensRow, DeltaLensItem, LensRowStatus } from "@/lib/lensPanelContent";
 
 function RowIcon({ status }: { status: LensRowStatus }) {
   if (status === "ok") return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />;
@@ -51,49 +51,6 @@ export function VisualLensCollapsible({ sections }: { sections: VisualLensSectio
           </div>
         );
       })}
-    </div>
-  );
-}
-
-export function HotLensPanel({ issues }: { issues: HotLensIssue[] }) {
-  if (issues.length === 0) {
-    return (
-      <div className="rounded-lg border border-primary/30 bg-primary/[0.06] px-3 py-3 text-[11px] text-foreground leading-snug">
-        <span className="font-semibold">✅ No critical issues found</span> — all sections score 7.0 or above.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {issues.map((it) => (
-        <div
-          key={it.sectionKey}
-          className={cn(
-            "rounded-lg border border-red-500/35 bg-card/90 px-3 py-2.5 space-y-1.5",
-            it.priority === "P1" && "border-l-4 border-l-red-500"
-          )}
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-[11px] font-bold text-foreground">{it.label}</span>
-            <span className="text-[11px] font-bold tabular-nums text-red-600 dark:text-red-400">{it.score.toFixed(1)}/10</span>
-          </div>
-          <span
-            className={cn(
-              "inline-flex text-[9px] font-bold uppercase rounded px-1.5 py-0.5",
-              it.priority === "P1" ? "bg-red-500/15 text-red-600 dark:text-red-400" : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-            )}
-          >
-            {it.priority}
-          </span>
-          <p className="text-[11px] text-foreground leading-snug">{it.problem}</p>
-          {it.competitorNote && (
-            <p className="text-[10px] text-muted-foreground leading-snug border-t border-border/60 pt-1.5 mt-1">
-              vs competitor: {it.competitorNote}
-            </p>
-          )}
-        </div>
-      ))}
     </div>
   );
 }

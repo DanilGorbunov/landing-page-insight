@@ -2,10 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { logClaudeUsage } from "../utils/claudeUsageLog.js";
 
-/** Sonnet for the user's own site; Haiku for competitors (3.75x cheaper + faster). */
+/** Sonnet for user site and competitors (consistent audit quality). */
 const MODEL_SONNET = "claude-sonnet-4-20250514";
-/** Must match Anthropic API model IDs (invalid ID = empty competitors). */
-const MODEL_HAIKU = "claude-haiku-4-5-20251001";
 const MAX_IMAGE_WIDTH = 1000;
 const MAX_IMAGE_WIDTH_COMPETITOR = 800; // smaller = fewer image tokens for competitors
 const JPEG_QUALITY = 76;
@@ -134,7 +132,7 @@ function parseSectionsResponse(text) {
 export async function analyzeLandingSections(scrapeResult, isUserSite = false) {
   const { markdown, screenshotUrl, screenshotBase64 } = scrapeResult;
   const url = scrapeResult.url || "(no url)";
-  const model = isUserSite ? MODEL_SONNET : MODEL_HAIKU;
+  const model = MODEL_SONNET;
   const maxTokens = isUserSite ? MAX_TOKENS_USER : MAX_TOKENS_COMPETITOR;
   const markdownMax = isUserSite ? MARKDOWN_MAX_CHARS : MARKDOWN_MAX_CHARS_COMPETITOR;
   const imgWidth = isUserSite ? MAX_IMAGE_WIDTH : MAX_IMAGE_WIDTH_COMPETITOR;

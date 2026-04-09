@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { motion } from "framer-motion";
 import { cn, getDomain } from "@/lib/utils";
-import { HeatmapOverlay } from "@/components/HeatmapOverlay";
 import type { AttentionZone } from "@/types/attention";
 import {
   type HeroSubMetrics,
@@ -29,19 +29,22 @@ import {
 } from "@/lib/compareToolbarContext";
 import { buildSectionScoreBreakdown } from "@/lib/scoreBreakdown";
 import { insightConfidenceFromResult, type InsightConfidence } from "@/lib/insightConfidence";
-import { buildHotLensIssues, buildDeltaLensItems, type DeltaLensItem } from "@/lib/lensPanelContent";
-import { HotLensPanel, DeltaLensPanel } from "@/components/LensInsightPanels";
+import { buildDeltaLensItems, type DeltaLensItem } from "@/lib/lensPanelContent";
+import { DeltaLensPanel } from "@/components/LensInsightPanels";
 import { ScoreBreakdownPopover } from "@/components/ScoreBreakdownPopover";
 import { CopyGeneratorBlock } from "@/components/CopyGeneratorBlock";
 import { AttentionAnalysisPanel } from "@/components/AttentionAnalysisPanel";
 import type { AttentionComparison, HeatmapAnalysis } from "@/types/attention";
-import type { ToolbarHintContent } from "@/lib/compareUiHints";
+import { HINT_CONTROLS, type ToolbarHintContent } from "@/lib/compareUiHints";
+import { HintTooltip } from "@/components/HintTooltip";
 import { BusinessImpactEstimate } from "@/components/BusinessImpactEstimate";
 import { InsightConfidenceBadge } from "@/components/InsightConfidenceBadge";
 import {
   BarChart3,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ClipboardCopy,
   Crown,
@@ -631,7 +634,6 @@ export function DecisionActionPanel({
   toolbarFilteredSectionCount,
   sectionDeltaVsCompetitor,
   vsDomain,
-  hotSectionCount = 0,
   quickWin,
   onQuickWinDismiss,
   onQuickWinPlan,
@@ -646,6 +648,7 @@ export function DecisionActionPanel({
   competitorOverallScores = [],
   panelTab: controlledPanelTab,
   onPanelTabChange,
+  onCollapseRightPanel,
 }: {
   result: AnalysisResult;
   activeSite: SiteLite;
@@ -693,11 +696,10 @@ export function DecisionActionPanel({
   toolbarFilteredSectionCount: number;
   sectionDeltaVsCompetitor?: Record<string, number | null> | null;
   vsDomain?: string | null;
-  hotSectionCount?: number;
   quickWin?: { label: string; fixOne: string; impact: number; sectionKey: string } | null;
   onQuickWinDismiss?: () => void;
   onQuickWinPlan?: () => void;
-  /** Per-section rows for HOT / Δ lenses (your site annotations). */
+  /** Per-section rows for Δ lens (your site annotations). */
   lensAnnotations?: Array<{
     sectionKey: string;
     label: string;
@@ -730,6 +732,8 @@ export function DecisionActionPanel({
   /** Optional controlled tab (syncs with screenshot AI labels visibility). */
   panelTab?: DecisionPanelTab;
   onPanelTabChange?: (tab: DecisionPanelTab) => void;
+  /** Hide the right column (desktop); shown as first control in the tab header. */
+  onCollapseRightPanel?: () => void;
 }) {
   const [internalPanelTab, setInternalPanelTab] = useState<DecisionPanelTab>("simulate");
   const isTabControlled = controlledPanelTab !== undefined;
@@ -749,10 +753,7 @@ export function DecisionActionPanel({
   const prevFocusedKeyRef = useRef<string | null | undefined>(undefined);
   const panelScrollRef = useRef<HTMLDivElement>(null);
 
-  const panelHeader = useMemo(
-    () => getRightPanelHeader(toolbarContext, { hotSectionCount }),
-    [toolbarContext, hotSectionCount]
-  );
+  const panelHeader = useMemo(() => getRightPanelHeader(toolbarContext), [toolbarContext]);
   const showFilterEmpty =
     toolbarFilteredSectionCount === 0 &&
     (toolbarContext.analyzeMode != null || toolbarContext.zoneLens !== "balanced");
@@ -829,8 +830,6 @@ export function DecisionActionPanel({
     return activeSite.domain;
   }, [winNarrative?.competitorLabel, vsDomain, activeSite.domain]);
 
-  const hotLensIssues = useMemo(() => buildHotLensIssues(result, lensAnnotations), [result, lensAnnotations]);
-
   const deltaLensPack = useMemo(() => {
     if (!lensVs) return { summary: null as string | null, items: [] as DeltaLensItem[] };
     const userBy = Object.fromEntries(lensAnnotations.map((a) => [a.sectionKey, a.score])) as Record<string, number | null>;
@@ -860,7 +859,7 @@ export function DecisionActionPanel({
     [sectionDeepDive]
   );
 
-  /** Balanced lens (or Analyze overlay): show standard problem + 3s insight. Visual/Hot/Delta replace with filtered views. */
+  /** Balanced lens (or Analyze overlay): show standard problem + 3s insight. Δ lens replaces with filtered view. */
   const defaultInsightProblemCard =
     toolbarContext.analyzeMode !== null || toolbarContext.zoneLens === "balanced";
 
@@ -897,45 +896,67 @@ export function DecisionActionPanel({
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card/95 backdrop-blur-sm overflow-hidden flex h-full min-h-0 max-h-full flex-col z-10",
-        fixMode ? "border-primary/50 shadow-md shadow-primary/10" : "border-primary/25 shadow-lg shadow-black/15"
+        "rounded-lg border-0 bg-transparent overflow-hidden flex h-full min-h-0 max-h-full flex-col z-10",
+        fixMode ? "shadow-md shadow-primary/20" : "shadow-lg shadow-black/15"
       )}
     >
-      <div
-        className="flex shrink-0 flex-nowrap items-center gap-1.5 bg-muted/20 px-2 py-1 overflow-x-auto scrollbar-hide"
-        role="tablist"
-        aria-label="Compare sections"
-      >
-        {DECISION_PANEL_TABS.map(({ id, label }) => {
-          const active = panelTab === id;
-          const Icon =
-            id === "insight"
-              ? Lightbulb
-              : id === "simulate"
-                ? FlaskConical
-                : id === "scores"
-                  ? BarChart3
-                  : null;
-          return (
+      <div className="flex shrink-0 flex-nowrap items-center gap-2 px-2 py-1">
+        {onCollapseRightPanel ? (
+          <HintTooltip
+            side="bottom"
+            title={HINT_CONTROLS.rightPanelToggle.title}
+            description={HINT_CONTROLS.rightPanelToggle.description}
+            action={HINT_CONTROLS.rightPanelToggle.action}
+          >
             <button
-              key={id}
               type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setPanelTab(id)}
+              onClick={onCollapseRightPanel}
               className={cn(
-                // Match SectionChipsStrip compact chips (Hero 7.5 row): text-[10px], px-2, pt-1 pb-1.5, gap-0.5
                 "inline-flex shrink-0 items-center gap-0.5 rounded-lg border px-2 pb-1.5 pt-1 text-[10px] font-semibold leading-none transition-colors",
-                active
-                  ? "border-amber-500/60 bg-amber-500/10 text-amber-950 shadow-sm dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-100"
-                  : "border-border text-muted-foreground hover:border-border/80 hover:bg-muted/40 hover:text-foreground"
+                "border-border text-muted-foreground hover:border-border/80 hover:bg-muted/40 hover:text-foreground"
               )}
+              aria-label="Hide analysis panel"
             >
-              {Icon ? <Icon className="h-3 w-3 shrink-0 opacity-90" aria-hidden /> : null}
-              {label}
+              <ChevronRight className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
             </button>
-          );
-        })}
+          </HintTooltip>
+        ) : null}
+        <div
+          className="flex min-w-0 flex-1 flex-nowrap items-center justify-center gap-1.5 overflow-x-auto scrollbar-hide"
+          role="tablist"
+          aria-label="Compare sections"
+        >
+          {DECISION_PANEL_TABS.map(({ id, label }) => {
+            const active = panelTab === id;
+            const Icon =
+              id === "insight"
+                ? Lightbulb
+                : id === "simulate"
+                  ? FlaskConical
+                  : id === "scores"
+                    ? BarChart3
+                    : null;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setPanelTab(id)}
+                className={cn(
+                  // Match SectionChipsStrip compact chips (Hero 7.5 row): text-[10px], px-2, pt-1 pb-1.5, gap-0.5
+                  "inline-flex shrink-0 items-center gap-0.5 rounded-lg border px-2 pb-1.5 pt-1 text-[10px] font-semibold leading-none transition-colors",
+                  active
+                    ? "border-amber-500/60 bg-amber-500/10 text-amber-950 shadow-sm dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-100"
+                    : "border-border text-muted-foreground hover:border-border/80 hover:bg-muted/40 hover:text-foreground"
+                )}
+              >
+                {Icon ? <Icon className="h-3 w-3 shrink-0 opacity-90" aria-hidden /> : null}
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div ref={panelScrollRef} className="p-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0">
@@ -1136,19 +1157,13 @@ export function DecisionActionPanel({
                 </button>
               </div>
             )}
-            {toolbarContext.analyzeMode === null && toolbarContext.zoneLens === "hot" && (
-              <HotLensPanel issues={hotLensIssues} />
-            )}
             {toolbarContext.analyzeMode === null && toolbarContext.zoneLens === "delta" && (
               <DeltaLensPanel summary={deltaLensPack.summary} items={deltaLensPack.items} />
             )}
             {defaultInsightProblemCard && (
             <div
               id="compare-scroll-insight"
-              className={cn(
-                "rounded-lg border border-red-500/35 bg-card/80 px-3 py-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(248,113,113,0.1)] scroll-mt-3",
-                toolbarContext.zoneLens === "hot" && "border-l-4 border-l-red-500"
-              )}
+              className="rounded-lg border border-red-500/35 bg-card/80 px-3 py-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(248,113,113,0.1)] scroll-mt-3"
             >
               <p className="text-sm font-semibold text-foreground">{sectionLabel}</p>
               <div className="flex flex-wrap items-center gap-2">
@@ -1162,7 +1177,13 @@ export function DecisionActionPanel({
               <p className="text-xs text-muted-foreground leading-relaxed">{threeSecondInsight.result}</p>
             </div>
             )}
-            <div className="pt-3 border-t border-border space-y-3">
+            <motion.div
+              key={activeSite.isUser ? `user-${userSite.domain}` : `comp-${activeSite.domain}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
+              className="pt-3 border-t border-border space-y-3"
+            >
               {!hideCompetitorRefs && (
                 <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                   How {competeHeadingName} does it differently
@@ -1179,7 +1200,7 @@ export function DecisionActionPanel({
                 activeSite={activeSite}
                 copyLine={copyLine}
               />
-            </div>
+            </motion.div>
           </div>
         )}
 
@@ -1616,172 +1637,21 @@ export type CompareOverlayLayerMode =
   | "first5s"
   | "conversion";
 
-/** Overlay tint for screenshot: compare | attention | heatmap | copy | trust | readability | first5s | conversion */
-export function CompareOverlayLayer({
-  mode,
-  annotations,
-  first5sTopPct,
-  heatmapGapPairByKey,
-  heatmapGapOnCompetitorOnly,
-  siteIsUser,
-  attention,
-}: {
+/**
+ * Analyze modes used to draw full-screen / zone tints on screenshots.
+ * Overlays are disabled so the shot stays clear; use pins, zones outline, and AI markers instead.
+ */
+export function CompareOverlayLayer(_props: {
   mode: CompareOverlayLayerMode;
   annotations: Array<{ top: number; height: number; score: number | null; label: string; sectionKey?: string }>;
-  /** Percent from top of screenshot where the “below fold” darkening starts (from ~600px / image height). */
-  first5sTopPct?: number | null;
-  /** Gap heat: user vs competitor score per section (for competitor screenshot tri-color). */
   heatmapGapPairByKey?: Record<string, { user: number | null; comp: number | null }>;
-  /** When true, hide heatmap on user screenshot (Gap heat shows zones on competitor only). */
   heatmapGapOnCompetitorOnly?: boolean;
   siteIsUser?: boolean;
-  /** AI attention heatmap zones (Analyze → Attention). */
   attention?: {
     zones: AttentionZone[] | null;
     visible: boolean;
     showPlaceholder: boolean;
   } | null;
 }) {
-  if (mode === "compare") return null;
-
-  if (mode === "heatmap" && heatmapGapOnCompetitorOnly && siteIsUser) return null;
-
-  const attentionResolved =
-    mode === "attention"
-      ? attention ?? { zones: null as AttentionZone[] | null, visible: true, showPlaceholder: true }
-      : null;
-
-  return (
-    <div className="pointer-events-none absolute inset-0 z-[15]">
-      {mode === "attention" && attentionResolved?.visible && attentionResolved.zones && attentionResolved.zones.length > 0 && (
-        <HeatmapOverlay zones={attentionResolved.zones} />
-      )}
-      {mode === "attention" && attentionResolved?.visible && (!attentionResolved.zones || !attentionResolved.zones.length) && attentionResolved.showPlaceholder && (
-        <>
-          <div
-            className="absolute inset-0 opacity-35"
-            style={{
-              background:
-                "radial-gradient(ellipse 50% 32% at 48% 16%, rgba(239,68,68,0.42), transparent 65%), radial-gradient(ellipse 40% 28% at 72% 55%, rgba(59,130,246,0.35), transparent 60%), radial-gradient(ellipse 45% 30% at 28% 70%, rgba(147,197,253,0.4), transparent 55%)",
-            }}
-          />
-          <div className="absolute left-[40%] top-[18%] w-px h-[40%] bg-gradient-to-b from-orange-400/90 to-amber-200/40" />
-          <div className="absolute bottom-[26%] right-[36%] rounded-full w-2 h-2 bg-orange-500 shadow-[0_0_14px_rgba(249,115,22,0.95)]" />
-        </>
-      )}
-      {mode === "heatmap" &&
-        heatmapGapPairByKey &&
-        !siteIsUser &&
-        annotations.map((a) => {
-          const key = a.sectionKey ?? a.label;
-          const pair = heatmapGapPairByKey[key];
-          const u = pair?.user ?? null;
-          const c = pair?.comp ?? null;
-          const gap = u != null && c != null ? c - u : null;
-          const bg =
-            gap == null
-              ? "rgba(148,163,184,0.2)"
-              : gap > 0.35
-                ? "rgba(239,68,68,0.38)"
-                : gap < -0.35
-                  ? "rgba(34,197,94,0.32)"
-                  : "rgba(148,163,184,0.22)";
-          return (
-            <div
-              key={a.label}
-              className="absolute left-0 right-0 border-y border-white/10"
-              style={{
-                top: `${a.top}%`,
-                height: `${a.height}%`,
-                background: `linear-gradient(90deg, ${bg}, transparent 92%)`,
-              }}
-            />
-          );
-        })}
-      {mode === "heatmap" &&
-        !heatmapGapPairByKey &&
-        annotations.map((a) => {
-          const intensity = a.score == null ? 0.2 : Math.max(0, (10 - a.score) / 10) * 0.85;
-          return (
-            <div
-              key={a.label}
-              className="absolute left-0 right-0 border-y border-red-500/20"
-              style={{
-                top: `${a.top}%`,
-                height: `${a.height}%`,
-                background: `linear-gradient(90deg, rgba(239,68,68,${intensity * 0.5}), rgba(239,68,68,${intensity * 0.15}))`,
-              }}
-            />
-          );
-        })}
-      {mode === "copy" &&
-        annotations.map((a) => {
-          const sk = (a as { sectionKey?: string }).sectionKey ?? "";
-          const primary =
-            /hero|cta/i.test(a.label) || sk === "hero" || sk === "CTA" || sk === "value proposition";
-          return (
-            <div
-              key={`copy-${a.label}`}
-              className={cn(
-                "absolute left-0 right-0 border-y backdrop-blur-[0.5px]",
-                primary ? "bg-amber-400/18 border-amber-400/40" : "bg-sky-500/14 border-sky-400/30"
-              )}
-              style={{ top: `${a.top}%`, height: `${a.height}%` }}
-            />
-          );
-        })}
-      {mode === "trust" && (
-        <>
-          <div
-            className="absolute left-0 right-0 border-y border-blue-500/30 bg-blue-500/[0.12] backdrop-blur-[0.5px]"
-            style={{ top: "53%", height: "19%" }}
-          />
-          <div
-            className="absolute left-0 right-0 border-y border-blue-500/35 bg-blue-500/[0.14] backdrop-blur-[0.5px]"
-            style={{ top: "70%", height: "20%" }}
-          />
-        </>
-      )}
-      {mode === "readability" && (
-        <>
-          <div
-            className="absolute left-0 right-0 border-y border-primary/25 bg-primary/[0.1]"
-            style={{ top: "0%", height: "22%" }}
-          />
-          <div
-            className="absolute left-0 right-0 border-y border-teal-500/25 bg-teal-500/[0.08]"
-            style={{ top: "18%", height: "17%" }}
-          />
-        </>
-      )}
-      {mode === "first5s" && first5sTopPct != null && first5sTopPct < 100 && (
-        <div
-          className="absolute left-0 right-0 bottom-0 z-[6]"
-          style={{
-            top: `${first5sTopPct}%`,
-            background: "linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.78) 45%, rgba(0,0,0,0.92) 100%)",
-          }}
-        />
-      )}
-      {mode === "conversion" &&
-        annotations.map((a) => {
-            const sc = a.score;
-            const ring =
-              sc == null
-                ? "border-muted-foreground/50 shadow-[inset_0_0_0_2px_rgba(148,163,184,0.5)]"
-                : sc >= 8
-                  ? "border-primary shadow-[inset_0_0_0_2px_hsl(var(--primary)_/_0.65)]"
-                  : sc >= 6
-                    ? "border-amber-400 shadow-[inset_0_0_0_2px_rgba(251,191,36,0.55)]"
-                    : "border-red-500 shadow-[inset_0_0_0_2px_rgba(239,68,68,0.6)]";
-            return (
-              <div
-                key={`conv-${a.label}`}
-                className={cn("absolute left-[1.5%] right-[1.5%] rounded-lg", ring)}
-                style={{ top: `${a.top}%`, height: `${a.height}%` }}
-              />
-            );
-          })}
-    </div>
-  );
+  return null;
 }

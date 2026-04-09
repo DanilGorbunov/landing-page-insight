@@ -6,6 +6,5 @@ export const FULL_INSIGHTS_SECTION_IDS = new Set([
   "actions",
   "copy",
   "hints",
-  "competitors",
   "beat",
 ]);

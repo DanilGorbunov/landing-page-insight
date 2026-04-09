@@ -2,7 +2,8 @@
  * Derives "decision dashboard" metrics from existing AnalysisResult fields.
  * When the API does not emit sub-scores, we deterministically spread from section text + UX signals.
  */
-import type { AnalysisResult, UxSignals } from "@/types/api";
+import type { AnalysisResult, JobLiveState, UxSignals } from "@/types/api";
+import { buildPartialResultFromLive } from "@/lib/buildPartialResultFromLive";
 import { getDomain, parseScoreFromReport, ensureScore } from "@/lib/utils";
 
 const SECTION_ORDER = ["hero", "value proposition", "features", "social proof", "CTA"] as const;
@@ -359,6 +360,8 @@ export interface CompareSiteTab {
   domain: string;
   isUser: boolean;
   overallScore: number | null;
+  /** Competitor slot not yet resolved (analyzing flow). */
+  loading?: boolean;
 }
 
 export function compareSitesList(result: AnalysisResult, userUrl: string): CompareSiteTab[] {
@@ -376,6 +379,28 @@ export function compareSitesList(result: AnalysisResult, userUrl: string): Compa
     list.push({ url: comp.url, domain: getDomain(comp.url), isUser: false, overallScore: cavg });
   }
   return list;
+}
+
+/** Up to 3 competitor slots with “Finding…” placeholders while the job runs. */
+export function compareSitesWhileAnalyzing(
+  live: JobLiveState | null,
+  userUrl: string,
+  jobId: string
+): CompareSiteTab[] {
+  const partial = buildPartialResultFromLive(live, userUrl, jobId);
+  const tabs = compareSitesList(partial, userUrl);
+  const nComp = tabs.filter((t) => !t.isUser).length;
+  const out: CompareSiteTab[] = [...tabs];
+  for (let i = nComp; i < 3; i++) {
+    out.push({
+      url: `__pending__:${i}`,
+      domain: "Finding…",
+      isUser: false,
+      overallScore: null,
+      loading: true,
+    });
+  }
+  return out;
 }
 
 /** Minor / Moderate / Severe from estimated loss band. */

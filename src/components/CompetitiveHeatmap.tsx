@@ -1,5 +1,5 @@
 import type { AnalysisResult } from "@/types/api";
-import { cn } from "@/lib/utils";
+import { cn, getDomain } from "@/lib/utils";
 
 const SECTION_KEYS = ["hero", "value proposition", "features", "social proof", "CTA"] as const;
 
@@ -23,11 +23,6 @@ function scoreColor(score: number | null): string {
   if (score >= 6) return "bg-amber-400/20 text-amber-600 dark:text-amber-400";
   if (score >= 4) return "bg-orange-400/20 text-orange-600 dark:text-orange-400";
   return "bg-destructive/20 text-destructive";
-}
-
-function getDomain(url: string) {
-  try { return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, ""); }
-  catch { return url; }
 }
 
 interface Props {

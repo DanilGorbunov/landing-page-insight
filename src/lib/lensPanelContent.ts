@@ -288,64 +288,6 @@ export function buildVisualLensSections(
   ];
 }
 
-export type HotLensIssue = {
-  sectionKey: SectionOrderKey;
-  label: string;
-  score: number;
-  problem: string;
-  priority: "P1" | "P2";
-  competitorNote: string | null;
-};
-
-function firstLineProblem(text: string): string {
-  const t = text.replace(/\*\*/g, "").trim();
-  const one = t.split(/\n|\.(?=\s)/)[0]?.trim() ?? t;
-  return one.length > 140 ? `${one.slice(0, 137)}…` : one;
-}
-
-export function buildHotLensIssues(
-  result: AnalysisResult,
-  annotations: Array<{ sectionKey: string; label: string; score: number | null; summary: string; fullText?: string }>
-): HotLensIssue[] {
-  const gaps = result.gaps ?? [];
-  const hints = result.uxHints ?? [];
-
-  const low = annotations
-    .filter((a): a is typeof a & { score: number } => a.score != null && a.score < 7)
-    .sort((a, b) => a.score - b.score);
-
-  return low.map((a) => {
-    const key = a.sectionKey as SectionOrderKey;
-    const gap =
-      gaps.find((g) => inferSectionKeyFromGapArea(g.area) === key) ??
-      gaps.find((g) => g.area.toLowerCase().includes(key.split(" ")[0] ?? ""));
-    const hint = hints.find((h) => h.section.toLowerCase().includes(key.split(" ")[0] ?? ""));
-
-    const problem =
-      gap?.problem?.trim() ||
-      hint?.issue?.trim() ||
-      (a.summary && a.summary !== "No data" ? firstLineProblem(a.summary) : "") ||
-      firstLineProblem(a.fullText ?? "") ||
-      "Section scores below the critical threshold.";
-
-    let competitorNote: string | null = null;
-    if (gap?.competitorAction?.trim()) competitorNote = gap.competitorAction.trim();
-    else if (gap?.competitor?.trim() && gap?.problem) competitorNote = `${gap.competitor}: ${gap.problem}`;
-    else if (gap?.competitor?.trim()) competitorNote = gap.competitor;
-
-    const priority: "P1" | "P2" = gap?.priority === "P1" ? "P1" : "P2";
-
-    return {
-      sectionKey: key,
-      label: a.label,
-      score: a.score,
-      problem,
-      priority,
-      competitorNote,
-    };
-  });
-}
-
 export type DeltaLensItem = {
   sectionKey: SectionOrderKey;
   label: string;

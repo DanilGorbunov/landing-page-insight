@@ -5,9 +5,41 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Extract domain from URL (strip protocol and trailing slash). */
+/** Remove leading www. from a hostname or host:port string (case-insensitive). */
+export function stripWwwFromHost(host: string): string {
+  if (!host || typeof host !== "string") return host;
+  return host.replace(/^www\./i, "");
+}
+
+/**
+ * Extract host (+ path/query/hash when present) from a URL string.
+ * Strips protocol, trailing slash on the full result, and leading www. on the host.
+ */
 export function getDomain(url: string): string {
-  return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const trimmed = (url ?? "").trim();
+  if (!trimmed) return "";
+  try {
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const u = new URL(withProto);
+    const host = stripWwwFromHost(u.host);
+    let rest = "";
+    if (u.pathname && u.pathname !== "/") rest = u.pathname;
+    if (u.search) rest += u.search;
+    if (u.hash) rest += u.hash;
+    const joined = rest ? `${host}${rest}` : host;
+    return joined.replace(/\/$/, "");
+  } catch {
+    let s = trimmed.replace(/^https?:\/\//i, "");
+    const cut = (() => {
+      const i = Math.min(
+        ...[s.indexOf("/"), s.indexOf("?"), s.indexOf("#")].map((x) => (x < 0 ? Infinity : x))
+      );
+      return i === Infinity ? -1 : i;
+    })();
+    const hostPart = cut >= 0 ? s.slice(0, cut) : s;
+    const tail = cut >= 0 ? s.slice(cut) : "";
+    return (stripWwwFromHost(hostPart) + tail).replace(/\/$/, "");
+  }
 }
 
 /** Return true if string is a valid http or https URL with a real-looking host (domain with dot or localhost). */

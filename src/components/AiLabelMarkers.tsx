@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Check, Copy, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -8,10 +8,8 @@ import { computeSimulateProjection, type SimulateImprovementItem } from "@/lib/s
 import type { SimulateAiLabelRow } from "@/lib/simulateAiLabels";
 
 const DOT = { red: "#E24B4A", amber: "#EF9F27", green: "#1D9E75" } as const;
-const DOT_SIZE_PX = 14;
-const BASE_DOT_SHADOW = "0 2px 6px rgba(0,0,0,0.25)";
 const SESSION_HINTS_SEEN = "hints_seen";
-const INTRO_MS = 3000;
+const FIRST_TOOLTIP_DELAY_MS = 500;
 
 function scoreToDotColor(score: number): (typeof DOT)[keyof typeof DOT] {
   if (score < 6) return DOT.red;
@@ -45,6 +43,13 @@ function pulseClassForScore(score: number, seen: boolean): string | null {
   return "animate-ai-dot-pulse-amber";
 }
 
+/** Keep AI tip pills inside screenshot bounds near left/right edges. */
+function markerTransformForLeftPct(leftPct: number): string {
+  if (leftPct <= 14) return "translate(0, -50%)";
+  if (leftPct >= 86) return "translate(-100%, -50%)";
+  return "translate(-50%, -50%)";
+}
+
 export function AiLabelMarkers({
   rows,
   simulateChecked,
@@ -52,7 +57,6 @@ export function AiLabelMarkers({
   userOverall,
   simulateItems,
   competitorOverallScores,
-  onFirstDotInteraction,
 }: {
   rows: SimulateAiLabelRow[];
   simulateChecked: Record<string, boolean>;
@@ -60,28 +64,22 @@ export function AiLabelMarkers({
   userOverall: number | null;
   simulateItems: SimulateImprovementItem[];
   competitorOverallScores: number[];
-  /** Hides hints bar after first interaction with any dot. */
-  onFirstDotInteraction?: () => void;
 }) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [cardPos, setCardPos] = useState<{ top: number; left: number; line: { x1: number; y1: number; x2: number; y2: number } | null } | null>(null);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dotRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  /** Anchor for cards / tooltip — the visible AI pill, not a separate dot. */
+  const markerRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  const [showIntroPills, setShowIntroPills] = useState(true);
-  const [postCollapseBounce, setPostCollapseBounce] = useState(false);
-  const introTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-
   const [pulseSeen, setPulseSeen] = useState<Record<string, boolean>>({});
-  const firstInteractionDone = useRef(false);
 
   const [showFirstTooltip, setShowFirstTooltip] = useState(false);
   const [firstTooltipReady, setFirstTooltipReady] = useState(false);
   const [firstTooltipPos, setFirstTooltipPos] = useState<{ top: number; left: number } | null>(null);
 
-  const firstDotId = useMemo(() => {
+  const firstMarkerId = useMemo(() => {
     if (rows.length === 0) return null;
     return [...rows].sort((a, b) => a.topPct - b.topPct)[0].id;
   }, [rows]);
@@ -105,30 +103,9 @@ export function AiLabelMarkers({
       setFirstTooltipReady(false);
       return;
     }
-    const t = setTimeout(() => setFirstTooltipReady(true), INTRO_MS + 400);
+    const t = setTimeout(() => setFirstTooltipReady(true), FIRST_TOOLTIP_DELAY_MS);
     return () => clearTimeout(t);
   }, [showFirstTooltip, rowsKey]);
-
-  useEffect(() => {
-    if (rows.length === 0) return;
-    introTimersRef.current.forEach(clearTimeout);
-    introTimersRef.current = [];
-    setShowIntroPills(true);
-    const t1 = setTimeout(() => {
-      setShowIntroPills(false);
-      const t2 = setTimeout(() => {
-        setPostCollapseBounce(true);
-        const t3 = setTimeout(() => setPostCollapseBounce(false), 450);
-        introTimersRef.current.push(t3);
-      }, 200);
-      introTimersRef.current.push(t2);
-    }, INTRO_MS);
-    introTimersRef.current.push(t1);
-    return () => {
-      introTimersRef.current.forEach(clearTimeout);
-      introTimersRef.current = [];
-    };
-  }, [rowsKey, rows.length]);
 
   const dismissFirstTooltipOnly = useCallback(() => {
     setShowFirstTooltip(false);
@@ -139,17 +116,9 @@ export function AiLabelMarkers({
     }
   }, []);
 
-  const markFirstDotInteractionOnly = useCallback(() => {
-    if (!firstInteractionDone.current) {
-      firstInteractionDone.current = true;
-      onFirstDotInteraction?.();
-    }
-  }, [onFirstDotInteraction]);
-
   const onDotInteract = useCallback(() => {
-    markFirstDotInteractionOnly();
     dismissFirstTooltipOnly();
-  }, [markFirstDotInteractionOnly, dismissFirstTooltipOnly]);
+  }, [dismissFirstTooltipOnly]);
 
   useEffect(() => {
     if (!showFirstTooltip || !firstTooltipReady) return;
@@ -163,22 +132,22 @@ export function AiLabelMarkers({
   }, [showFirstTooltip, firstTooltipReady, dismissFirstTooltipOnly]);
 
   const updateFirstTooltipPos = useCallback(() => {
-    if (!showFirstTooltip || !firstTooltipReady || !firstDotId) {
+    if (!showFirstTooltip || !firstTooltipReady || !firstMarkerId) {
       setFirstTooltipPos(null);
       return;
     }
-    const el = dotRefs.current.get(firstDotId);
+    const el = markerRefs.current.get(firstMarkerId);
     if (!el) return;
     const r = el.getBoundingClientRect();
     setFirstTooltipPos({
       top: r.top - 8,
       left: r.left + r.width / 2,
     });
-  }, [showFirstTooltip, firstTooltipReady, firstDotId]);
+  }, [showFirstTooltip, firstTooltipReady, firstMarkerId]);
 
   useLayoutEffect(() => {
     updateFirstTooltipPos();
-  }, [updateFirstTooltipPos, showIntroPills, rowsKey, postCollapseBounce]);
+  }, [updateFirstTooltipPos, rowsKey]);
 
   useEffect(() => {
     if (!showFirstTooltip || !firstTooltipReady) return;
@@ -203,10 +172,9 @@ export function AiLabelMarkers({
       clearLeaveTimer();
       setHoverId(id);
       setPulseSeen((p) => ({ ...p, [id]: true }));
-      markFirstDotInteractionOnly();
       dismissFirstTooltipOnly();
     },
-    [clearLeaveTimer, markFirstDotInteractionOnly, dismissFirstTooltipOnly]
+    [clearLeaveTimer, dismissFirstTooltipOnly]
   );
 
   const onLeaveMarker = useCallback(() => {
@@ -226,9 +194,9 @@ export function AiLabelMarkers({
       setCardPos(null);
       return;
     }
-    const dotEl = dotRefs.current.get(openCardId);
-    if (!dotEl) return;
-    const dr = dotEl.getBoundingClientRect();
+    const markerEl = markerRefs.current.get(openCardId);
+    if (!markerEl) return;
+    const dr = markerEl.getBoundingClientRect();
     const cw = 280;
     const ch = 360;
     const gap = 12;
@@ -255,8 +223,8 @@ export function AiLabelMarkers({
     const onDoc = (e: MouseEvent) => {
       const t = e.target as Node;
       if (cardRef.current?.contains(t)) return;
-      if (openCardId && dotRefs.current.get(openCardId)?.contains(t)) return;
-      for (const el of dotRefs.current.values()) {
+      if (openCardId && markerRefs.current.get(openCardId)?.contains(t)) return;
+      for (const el of markerRefs.current.values()) {
         if (el?.contains(t)) return;
       }
       closeCard();
@@ -272,24 +240,21 @@ export function AiLabelMarkers({
   return (
     <>
       <div className="pointer-events-none absolute inset-0 z-[20] min-h-full">
-        {rows.map((row, i) => {
+        {rows.map((row) => {
           const checked = !!simulateChecked[row.id];
           const fill = scoreToDotColor(row.score);
-          const hover = hoverId === row.id;
-          const growRight = row.leftPct <= 72;
-          const showPill = showIntroPills || hover;
           const seenPulse = !!pulseSeen[row.id];
-          const pulseCls = !showIntroPills ? pulseClassForScore(row.score, seenPulse) : null;
+          const pulseCls = pulseClassForScore(row.score, seenPulse);
+          const hover = hoverId === row.id;
 
           return (
             <div
               key={row.id}
-              className="pointer-events-auto absolute flex items-center gap-0"
+              className="pointer-events-auto absolute flex items-center justify-center"
               style={{
                 top: `${row.topPct}%`,
                 left: `${row.leftPct}%`,
-                transform: "translate(-50%, -50%)",
-                flexDirection: growRight ? "row" : "row-reverse",
+                transform: markerTransformForLeftPct(row.leftPct),
               }}
               onMouseEnter={() => onEnterMarker(row.id)}
               onMouseLeave={onLeaveMarker}
@@ -300,74 +265,46 @@ export function AiLabelMarkers({
             >
               <motion.div
                 ref={(el) => {
-                  if (el) dotRefs.current.set(row.id, el);
-                  else dotRefs.current.delete(row.id);
+                  if (el) markerRefs.current.set(row.id, el);
+                  else markerRefs.current.delete(row.id);
                 }}
-                className="relative z-[21] shrink-0"
+                className={cn("relative z-[21] shrink-0", hover && "z-[23]")}
                 initial={false}
-                animate={{
-                  scale: postCollapseBounce ? [1, 1.15, 1] : 1,
-                }}
-                transition={
-                  postCollapseBounce
-                    ? { duration: 0.45, times: [0, 0.45, 1], ease: "easeOut" }
-                    : { type: "spring", stiffness: 420, damping: 28, delay: i * 0.06 }
-                }
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: "spring", stiffness: 500, damping: 32 }}
               >
-                <span
-                  className={cn("block rounded-full border-2 border-white", pulseCls)}
+                <div
+                  className={cn(
+                    "flex h-8 min-w-0 items-center gap-2 rounded-full border-[1.5px] bg-white py-1 pl-2.5 pr-1 dark:bg-zinc-950",
+                    pulseCls
+                  )}
                   style={{
-                    width: DOT_SIZE_PX,
-                    height: DOT_SIZE_PX,
-                    backgroundColor: checked ? DOT.green : fill,
-                    boxShadow: BASE_DOT_SHADOW,
+                    borderColor: checked ? DOT.green : fill,
+                    boxShadow: pulseCls ? undefined : "0 2px 8px rgba(0,0,0,0.12)",
                   }}
-                  aria-hidden
-                />
-                {checked ? (
-                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-[8px] font-bold leading-none text-white">
-                    ✓
+                >
+                  <span className="text-[13px] font-semibold leading-none text-foreground whitespace-nowrap">
+                    {checked ? "Added ✓" : `${scoreEmoji(row.score)} ${row.sectionLabel} · ${row.score.toFixed(1)}`}
                   </span>
-                ) : null}
-              </motion.div>
-
-              <AnimatePresence>
-                {showPill ? (
-                  <motion.div
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: "auto" }}
-                    exit={{ opacity: 0, width: 0 }}
-                    transition={{ duration: 0.15, ease: "easeOut" }}
-                    className={cn("z-[22] overflow-hidden", growRight ? "ml-1.5 origin-left" : "mr-1.5 origin-right")}
+                  <button
+                    type="button"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1D9E75] text-white shadow-sm hover:brightness-110"
+                    aria-label={checked ? "Remove from Simulate" : "Open suggestion"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDotInteract();
+                      if (checked) {
+                        onSimulateToggle(row.id, false);
+                        toast(`Removed ${row.sectionLabel} from Simulate`, { duration: 2500, position: "bottom-center" });
+                      } else {
+                        setOpenCardId(row.id);
+                      }
+                    }}
                   >
-                    <div
-                      className="flex h-8 min-w-0 items-center gap-2 rounded-full border-[1.5px] bg-white py-1 pl-2.5 pr-1 shadow-sm dark:bg-zinc-950"
-                      style={{ borderColor: checked ? DOT.green : fill }}
-                    >
-                      <span className="text-[13px] font-semibold leading-none text-foreground whitespace-nowrap">
-                        {checked ? "Added ✓" : `${scoreEmoji(row.score)} ${row.sectionLabel} · ${row.score.toFixed(1)}`}
-                      </span>
-                      <button
-                        type="button"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1D9E75] text-white shadow-sm hover:brightness-110"
-                        aria-label={checked ? "Remove from Simulate" : "Open suggestion"}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDotInteract();
-                          if (checked) {
-                            onSimulateToggle(row.id, false);
-                            toast(`Removed ${row.sectionLabel} from Simulate`, { duration: 2500, position: "bottom-center" });
-                          } else {
-                            setOpenCardId(row.id);
-                          }
-                        }}
-                      >
-                        {checked ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />}
-                      </button>
-                    </div>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
+                    {checked ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                  </button>
+                </div>
+              </motion.div>
             </div>
           );
         })}
@@ -376,7 +313,7 @@ export function AiLabelMarkers({
       {showFirstTooltip &&
         firstTooltipReady &&
         firstTooltipPos &&
-        firstDotId &&
+        firstMarkerId &&
         createPortal(
           <div
             className="pointer-events-none fixed z-[101] max-w-[220px] -translate-x-1/2 -translate-y-full rounded-lg border border-border bg-popover px-3 py-2 text-[11px] font-medium text-popover-foreground shadow-lg"
