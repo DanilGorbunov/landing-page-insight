@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { DashboardNavSidebar } from "@/components/DashboardNavSidebar";
+import { DashboardPageShell } from "@/components/DashboardPageShell";
 import { HistoryListPanel } from "@/components/HistoryListPanel";
 import { readFullInsightsPayload, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
 import { getHistoryCount, type HistoryEntry } from "@/lib/analysisHistory";
@@ -60,43 +60,41 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <DashboardNavSidebar
-        activeNavId="history"
-        onSelect={handleNav}
-        reportContext={reportContext}
-        result={result}
-        onNewAnalysis={() => navigate("/")}
-      />
-
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/90 backdrop-blur px-4 md:px-6">
-          <div className="min-w-0 flex items-center gap-2 text-sm">
-            <Link to={auditSectionHref("compare", url)} className="text-muted-foreground hover:text-foreground truncate">
-              Dashboard
-            </Link>
-            <span className="text-muted-foreground/60" aria-hidden>
-              /
-            </span>
-            <span className="font-semibold text-foreground truncate">History</span>
-          </div>
-        </header>
-
-        <main id="main" className="flex-1 overflow-y-auto p-5 md:p-7">
-          <div className="max-w-5xl mx-auto">
-            <h1 className="text-lg font-bold text-foreground mb-1">Analysis history</h1>
-            <p className="text-xs text-muted-foreground mb-6">Open a saved report or start a new analysis from the home page.</p>
-            <HistoryListPanel
-              historyTick={historyTick}
-              onViewReport={handleViewReport}
-              onHistoryMutated={() => {
-                setHistoryCount(getHistoryCount());
-                setHistoryTick((n) => n + 1);
-              }}
-            />
-          </div>
-        </main>
+    <DashboardPageShell
+      sidebarProps={{
+        activeNavId: "history",
+        onSelect: handleNav,
+        reportContext,
+        result,
+        onNewAnalysis: () => navigate("/"),
+      }}
+      headerCenter={
+        <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2 px-1 text-sm">
+          <Link to={auditSectionHref("compare", url)} className="truncate text-muted-foreground hover:text-foreground">
+            Dashboard
+          </Link>
+          <span className="text-muted-foreground/60" aria-hidden>
+            /
+          </span>
+          <span className="truncate font-semibold text-foreground">History</span>
+        </div>
+      }
+      mainClassName="overflow-y-auto p-5 md:p-7"
+    >
+      <div className="mx-auto max-w-5xl">
+        <h1 className="mb-1 text-lg font-bold text-foreground">Analysis history</h1>
+        <p className="mb-6 text-xs text-muted-foreground">
+          Open a saved report or start a new analysis from the home page.
+        </p>
+        <HistoryListPanel
+          historyTick={historyTick}
+          onViewReport={handleViewReport}
+          onHistoryMutated={() => {
+            setHistoryCount(getHistoryCount());
+            setHistoryTick((n) => n + 1);
+          }}
+        />
       </div>
-    </div>
+    </DashboardPageShell>
   );
 }

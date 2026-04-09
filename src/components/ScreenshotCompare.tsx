@@ -29,6 +29,8 @@ import {
   Check,
   Plus,
   RefreshCw,
+  Users,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -114,6 +116,9 @@ const SCREENSHOT_SECTION_FALLBACK_SCORES: Record<(typeof SECTION_KEYS)[number], 
 };
 
 const ZOOM_LEVELS = [1, 1.25, 1.5, 1.75] as const;
+
+/** Split column toolbar: site pill + AI Tips / zoom / heatmap / wide / grid-back — 28px row height. */
+const COMPACT_TOOLBAR_ROW = "h-7 min-h-7";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
@@ -595,20 +600,21 @@ function AiTipsColumnButton({
         aria-label="AI Tips"
         className={cn(
           "inline-flex shrink-0 items-center justify-center rounded-lg border font-semibold transition-colors",
-          compact ? "gap-0.5 px-1.5 py-1 text-[9px]" : "gap-1 px-2.5 py-1.5 text-[11px]",
+          compact
+            ? cn(COMPACT_TOOLBAR_ROW, "w-7 px-0 text-[9px]")
+            : "size-8 px-0 text-[11px]",
           active
             ? "border-[#1D9E75]/50 bg-[#1D9E75]/10 text-[#0f6b4f] dark:text-[#8ee8c8]"
             : "border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
         )}
       >
         <Lightbulb className={cn("shrink-0 opacity-90", compact ? "h-3 w-3" : "h-3.5 w-3.5")} aria-hidden />
-        <span className={compact ? "max-[420px]:sr-only" : ""}>AI Tips</span>
       </button>
     </HintTooltip>
   );
 }
 
-/** Zoom — left of Heatmap on each column; state is keyed by site URL in the parent. */
+/** Zoom — after Heatmap in each column; state is keyed by site URL in the parent. */
 function ZoomColumnControls({
   zoomIdx,
   onZoomOut,
@@ -624,7 +630,12 @@ function ZoomColumnControls({
 }) {
   const zoom = ZOOM_LEVELS[zoomIdx] ?? 1;
   return (
-    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border p-0.5">
+    <div
+      className={cn(
+        "flex shrink-0 gap-0.5 rounded-lg border border-border px-0.5",
+        compact ? cn(COMPACT_TOOLBAR_ROW, "items-stretch py-0") : "items-center p-0.5"
+      )}
+    >
       <HintTooltip
         side="bottom"
         title={HINT_CONTROLS.zoomOut.title}
@@ -639,7 +650,10 @@ function ZoomColumnControls({
             onZoomOut();
           }}
           disabled={zoomIdx === 0}
-          className={cn("rounded p-1 hover:bg-muted disabled:opacity-40", compact && "p-0.5")}
+          className={cn(
+            "flex items-center justify-center rounded hover:bg-muted disabled:opacity-40",
+            compact ? "h-full min-h-0 px-1 py-0" : "p-1"
+          )}
           aria-label="Zoom out"
         >
           <ZoomOut className={cn(compact ? "h-2.5 w-2.5" : "h-3 w-3")} />
@@ -647,8 +661,8 @@ function ZoomColumnControls({
       </HintTooltip>
       <span
         className={cn(
-          "font-mono font-bold text-center text-muted-foreground tabular-nums",
-          compact ? "w-8 text-[9px]" : "w-10 text-[10px]"
+          "inline-flex items-center justify-center font-mono font-bold text-muted-foreground tabular-nums",
+          compact ? "w-8 shrink-0 self-stretch text-[9px]" : "w-10 text-center text-[10px]"
         )}
       >
         {Math.round(zoom * 100)}%
@@ -667,7 +681,10 @@ function ZoomColumnControls({
             onZoomIn();
           }}
           disabled={zoomIdx >= ZOOM_LEVELS.length - 1}
-          className={cn("rounded p-1 hover:bg-muted disabled:opacity-40", compact && "p-0.5")}
+          className={cn(
+            "flex items-center justify-center rounded hover:bg-muted disabled:opacity-40",
+            compact ? "h-full min-h-0 px-1 py-0" : "p-1"
+          )}
           aria-label="Zoom in"
         >
           <ZoomIn className={cn(compact ? "h-2.5 w-2.5" : "h-3 w-3")} />
@@ -706,14 +723,15 @@ function HeatmapColumnButton({
         aria-label="Heatmap"
         className={cn(
           "inline-flex shrink-0 items-center justify-center rounded-lg border font-semibold transition-colors",
-          compact ? "gap-0.5 px-1.5 py-1 text-[9px]" : "gap-1 px-2.5 py-1.5 text-[11px]",
+          compact
+            ? cn(COMPACT_TOOLBAR_ROW, "w-7 px-0 text-[9px]")
+            : "size-8 px-0 text-[11px]",
           active
             ? "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400"
             : "border-border text-muted-foreground hover:bg-muted/50 hover:text-foreground"
         )}
       >
         <MousePointer2 className={cn("shrink-0", compact ? "h-3 w-3" : "h-3.5 w-3.5")} aria-hidden />
-        <span className={compact ? "max-[360px]:sr-only" : ""}>Heatmap</span>
       </button>
     </HintTooltip>
   );
@@ -743,12 +761,35 @@ function WideLayoutButton({
         aria-label={fullWidth ? "Normal width" : "Wide layout"}
         className={cn(
           "inline-flex shrink-0 items-center justify-center rounded-lg border border-border font-semibold text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
-          compact ? "size-7" : "size-8"
+          compact ? cn(COMPACT_TOOLBAR_ROW, "w-7 px-0") : "size-8"
         )}
       >
         {fullWidth ? <Minimize2 className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} /> : <Maximize2 className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />}
       </button>
     </HintTooltip>
+  );
+}
+
+/** Exit wide / full-width — same row as site + AI Tips / Heatmap / Zoom / Wide (not on the screenshot). */
+function ScreenshotWideExitButton({
+  "aria-label": ariaLabel,
+  title,
+  onClose,
+}: {
+  "aria-label": string;
+  title?: string;
+  onClose: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      title={title ?? ariaLabel}
+      aria-label={ariaLabel}
+      className="inline-flex h-7 w-7 shrink-0 items-center justify-center self-stretch rounded-lg border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+    </button>
   );
 }
 
@@ -799,7 +840,7 @@ function SplitSiteColumnPicker({
     <div
       className={cn(
         "inline-flex max-w-full min-w-0 items-center rounded-lg border border-border font-semibold text-muted-foreground transition-colors hover:text-foreground",
-        compact ? "gap-1 px-2 py-1 text-[10px]" : "gap-1.5 px-2.5 py-1.5 text-[11px]"
+        compact ? cn(COMPACT_TOOLBAR_ROW, "gap-1 px-2 py-0 text-[10px]") : "gap-1.5 px-2.5 py-1.5 text-[11px]"
       )}
     >
       {site.isUser && (
@@ -865,14 +906,23 @@ function SplitSiteColumnPicker({
   if (!wideLayout && !heatmap && !aiTips && !zoom) return picker;
 
   return (
-    <div className="flex w-full min-w-0 items-center justify-between gap-2">
-      <div className="min-w-0 flex-1 overflow-hidden">{picker}</div>
-      <div className="flex shrink-0 items-center gap-1">
+    <div className="flex w-full min-w-0 flex-wrap items-stretch justify-start gap-2">
+      {/* Site + dropdown first; then tools — entire group stays left (no flex-1 stretch across the row). */}
+      <div className="min-w-0 shrink">{picker}</div>
+      <div className="flex shrink-0 items-stretch gap-1">
         {aiTips ? (
           <AiTipsColumnButton
             active={aiTips.active}
             onToggle={aiTips.onToggle}
             pushToolbarHelp={aiTips.pushToolbarHelp}
+            compact={compact}
+          />
+        ) : null}
+        {heatmap ? (
+          <HeatmapColumnButton
+            active={heatmap.active}
+            onToggle={heatmap.onToggle}
+            pushToolbarHelp={heatmap.pushToolbarHelp}
             compact={compact}
           />
         ) : null}
@@ -882,14 +932,6 @@ function SplitSiteColumnPicker({
             onZoomOut={zoom.onZoomOut}
             onZoomIn={zoom.onZoomIn}
             pushToolbarHelp={zoom.pushToolbarHelp}
-            compact={compact}
-          />
-        ) : null}
-        {heatmap ? (
-          <HeatmapColumnButton
-            active={heatmap.active}
-            onToggle={heatmap.onToggle}
-            pushToolbarHelp={heatmap.pushToolbarHelp}
             compact={compact}
           />
         ) : null}
@@ -1783,31 +1825,20 @@ export function ScreenshotCompare({
           {/* ANALYZE — Back + History */}
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             {compareToolbarNav ? (
-              <div className="mr-1 flex shrink-0 items-center gap-1 border-r border-border/70 pr-2">
+              <div className="mr-1 flex shrink-0 items-center gap-1 pr-2">
                 <button
                   type="button"
                   onClick={compareToolbarNav.onBack}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                   aria-label="Back"
                 >
-                  <ChevronLeft className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                  <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
                 </button>
-                {onReaudit ? (
-                  <button
-                    type="button"
-                    onClick={onReaudit}
-                    aria-label="Re-audit from scratch"
-                    title="Re-audit from scratch"
-                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                  >
-                    <RefreshCw className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                  </button>
-                ) : null}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="inline-flex max-w-[min(11rem,36vw)] items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-left text-[11px] font-semibold text-foreground transition-colors hover:bg-muted/50"
+                      className="inline-flex h-7 max-w-[min(11rem,36vw)] items-center gap-1 rounded-lg border border-border px-2 py-0 text-left text-[11px] font-semibold text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label="Analysis history"
                     >
                       <span className="min-w-0 truncate">{compareToolbarNav.currentDomain}</span>
@@ -1850,15 +1881,26 @@ export function ScreenshotCompare({
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
+                {onReaudit ? (
+                  <button
+                    type="button"
+                    onClick={onReaudit}
+                    aria-label="Re-audit from scratch"
+                    title="Re-audit from scratch"
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                ) : null}
                 {onNewAnalysis ? (
                   <button
                     type="button"
                     onClick={onNewAnalysis}
                     aria-label="New Analysis"
                     title="New Analysis"
-                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                   >
-                    <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
                   </button>
                 ) : null}
               </div>
@@ -1933,33 +1975,42 @@ export function ScreenshotCompare({
               {viewMode === "single" &&
                 (activeSite.screenshotUrl ? (
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                    <div className="min-w-0 shrink-0">
-                      <SplitSiteColumnPicker
-                        compact
-                        sites={sites}
-                        valueIdx={activeIdx}
-                        onSelect={(idx) => {
-                          if (controlled) pushToolbarHelp("vs-column-single", HINT_CONTROLS.vsSelect);
-                          setActiveIdx(idx);
-                          setExpandedPin(null);
-                        }}
-                        aiTips={{
-                          active: aiTipsVisible,
-                          onToggle: () => setAiTipsVisible((v) => !v),
-                          pushToolbarHelp,
-                        }}
-                        zoom={zoomColumnProps(activeSite.url)}
-                        heatmap={{
-                          active: heatmapEnabledUrls.includes(activeSite.url),
-                          onToggle: () => toggleHeatmapUrl(activeSite.url),
-                          pushToolbarHelp,
-                        }}
-                        wideLayout={{
-                          fullWidth,
-                          onToggle: () => setFullWidth((v) => !v),
-                          pushToolbarHelp,
-                        }}
-                      />
+                    <div className="flex min-w-0 shrink-0 items-stretch gap-1.5">
+                      <div className="min-w-0 flex-1">
+                        <SplitSiteColumnPicker
+                          compact
+                          sites={sites}
+                          valueIdx={activeIdx}
+                          onSelect={(idx) => {
+                            if (controlled) pushToolbarHelp("vs-column-single", HINT_CONTROLS.vsSelect);
+                            setActiveIdx(idx);
+                            setExpandedPin(null);
+                          }}
+                          aiTips={{
+                            active: aiTipsVisible,
+                            onToggle: () => setAiTipsVisible((v) => !v),
+                            pushToolbarHelp,
+                          }}
+                          zoom={zoomColumnProps(activeSite.url)}
+                          heatmap={{
+                            active: heatmapEnabledUrls.includes(activeSite.url),
+                            onToggle: () => toggleHeatmapUrl(activeSite.url),
+                            pushToolbarHelp,
+                          }}
+                          wideLayout={{
+                            fullWidth,
+                            onToggle: () => setFullWidth((v) => !v),
+                            pushToolbarHelp,
+                          }}
+                        />
+                      </div>
+                      {fullWidth ? (
+                        <ScreenshotWideExitButton
+                          aria-label="Restore analysis panel"
+                          title="Exit full width"
+                          onClose={() => setFullWidth(false)}
+                        />
+                      ) : null}
                     </div>
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                       <ScreenshotFrame
@@ -2057,7 +2108,7 @@ export function ScreenshotCompare({
                                 Tap a site to open the full screenshot beside yours.
                               </p>
                             </div>
-                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl border border-border bg-muted/15 p-2 scrollbar-hide">
+                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl bg-muted/15 p-2 scrollbar-hide">
                               <div className="grid grid-cols-2 gap-2">
                                 {competitorSiteEntries.map(({ site, siteIndex }) => (
                                   <button
@@ -2098,47 +2149,57 @@ export function ScreenshotCompare({
                           </div>
                         ) : (
                           <>
-                            {competitorSiteEntries.length > 0 && (
-                              <div className="min-w-0 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    pushToolbarHelp("competitor-grid-back", HINT_CONTROLS.vsSelect);
-                                    backToCompetitorGrid();
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-[10px] font-semibold text-foreground transition-colors hover:bg-muted/50"
+                            <div className="flex min-w-0 max-w-full shrink-0 items-stretch justify-start gap-1.5">
+                              {competitorSiteEntries.length > 0 ? (
+                                <HintTooltip
+                                  side="bottom"
+                                  title="All competitors"
+                                  description="Return to the grid to pick another competitor site."
                                 >
-                                  <ChevronLeft className="h-3 w-3" aria-hidden />
-                                  All competitors
-                                </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      pushToolbarHelp("competitor-grid-back", HINT_CONTROLS.vsSelect);
+                                      backToCompetitorGrid();
+                                    }}
+                                    aria-label="All competitors"
+                                    className={cn(
+                                      "inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+                                      COMPACT_TOOLBAR_ROW,
+                                      "w-7 px-0"
+                                    )}
+                                  >
+                                    <Users className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                                  </button>
+                                </HintTooltip>
+                              ) : null}
+                              <div className="min-w-0 max-w-full shrink">
+                                <SplitSiteColumnPicker
+                                  compact
+                                  sites={sites}
+                                  valueIdx={safeRight}
+                                  onSelect={(idx) => {
+                                    pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
+                                    selectSplitRight(idx);
+                                  }}
+                                  aiTips={{
+                                    active: aiTipsVisible,
+                                    onToggle: () => setAiTipsVisible((v) => !v),
+                                    pushToolbarHelp,
+                                  }}
+                                  zoom={zoomColumnProps(splitRightSite.url)}
+                                  heatmap={{
+                                    active: heatmapEnabledUrls.includes(splitRightSite.url),
+                                    onToggle: () => toggleHeatmapUrl(splitRightSite.url),
+                                    pushToolbarHelp,
+                                  }}
+                                  wideLayout={{
+                                    fullWidth: false,
+                                    onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
+                                    pushToolbarHelp,
+                                  }}
+                                />
                               </div>
-                            )}
-                            <div className="min-w-0 shrink-0">
-                              <SplitSiteColumnPicker
-                                compact
-                                sites={sites}
-                                valueIdx={safeRight}
-                                onSelect={(idx) => {
-                                  pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
-                                  selectSplitRight(idx);
-                                }}
-                                aiTips={{
-                                  active: aiTipsVisible,
-                                  onToggle: () => setAiTipsVisible((v) => !v),
-                                  pushToolbarHelp,
-                                }}
-                                zoom={zoomColumnProps(splitRightSite.url)}
-                                heatmap={{
-                                  active: heatmapEnabledUrls.includes(splitRightSite.url),
-                                  onToggle: () => toggleHeatmapUrl(splitRightSite.url),
-                                  pushToolbarHelp,
-                                }}
-                                wideLayout={{
-                                  fullWidth: false,
-                                  onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
-                                  pushToolbarHelp,
-                                }}
-                              />
                             </div>
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                               <ScreenshotFrame
@@ -2167,31 +2228,38 @@ export function ScreenshotCompare({
                     </div>
                   ) : wideSoloSide === "left" ? (
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                      <div className="min-w-0 shrink-0">
-                        <SplitSiteColumnPicker
-                          compact
-                          sites={sites}
-                          valueIdx={safeLeft}
-                          onSelect={(idx) => {
-                            pushToolbarHelp("vs-column-left", HINT_CONTROLS.vsSelect);
-                            selectSplitLeft(idx);
-                          }}
-                          aiTips={{
-                            active: aiTipsVisible,
-                            onToggle: () => setAiTipsVisible((v) => !v),
-                            pushToolbarHelp,
-                          }}
-                          zoom={zoomColumnProps(splitLeftSite.url)}
-                          heatmap={{
-                            active: heatmapEnabledUrls.includes(splitLeftSite.url),
-                            onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
-                            pushToolbarHelp,
-                          }}
-                          wideLayout={{
-                            fullWidth: true,
-                            onToggle: () => setWideSoloSide((s) => (s === "left" ? null : "left")),
-                            pushToolbarHelp,
-                          }}
+                      <div className="flex min-w-0 shrink-0 items-stretch gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <SplitSiteColumnPicker
+                            compact
+                            sites={sites}
+                            valueIdx={safeLeft}
+                            onSelect={(idx) => {
+                              pushToolbarHelp("vs-column-left", HINT_CONTROLS.vsSelect);
+                              selectSplitLeft(idx);
+                            }}
+                            aiTips={{
+                              active: aiTipsVisible,
+                              onToggle: () => setAiTipsVisible((v) => !v),
+                              pushToolbarHelp,
+                            }}
+                            zoom={zoomColumnProps(splitLeftSite.url)}
+                            heatmap={{
+                              active: heatmapEnabledUrls.includes(splitLeftSite.url),
+                              onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
+                              pushToolbarHelp,
+                            }}
+                            wideLayout={{
+                              fullWidth: true,
+                              onToggle: () => setWideSoloSide((s) => (s === "left" ? null : "left")),
+                              pushToolbarHelp,
+                            }}
+                          />
+                        </div>
+                        <ScreenshotWideExitButton
+                          aria-label="Exit full-width column"
+                          title="Exit full width"
+                          onClose={() => setWideSoloSide(null)}
                         />
                       </div>
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -2220,31 +2288,38 @@ export function ScreenshotCompare({
                     </div>
                   ) : (
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                      <div className="min-w-0 shrink-0">
-                        <SplitSiteColumnPicker
-                          compact
-                          sites={sites}
-                          valueIdx={safeRight}
-                          onSelect={(idx) => {
-                            pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
-                            selectSplitRight(idx);
-                          }}
-                          aiTips={{
-                            active: aiTipsVisible,
-                            onToggle: () => setAiTipsVisible((v) => !v),
-                            pushToolbarHelp,
-                          }}
-                          zoom={zoomColumnProps(splitRightSite.url)}
-                          heatmap={{
-                            active: heatmapEnabledUrls.includes(splitRightSite.url),
-                            onToggle: () => toggleHeatmapUrl(splitRightSite.url),
-                            pushToolbarHelp,
-                          }}
-                          wideLayout={{
-                            fullWidth: true,
-                            onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
-                            pushToolbarHelp,
-                          }}
+                      <div className="flex min-w-0 shrink-0 items-stretch gap-1.5">
+                        <div className="min-w-0 flex-1">
+                          <SplitSiteColumnPicker
+                            compact
+                            sites={sites}
+                            valueIdx={safeRight}
+                            onSelect={(idx) => {
+                              pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
+                              selectSplitRight(idx);
+                            }}
+                            aiTips={{
+                              active: aiTipsVisible,
+                              onToggle: () => setAiTipsVisible((v) => !v),
+                              pushToolbarHelp,
+                            }}
+                            zoom={zoomColumnProps(splitRightSite.url)}
+                            heatmap={{
+                              active: heatmapEnabledUrls.includes(splitRightSite.url),
+                              onToggle: () => toggleHeatmapUrl(splitRightSite.url),
+                              pushToolbarHelp,
+                            }}
+                            wideLayout={{
+                              fullWidth: true,
+                              onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
+                              pushToolbarHelp,
+                            }}
+                          />
+                        </div>
+                        <ScreenshotWideExitButton
+                          aria-label="Exit full-width column"
+                          title="Exit full width"
+                          onClose={() => setWideSoloSide(null)}
                         />
                       </div>
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -2358,31 +2433,38 @@ export function ScreenshotCompare({
                       </>
                     ) : wideSoloSide === "left" ? (
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                        <div className="min-w-0 shrink-0">
-                          <SplitSiteColumnPicker
-                            compact
-                            sites={sites}
-                            valueIdx={safeLeft}
-                            onSelect={(idx) => {
-                              pushToolbarHelp("vs-column-left", HINT_CONTROLS.vsSelect);
-                              selectSplitLeft(idx);
-                            }}
-                            aiTips={{
-                              active: aiTipsVisible,
-                              onToggle: () => setAiTipsVisible((v) => !v),
-                              pushToolbarHelp,
-                            }}
-                            zoom={zoomColumnProps(splitLeftSite.url)}
-                            heatmap={{
-                              active: heatmapEnabledUrls.includes(splitLeftSite.url),
-                              onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
-                              pushToolbarHelp,
-                            }}
-                            wideLayout={{
-                              fullWidth: true,
-                              onToggle: () => setWideSoloSide((s) => (s === "left" ? null : "left")),
-                              pushToolbarHelp,
-                            }}
+                        <div className="flex min-w-0 shrink-0 items-stretch gap-1.5">
+                          <div className="min-w-0 flex-1">
+                            <SplitSiteColumnPicker
+                              compact
+                              sites={sites}
+                              valueIdx={safeLeft}
+                              onSelect={(idx) => {
+                                pushToolbarHelp("vs-column-left", HINT_CONTROLS.vsSelect);
+                                selectSplitLeft(idx);
+                              }}
+                              aiTips={{
+                                active: aiTipsVisible,
+                                onToggle: () => setAiTipsVisible((v) => !v),
+                                pushToolbarHelp,
+                              }}
+                              zoom={zoomColumnProps(splitLeftSite.url)}
+                              heatmap={{
+                                active: heatmapEnabledUrls.includes(splitLeftSite.url),
+                                onToggle: () => toggleHeatmapUrl(splitLeftSite.url),
+                                pushToolbarHelp,
+                              }}
+                              wideLayout={{
+                                fullWidth: true,
+                                onToggle: () => setWideSoloSide((s) => (s === "left" ? null : "left")),
+                                pushToolbarHelp,
+                              }}
+                            />
+                          </div>
+                          <ScreenshotWideExitButton
+                            aria-label="Exit full-width column"
+                            title="Exit full width"
+                            onClose={() => setWideSoloSide(null)}
                           />
                         </div>
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -2411,31 +2493,38 @@ export function ScreenshotCompare({
                       </div>
                     ) : (
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                        <div className="min-w-0 shrink-0">
-                          <SplitSiteColumnPicker
-                            compact
-                            sites={sites}
-                            valueIdx={safeRight}
-                            onSelect={(idx) => {
-                              pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
-                              selectSplitRight(idx);
-                            }}
-                            aiTips={{
-                              active: aiTipsVisible,
-                              onToggle: () => setAiTipsVisible((v) => !v),
-                              pushToolbarHelp,
-                            }}
-                            zoom={zoomColumnProps(splitRightSite.url)}
-                            heatmap={{
-                              active: heatmapEnabledUrls.includes(splitRightSite.url),
-                              onToggle: () => toggleHeatmapUrl(splitRightSite.url),
-                              pushToolbarHelp,
-                            }}
-                            wideLayout={{
-                              fullWidth: true,
-                              onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
-                              pushToolbarHelp,
-                            }}
+                        <div className="flex min-w-0 shrink-0 items-stretch gap-1.5">
+                          <div className="min-w-0 flex-1">
+                            <SplitSiteColumnPicker
+                              compact
+                              sites={sites}
+                              valueIdx={safeRight}
+                              onSelect={(idx) => {
+                                pushToolbarHelp("vs-column-right", HINT_CONTROLS.vsSelect);
+                                selectSplitRight(idx);
+                              }}
+                              aiTips={{
+                                active: aiTipsVisible,
+                                onToggle: () => setAiTipsVisible((v) => !v),
+                                pushToolbarHelp,
+                              }}
+                              zoom={zoomColumnProps(splitRightSite.url)}
+                              heatmap={{
+                                active: heatmapEnabledUrls.includes(splitRightSite.url),
+                                onToggle: () => toggleHeatmapUrl(splitRightSite.url),
+                                pushToolbarHelp,
+                              }}
+                              wideLayout={{
+                                fullWidth: true,
+                                onToggle: () => setWideSoloSide((s) => (s === "right" ? null : "right")),
+                                pushToolbarHelp,
+                              }}
+                            />
+                          </div>
+                          <ScreenshotWideExitButton
+                            aria-label="Exit full-width column"
+                            title="Exit full width"
+                            onClose={() => setWideSoloSide(null)}
                           />
                         </div>
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

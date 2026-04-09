@@ -2,10 +2,9 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Bell, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { DashboardNavSidebar } from "@/components/DashboardNavSidebar";
+import { DashboardPageShell } from "@/components/DashboardPageShell";
 import { getDomain, ensureScore, parseSectionScores } from "@/lib/utils";
 import { readFullInsightsPayload } from "@/lib/reportSession";
-import { getHistoryCount } from "@/lib/analysisHistory";
 import { weightedOverallFromSections } from "@/lib/insightsProjection";
 import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
 import { auditSectionHref } from "@/lib/auditSlug";
@@ -34,7 +33,6 @@ function faviconUrl(domain: string) {
 
 export default function MonitorPage() {
   const navigate = useNavigate();
-  const [historyCount, setHistoryCount] = useState(getHistoryCount);
 
   const payload = readFullInsightsPayload();
   const result: AnalysisResult | null = payload?.result ?? null;
@@ -53,10 +51,6 @@ export default function MonitorPage() {
     url != null && overallScore != null
       ? { url, overallScore, ...(payload?.paidAt ? { createdAt: payload.paidAt } : {}) }
       : null;
-
-  useEffect(() => {
-    setHistoryCount(getHistoryCount());
-  }, []);
 
   const handleNav = (id: string) => {
     if (id === "monitor") return;
@@ -89,33 +83,31 @@ export default function MonitorPage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <DashboardNavSidebar
-        activeNavId="monitor"
-        onSelect={handleNav}
-        reportContext={reportContext}
-        result={result}
-        onNewAnalysis={() => navigate("/")}
-      />
-
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/90 backdrop-blur px-4 md:px-6">
-          <div className="min-w-0 flex items-center gap-2 text-sm">
-            <Link to={auditSectionHref("compare", url)} className="text-muted-foreground hover:text-foreground truncate">
-              Dashboard
-            </Link>
-            <span className="text-muted-foreground/60" aria-hidden>
-              /
-            </span>
-            <span className="font-semibold text-foreground truncate inline-flex items-center gap-1.5">
-              <Bell className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              Monitor
-            </span>
-          </div>
-        </header>
-
-        <main id="main" className="flex-1 overflow-y-auto p-5 md:p-7">
-          <div className="max-w-2xl mx-auto w-full space-y-8">
+    <DashboardPageShell
+      sidebarProps={{
+        activeNavId: "monitor",
+        onSelect: handleNav,
+        reportContext,
+        result,
+        onNewAnalysis: () => navigate("/"),
+      }}
+      headerCenter={
+        <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2 px-1 text-sm">
+          <Link to={auditSectionHref("compare", url)} className="truncate text-muted-foreground hover:text-foreground">
+            Dashboard
+          </Link>
+          <span className="text-muted-foreground/60" aria-hidden>
+            /
+          </span>
+          <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-semibold text-foreground">
+            <Bell className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            Monitor
+          </span>
+        </div>
+      }
+      mainClassName="overflow-y-auto p-5 md:p-7"
+    >
+      <div id="main" className="mx-auto w-full max-w-2xl space-y-8">
             <div>
               <h1 className="text-2xl font-bold text-foreground">Competitor Monitor</h1>
               <p className="text-sm text-muted-foreground mt-1">Track when competitors update their landing pages</p>
@@ -190,8 +182,6 @@ export default function MonitorPage() {
               <p className="text-[11px] text-[hsl(215,20%,65%)] mt-3">Free during beta · No credit card required</p>
             </div>
           </div>
-        </main>
-      </div>
-    </div>
+    </DashboardPageShell>
   );
 }

@@ -24,7 +24,6 @@ import {
 import type { AnalysisResult } from "@/types/api";
 import {
   type ToolbarContext,
-  getRightPanelHeader,
   formatToolbarContextForEmpty,
 } from "@/lib/compareToolbarContext";
 import { buildSectionScoreBreakdown } from "@/lib/scoreBreakdown";
@@ -40,10 +39,15 @@ import { HintTooltip } from "@/components/HintTooltip";
 import { BusinessImpactEstimate } from "@/components/BusinessImpactEstimate";
 import { InsightConfidenceBadge } from "@/components/InsightConfidenceBadge";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
-  ChevronRight,
   ChevronUp,
   ClipboardCopy,
   Crown,
@@ -57,12 +61,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import {
-  computeSimulateProjection,
-  quickWinsSummary,
-  simulateRankAfterScore,
-  type SimulateImprovementItem,
-} from "@/lib/simulateWhatIf";
+import { computeSimulateProjection, type SimulateImprovementItem } from "@/lib/simulateWhatIf";
 
 function sColor(s: number) {
   if (s >= 7.5) return "text-primary";
@@ -728,7 +727,6 @@ export function DecisionActionPanel({
   const prevFocusedKeyRef = useRef<string | null | undefined>(undefined);
   const panelScrollRef = useRef<HTMLDivElement>(null);
 
-  const panelHeader = useMemo(() => getRightPanelHeader(toolbarContext), [toolbarContext]);
   const showFilterEmpty =
     toolbarFilteredSectionCount === 0 &&
     (toolbarContext.analyzeMode != null || toolbarContext.zoneLens !== "balanced");
@@ -805,19 +803,11 @@ export function DecisionActionPanel({
     return buildDeltaLensItems(result, userBy, lensVs.bySection, lensVs.domain);
   }, [result, lensAnnotations, lensVs]);
 
-  const { projected: simulateProjected, netLift: simulateGain, wasCapped: simulateWasCapped } = useMemo(
+  const { projected: simulateProjected, netLift: simulateGain } = useMemo(
     () => computeSimulateProjection(userOverall, simulateItems, simulateChecked, competitorOverallScores),
     [userOverall, simulateItems, simulateChecked, competitorOverallScores]
   );
   const animatedSimulateScore = useAnimatedNumber(simulateProjected, 300);
-  const simulateRankInfo = useMemo(
-    () => simulateRankAfterScore(simulateProjected, competitorOverallScores),
-    [simulateProjected, competitorOverallScores]
-  );
-  const simulateQuickWins = useMemo(
-    () => quickWinsSummary(simulateItems, userOverall, competitorOverallScores),
-    [simulateItems, userOverall, competitorOverallScores]
-  );
 
   /** Below Watch bullets: omit duplicated "What works" block; show only improvement-focused tail when present. */
   const sectionDeepDiveExtraBody = useMemo(
@@ -869,37 +859,36 @@ export function DecisionActionPanel({
         fixMode ? "shadow-md shadow-primary/20" : "shadow-lg shadow-black/15"
       )}
     >
-      {onCollapseRightPanel ? (
-        <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2 px-2 py-1">
-          <HintTooltip
-            side="bottom"
-            title={HINT_CONTROLS.rightPanelToggle.title}
-            description={HINT_CONTROLS.rightPanelToggle.description}
-            action={HINT_CONTROLS.rightPanelToggle.action}
-          >
-            <button
-              type="button"
-              onClick={onCollapseRightPanel}
-              className={cn(
-                "inline-flex shrink-0 items-center gap-0.5 rounded-lg border px-2 pb-1.5 pt-1 text-[10px] font-semibold leading-none transition-colors",
-                "border-border text-muted-foreground hover:border-border/80 hover:bg-muted/40 hover:text-foreground"
-              )}
-              aria-label="Hide analysis panel"
-            >
-              <ChevronRight className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
-            </button>
-          </HintTooltip>
-        </div>
-      ) : null}
-
-      <div ref={panelScrollRef} className="p-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0">
+      <div
+        ref={panelScrollRef}
+        className="scrollbar-hide px-0 pt-1 pb-3 overflow-y-auto text-xs space-y-3 flex-1 min-h-0"
+      >
         <Fragment key={toolbarContextKey}>
           <div className="space-y-3">
             <div className="rounded-lg border border-primary/25 bg-gradient-to-b from-primary/[0.07] to-transparent px-3 py-3 space-y-3">
               <div className="flex items-center gap-2">
                 <FlaskConical className="h-4 w-4 text-primary shrink-0" aria-hidden />
-                <p className="text-[11px] font-bold text-foreground">What-if Simulator</p>
-                <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Preview</span>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <p className="text-[11px] font-bold text-foreground">What-if Simulator</p>
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-muted-foreground">Preview</span>
+                </div>
+                {onCollapseRightPanel ? (
+                  <HintTooltip
+                    side="bottom"
+                    title={HINT_CONTROLS.rightPanelToggle.title}
+                    description={HINT_CONTROLS.rightPanelToggle.description}
+                    action={HINT_CONTROLS.rightPanelToggle.action}
+                  >
+                    <button
+                      type="button"
+                      onClick={onCollapseRightPanel}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                      aria-label="Hide analysis panel"
+                    >
+                      <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                    </button>
+                  </HintTooltip>
+                ) : null}
               </div>
               <div>
                   <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1.5">Projected overall</p>
@@ -918,234 +907,326 @@ export function DecisionActionPanel({
                       style={{ width: `${Math.min(100, (simulateProjected / 10) * 100)}%` }}
                     />
                   </div>
-                  <p className="mt-2 text-[11px] text-foreground">
-                    {simulateWasCapped && simulateRankInfo.isTop ? (
-                      <>
-                        You&apos;d rank <span className="font-bold text-primary tabular-nums">#1</span> — ahead of all
-                        competitors
-                      </>
-                    ) : simulateRankInfo.isTop ? (
-                      <>
-                        Projected rank: <span className="font-bold text-primary tabular-nums">#1</span>{" "}
-                        <span aria-hidden>🏆</span>
-                        <span className="text-muted-foreground"> — ahead of benchmarks in this set</span>
-                      </>
-                    ) : (
-                      <>
-                        Projected rank: <span className="font-bold tabular-nums">#{simulateRankInfo.rank}</span> of{" "}
-                        {simulateRankInfo.total}
-                      </>
-                    )}
-                  </p>
                 </div>
-                <div className="rounded-lg border border-border/80 bg-card/60 px-2.5 py-2">
-                  <p className="text-[9px] font-bold uppercase text-muted-foreground mb-1">Quick wins</p>
-                  <p className="text-[11px] leading-snug text-foreground">{simulateQuickWins.rankLine}</p>
-                </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Improvements</p>
-              {simulateItems.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-2">
-                  No improvement rows yet — run an analysis with gaps or section scores.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {simulateItems.map((item) => {
-                    const checked = !!simulateChecked[item.id];
-                    return (
-                      <li
-                        key={item.id}
-                        className={cn(
-                          "rounded-lg border px-2.5 py-2 transition-colors",
-                          checked ? "border-[#1D9E75]/50 bg-[#1D9E75]/[0.06]" : "border-border bg-muted/15"
-                        )}
-                      >
-                        <div className="flex items-start gap-1">
-                          <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => onSimulateToggle?.(item.id, e.target.checked)}
-                              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary transition-transform duration-200 ease-out checked:scale-110"
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex flex-wrap items-center gap-1.5 gap-y-1">
-                                <span className="text-[11px] font-bold text-foreground">{item.sectionLabel}</span>
-                                <span className="inline-flex items-center rounded-full border border-[#1D9E75]/40 bg-[#1D9E75]/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#0f6b4f] dark:text-[#5ed9a8]">
-                                  +{item.points.toFixed(1)} pts
-                                </span>
-                                <span
-                                  className={cn(
-                                    "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase",
-                                    effortSimulateClass(item.effort)
-                                  )}
-                                >
-                                  {item.effort}
-                                </span>
-                              </span>
-                              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{item.oneLineFix}</span>
-                            </span>
-                          </label>
-                          {checked ? (
-                            <button
-                              type="button"
-                              className="mt-0.5 shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                              aria-label={`Remove ${item.sectionLabel} from plan`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                onSimulateToggle?.(item.id, false);
-                              }}
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          ) : null}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
             </div>
 
             {fixMode && (
-              <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-[11px] text-foreground flex items-start gap-2">
-                <Wrench className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-[11px] text-foreground">
+                <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <div>
                   <span className="font-bold text-primary">Fix mode on</span>
-                  <span className="text-muted-foreground"> — only high-impact issues and P1 gaps. Turn off to see full metrics.</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    — only high-impact issues and P1 gaps. Turn off to see full metrics.
+                  </span>
                 </div>
               </div>
             )}
 
-            <div id="compare-scroll-simulate-plan" className="rounded-lg border border-border bg-muted/20 p-3 space-y-2 scroll-mt-4">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-foreground">Recommended next steps</p>
-              {topPlan.length === 0 ? (
-                <p className="text-muted-foreground">Add gaps or an action plan in the report to populate this list.</p>
-              ) : (
-                <ol className="space-y-2">
-                  {topPlan.map((row, i) => (
-                    <li key={`${row.title}-${i}`} className="flex gap-2 items-start">
-                      <span className="font-bold text-primary tabular-nums shrink-0">{i + 1}.</span>
-                      <div className="min-w-0 flex-1">
-                        <span className={cn("text-[9px] font-bold uppercase rounded px-1.5 py-0.5 mr-2", impactBadge(row.impact))}>
-                          {row.impact}
-                        </span>
-                        <span className="text-foreground leading-snug">{row.title}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setFixMode(true);
-                  setSimplifyCEO(false);
-                }}
-                className="w-full mt-1 inline-flex items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-foreground hover:brightness-110"
-              >
-                <Rocket className="h-3.5 w-3.5" />
-                Apply fixes (focus P1)
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tools</p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setFixMode(!fixMode)}
+                  className={cn(
+                    "flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase",
+                    fixMode
+                      ? "bg-primary text-primary-foreground ring-2 ring-primary/60"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Wrench className="h-3 w-3" />
+                  {fixMode ? "Fix mode on" : "Fix mode"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSimplifyCEO(!simplifyCEO)}
+                  className={cn(
+                    "rounded-full px-2 py-1 text-[10px] font-bold uppercase",
+                    simplifyCEO
+                      ? "bg-amber-500/20 text-amber-700 dark:text-amber-400"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  CEO view
+                </button>
+              </div>
             </div>
 
-            {simplifyCEO ? (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
-                <p className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400">Explain like I&apos;m CEO</p>
-                <ul className="list-disc pl-4 space-y-1.5 text-foreground leading-relaxed">
-                  {ceoBullets.map((b, i) => (
-                    <li key={i}>{b}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+            <Accordion type="multiple" defaultValue={["improvements"]} className="rounded-lg border border-border bg-card/30">
+              <AccordionItem value="improvements" className="border-border px-0">
+                <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                  Improvements
+                </AccordionTrigger>
+                <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                  {simulateItems.length === 0 ? (
+                    <p className="text-[11px] text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-2">
+                      No improvement rows yet — run an analysis with gaps or section scores.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {simulateItems.map((item) => {
+                        const checked = !!simulateChecked[item.id];
+                        return (
+                          <li
+                            key={item.id}
+                            className={cn(
+                              "rounded-lg border px-2.5 py-2 transition-colors",
+                              checked ? "border-[#1D9E75]/50 bg-[#1D9E75]/[0.06]" : "border-border bg-muted/15"
+                            )}
+                          >
+                            <div className="flex items-start gap-1">
+                              <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => onSimulateToggle?.(item.id, e.target.checked)}
+                                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-primary transition-transform duration-200 ease-out checked:scale-110"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex flex-wrap items-center gap-1.5 gap-y-1">
+                                    <span className="text-[11px] font-bold text-foreground">{item.sectionLabel}</span>
+                                    <span className="inline-flex items-center rounded-full border border-[#1D9E75]/40 bg-[#1D9E75]/10 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-[#0f6b4f] dark:text-[#5ed9a8]">
+                                      +{item.points.toFixed(1)} pts
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase",
+                                        effortSimulateClass(item.effort)
+                                      )}
+                                    >
+                                      {item.effort}
+                                    </span>
+                                  </span>
+                                  <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{item.oneLineFix}</span>
+                                </span>
+                              </label>
+                              {checked ? (
+                                <button
+                                  type="button"
+                                  className="mt-0.5 shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                  aria-label={`Remove ${item.sectionLabel} from plan`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    onSimulateToggle?.(item.id, false);
+                                  }}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              ) : null}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
 
-            <div className="rounded-lg border border-border p-3 space-y-2">
-              <p className="text-[10px] font-bold uppercase text-muted-foreground">What to fix</p>
-              {gaps.length === 0 ? (
-                <p className="text-muted-foreground">{fixMode ? "No P1 gaps in payload." : "No gaps listed in this report yet."}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {gaps.slice(0, 6).map((g, i) => (
-                    <li key={i} className="rounded-lg bg-muted/20 border border-border/60 p-2">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <InsightConfidenceBadge level={insightConf} />
-                        <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-background/60 px-1.5 py-0.5 text-muted-foreground">
-                          Data coverage {dataCoveragePct}%
-                        </span>
-                      </div>
-                      <span
-                        className={cn(
-                          "text-[9px] font-bold rounded px-1.5 py-0.5",
-                          g.priority === "P1" ? "bg-red-500/15 text-red-500" : "bg-amber-500/15 text-amber-500"
-                        )}
-                      >
-                        {g.priority}
+              <AccordionItem value="recommended" className="border-border px-0">
+                <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                  Recommended next steps
+                </AccordionTrigger>
+                <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                  <div id="compare-scroll-simulate-plan" className="scroll-mt-4 space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                    {topPlan.length === 0 ? (
+                      <p className="text-muted-foreground">Add gaps or an action plan in the report to populate this list.</p>
+                    ) : (
+                      <ol className="space-y-2">
+                        {topPlan.map((row, i) => (
+                          <li key={`${row.title}-${i}`} className="flex items-start gap-2">
+                            <span className="shrink-0 font-bold tabular-nums text-primary">{i + 1}.</span>
+                            <div className="min-w-0 flex-1">
+                              <span
+                                className={cn("mr-2 inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase", impactBadge(row.impact))}
+                              >
+                                {row.impact}
+                              </span>
+                              <span className="leading-snug text-foreground">{row.title}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFixMode(true);
+                        setSimplifyCEO(false);
+                      }}
+                      className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-foreground hover:brightness-110"
+                    >
+                      <Rocket className="h-3.5 w-3.5" />
+                      Apply fixes (focus P1)
+                    </button>
+                  </div>
+                  {simplifyCEO ? (
+                    <div className="mt-2 space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                      <p className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400">Explain like I&apos;m CEO</p>
+                      <ul className="list-disc space-y-1.5 pl-4 leading-relaxed text-foreground">
+                        {ceoBullets.map((b, i) => (
+                          <li key={i}>{b}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="what-to-fix" className="border-border px-0">
+                <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                  What to fix
+                </AccordionTrigger>
+                <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                  {gaps.length === 0 ? (
+                    <p className="text-muted-foreground">{fixMode ? "No P1 gaps in payload." : "No gaps listed in this report yet."}</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {gaps.slice(0, 6).map((g, i) => (
+                        <li key={i} className="rounded-lg border border-border/60 bg-muted/20 p-2">
+                          <span
+                            className={cn(
+                              "inline-block rounded px-1.5 py-0.5 text-[9px] font-bold",
+                              g.priority === "P1" ? "bg-red-500/15 text-red-500" : "bg-amber-500/15 text-amber-500"
+                            )}
+                          >
+                            {g.priority}
+                          </span>
+                          <p className="mt-1 text-foreground">{g.problem}</p>
+                          <p className="mt-0.5 text-[11px] text-primary">{g.recommendation}</p>
+                          {g.recommendation?.trim() ? (
+                            <CopyGeneratorBlock
+                              result={result}
+                              sectionKey={inferSectionKeyFromGapArea(g.area) ?? "hero"}
+                              issue={g.problem}
+                            />
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="business-impact" className="border-border px-0">
+                <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                  Business impact
+                </AccordionTrigger>
+                <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                  <div className="rounded-lg border border-border bg-muted/15 px-2 py-2">
+                    <BusinessImpactEstimate conversion={conversion} />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="conversion-impact" className="border-border px-0">
+                <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                  Conversion impact
+                </AccordionTrigger>
+                <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                  <div className="space-y-2 rounded-lg border border-border p-3">
+                    <p className="leading-snug text-foreground">{verdictLine}</p>
+                    <div className="flex flex-wrap gap-2 text-[10px]">
+                      <span className={cn("rounded-full border px-2 py-0.5", riskBadge(conversion.risk))}>Risk: {conversion.risk}</span>
+                      <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">
+                        Friction {conversion.frictionScore.toFixed(1)}/10
                       </span>
-                      <p className="text-foreground mt-1">{g.problem}</p>
-                      <p className="text-primary text-[11px] mt-0.5">{g.recommendation}</p>
-                      {g.recommendation?.trim() ? (
-                        <CopyGeneratorBlock
-                          result={result}
-                          sectionKey={inferSectionKeyFromGapArea(g.area) ?? "hero"}
-                          issue={g.problem}
-                        />
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                      <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">
+                        Cognitive load: {conversion.cognitiveLoad}
+                      </span>
+                    </div>
+                    <p className="text-muted-foreground">
+                      Est. revenue at stake:{" "}
+                      <span className="font-bold tabular-nums text-red-500">
+                        −{conversion.lossLowPct}–{conversion.lossHighPct}%
+                      </span>
+                    </p>
+                    <div className="space-y-1.5 border-t border-border/80 pt-2">
+                      <p className="text-[10px] font-bold uppercase text-primary">Why risk is {conversion.risk}</p>
+                      <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+                        {riskWhyBut.why.map((line, i) => (
+                          <li key={i}>{line}</li>
+                        ))}
+                      </ul>
+                      <p className="pt-1 text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400">But</p>
+                      <p className="leading-relaxed text-foreground">{riskWhyBut.but}</p>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="insights-body" className="border-border px-0">
+                <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                  Insights
+                </AccordionTrigger>
+                <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                  {defaultInsightProblemCard ? (
+                    <div
+                      id="compare-scroll-insight"
+                      className="space-y-2 rounded-lg border border-red-500/35 bg-card/80 px-3 py-3 shadow-[inset_0_1px_0_0_rgba(248,113,113,0.1)] scroll-mt-3"
+                    >
+                      <p className="text-sm font-semibold text-foreground">{sectionLabel}</p>
+                      <p className="text-sm leading-snug text-foreground">{threeSecondInsight.problem}</p>
+                      <p className="pt-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">In 3 seconds</p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">{threeSecondInsight.result}</p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">No section insight for this view.</p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="compete" className="border-border px-0">
+                <AccordionTrigger className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                  <span className="line-clamp-2 text-left">
+                    How {competeHeadingName} does it differently
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                  <motion.div
+                    key={activeSite.isUser ? `user-${userSite.domain}` : `comp-${activeSite.domain}`}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="space-y-3"
+                  >
+                    <CompetePanelBody
+                      hideCompetitorRefs={!!hideCompetitorRefs}
+                      winNarrative={winNarrative}
+                      stealThree={stealThree}
+                      abVariants={abVariants}
+                      result={result}
+                      insightConf={insightConf}
+                      dataCoveragePct={dataCoveragePct}
+                      activeSite={activeSite}
+                      copyLine={copyLine}
+                    />
+                  </motion.div>
+                </AccordionContent>
+              </AccordionItem>
+
+              {!fixMode && (
+                <AccordionItem value="confidence" className="border-b-0 border-border px-0">
+                  <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                    Confidence · Data coverage
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                    <div className="flex items-start justify-between gap-2 rounded-lg border border-border/80 p-2.5">
+                      <div>
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <InsightConfidenceBadge level={insightConf} />
+                          <p className="text-[10px] font-bold uppercase text-muted-foreground">Data coverage</p>
+                        </div>
+                        <p className="text-lg font-bold tabular-nums text-foreground">{dataCoveragePct}%</p>
+                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{confidenceExplanation(gapConfidence)}</p>
+                      </div>
+                      <ScanEye className="h-8 w-8 shrink-0 text-muted-foreground/40" aria-hidden />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
               )}
-            </div>
-
-            <div className="space-y-3 pt-2 border-t border-border">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Business impact</p>
-              <div className="rounded-lg border border-border bg-muted/15 px-2 py-2">
-                <BusinessImpactEstimate conversion={conversion} />
-              </div>
-              <div className="rounded-lg border border-border p-3 space-y-2">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <InsightConfidenceBadge level={insightConf} />
-                  <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-muted/40 px-1.5 py-0.5 text-muted-foreground">
-                    Data coverage {dataCoveragePct}%
-                  </span>
-                </div>
-                <p className="text-[10px] font-bold uppercase text-muted-foreground">Conversion impact</p>
-                <p className="text-foreground leading-snug">{verdictLine}</p>
-                <div className="flex flex-wrap gap-2 text-[10px]">
-                  <span className={cn("rounded-full border px-2 py-0.5", riskBadge(conversion.risk))}>Risk: {conversion.risk}</span>
-                  <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">
-                    Friction {conversion.frictionScore.toFixed(1)}/10
-                  </span>
-                  <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5 text-muted-foreground">
-                    Cognitive load: {conversion.cognitiveLoad}
-                  </span>
-                </div>
-                <p className="text-muted-foreground">
-                  Est. revenue at stake:{" "}
-                  <span className="font-bold text-red-500 tabular-nums">
-                    −{conversion.lossLowPct}–{conversion.lossHighPct}%
-                  </span>
-                </p>
-                <div className="pt-2 border-t border-border/80 space-y-1.5">
-                  <p className="text-[10px] font-bold uppercase text-primary">Why risk is {conversion.risk}</p>
-                  <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
-                    {riskWhyBut.why.map((line, i) => (
-                      <li key={i}>{line}</li>
-                    ))}
-                  </ul>
-                  <p className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 pt-1">But</p>
-                  <p className="text-foreground leading-relaxed">{riskWhyBut.but}</p>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-[10px] leading-snug text-muted-foreground border-t border-border pt-2">
-              Maximum projected score capped at realistic ceiling.
-              <br />
-              Actual results depend on implementation quality.
-            </p>
+            </Accordion>
           </div>
 
           <div className="space-y-3 border-t border-border pt-3">
@@ -1177,14 +1258,6 @@ export function DecisionActionPanel({
                 ))}
               </div>
             )}
-            {(panelHeader.title || panelHeader.subtitle) && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 transition-opacity duration-150">
-                {panelHeader.title && <p className="text-[11px] font-bold text-primary">{panelHeader.title}</p>}
-                {panelHeader.subtitle && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{panelHeader.subtitle}</p>
-                )}
-              </div>
-            )}
             {attentionInsight && toolbarContext.analyzeMode === "attention" && (
               <AttentionAnalysisPanel
                 loading={attentionInsight.loading}
@@ -1202,32 +1275,6 @@ export function DecisionActionPanel({
                 No {formatToolbarContextForEmpty(toolbarContext)} issues found in this section — that&apos;s a good sign ✓
               </div>
             )}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Insight</p>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setFixMode(!fixMode)}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[10px] font-bold uppercase flex items-center gap-1",
-                    fixMode ? "bg-primary text-primary-foreground ring-2 ring-primary/60" : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Wrench className="h-3 w-3" />
-                  {fixMode ? "Fix mode on" : "Fix mode"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSimplifyCEO(!simplifyCEO)}
-                  className={cn(
-                    "rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                    simplifyCEO ? "bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  CEO view
-                </button>
-              </div>
-            </div>
             {hideCompetitorRefs && (
               <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5">
                 <p className="text-[11px] font-semibold text-foreground">Your site only</p>
@@ -1235,41 +1282,6 @@ export function DecisionActionPanel({
                   Single view — competitor comparison is hidden. Use Original, Split, or Slider to see vs{" "}
                   {vsDomain ?? "a competitor"}.
                 </p>
-              </div>
-            )}
-            {!hideCompetitorRefs && statusBanner && (
-              <CompareHeaderStatus
-                variant="overview"
-                userScore={statusBanner.userScore}
-                rank={statusBanner.rank}
-                totalRanked={statusBanner.totalRanked}
-                losing={statusBanner.losing}
-                conversion={statusBanner.conversion}
-                mainIssue={statusBanner.mainIssue}
-              />
-            )}
-            {quickWin && !hideCompetitorRefs && onQuickWinDismiss && onQuickWinPlan && (
-              <div className="flex flex-wrap items-center gap-2 rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-950 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-50">
-                <span className="min-w-0 flex-1 leading-snug">
-                  <span className="font-bold">Quick Win:</span>{" "}
-                  <span className="font-semibold">{quickWin.label}</span> — {quickWin.fixOne} → est.{" "}
-                  <span className="font-bold tabular-nums">+{quickWin.impact}%</span> impact
-                </span>
-                <button
-                  type="button"
-                  onClick={onQuickWinPlan}
-                  className="shrink-0 rounded-full border border-amber-600/40 bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-950 hover:bg-amber-200 dark:border-amber-400/50 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-900/80"
-                >
-                  Fix this →
-                </button>
-                <button
-                  type="button"
-                  onClick={onQuickWinDismiss}
-                  className="shrink-0 rounded-md p-1 text-amber-800 hover:bg-amber-200/80 dark:text-amber-200 dark:hover:bg-amber-900/60"
-                  aria-label="Dismiss quick win"
-                >
-                  ×
-                </button>
               </div>
             )}
             {sectionDeepDive && (
@@ -1321,13 +1333,13 @@ export function DecisionActionPanel({
                   </div>
                 )}
                 {sectionDeepDiveExtraBody ? (
-                  <div className="rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
+                  <div className="scrollbar-hide rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
                     <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
                       {sectionDeepDiveExtraBody}
                     </p>
                   </div>
                 ) : sectionDeepDive.watchPoints.length === 0 ? (
-                  <div className="rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
+                  <div className="scrollbar-hide rounded-lg border border-border/80 bg-card/50 p-2.5 max-h-[min(280px,40vh)] overflow-y-auto">
                     <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">
                       {annotationDisplayBody(sectionDeepDive.fullText) || "—"}
                     </p>
@@ -1346,71 +1358,23 @@ export function DecisionActionPanel({
             {toolbarContext.analyzeMode === null && toolbarContext.zoneLens === "delta" && (
               <DeltaLensPanel summary={deltaLensPack.summary} items={deltaLensPack.items} />
             )}
-            {defaultInsightProblemCard && (
-            <div
-              id="compare-scroll-insight"
-              className="rounded-lg border border-red-500/35 bg-card/80 px-3 py-3 space-y-2 shadow-[inset_0_1px_0_0_rgba(248,113,113,0.1)] scroll-mt-3"
-            >
-              <p className="text-sm font-semibold text-foreground">{sectionLabel}</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <InsightConfidenceBadge level={insightConf} />
-                <span className="text-[9px] font-bold uppercase tracking-wide rounded border border-border bg-muted/50 px-1.5 py-0.5 text-muted-foreground">
-                  Data coverage {dataCoveragePct}%
-                </span>
-              </div>
-              <p className="text-sm text-foreground leading-snug">{threeSecondInsight.problem}</p>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground pt-1">In 3 seconds</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">{threeSecondInsight.result}</p>
-            </div>
-            )}
-            <motion.div
-              key={activeSite.isUser ? `user-${userSite.domain}` : `comp-${activeSite.domain}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
-              className="pt-3 border-t border-border space-y-3"
-            >
-              {!hideCompetitorRefs && (
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                  How {competeHeadingName} does it differently
-                </p>
-              )}
-              <CompetePanelBody
-                hideCompetitorRefs={!!hideCompetitorRefs}
-                winNarrative={winNarrative}
-                stealThree={stealThree}
-                abVariants={abVariants}
-                result={result}
-                insightConf={insightConf}
-                dataCoveragePct={dataCoveragePct}
-                activeSite={activeSite}
-                copyLine={copyLine}
-              />
-            </motion.div>
           </div>
 
           <div className="space-y-3 border-t border-border pt-3">
             {!fixMode && (
-              <div className="rounded-lg border border-border/80 p-2.5 flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <InsightConfidenceBadge level={insightConf} />
-                    <p className="text-[10px] font-bold uppercase text-muted-foreground">Data coverage</p>
-                  </div>
-                  <p className="text-lg font-bold tabular-nums text-foreground">{dataCoveragePct}%</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{confidenceExplanation(gapConfidence)}</p>
-                </div>
-                <ScanEye className="h-8 w-8 text-muted-foreground/40 shrink-0" />
-              </div>
-            )}
-
-            {!fixMode && (
               <>
                 <div className="rounded-lg border border-border overflow-hidden">
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setHeroOpen(!heroOpen)}
-                    className="w-full flex items-center justify-between px-3 py-2 bg-muted/30 hover:bg-muted/50"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setHeroOpen((o) => !o);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-muted/30 hover:bg-muted/50 cursor-pointer"
                   >
                     <span className="font-semibold text-foreground inline-flex items-center gap-1 flex-wrap">
                       {sectionLabel}{" "}
@@ -1428,7 +1392,7 @@ export function DecisionActionPanel({
                       )}
                     </span>
                     {heroOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
+                  </div>
                   {heroOpen && focusedKey === "hero" && (
                     <div className="px-3 py-2 space-y-1.5 border-t border-border bg-card/50">
                       <p className="text-[10px] text-muted-foreground mb-1">Hero breakdown</p>

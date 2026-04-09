@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   LayoutDashboard,
   RefreshCw,
+  BarChart3,
   Eye,
   Plus,
   Sparkles,
@@ -24,7 +25,7 @@ interface NavItem {
 const COMPARE_NAV_ITEM: NavItem = { id: "compare", label: "Compare", icon: RefreshCw, group: "MAIN" };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "overview", label: "Overview", icon: RefreshCw, group: "MAIN" },
+  { id: "overview", label: "Overview", icon: BarChart3, group: "MAIN" },
   { id: "monitor", label: "Monitor", icon: Eye, group: "COMPETE" },
 ];
 

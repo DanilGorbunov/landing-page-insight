@@ -1,10 +1,15 @@
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { useMemo } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Check, X } from "lucide-react";
 import { TouchTargetButton } from "@/components/ui/touch-target-button";
 import { CardContainer } from "@/components/ui/card-container";
-import { TOUCH_TARGET_CLASS } from "@/lib/constants";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { cn } from "@/lib/utils";
+import { DashboardPageShell } from "@/components/DashboardPageShell";
+import { cn, ensureScore, parseSectionScores } from "@/lib/utils";
+import { readFullInsightsPayload } from "@/lib/reportSession";
+import { weightedOverallFromSections } from "@/lib/insightsProjection";
+import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
+import { auditSectionHref } from "@/lib/auditSlug";
+import type { AnalysisResult } from "@/types/api";
 
 type FeatureLine = { text: string; included: boolean };
 
@@ -123,81 +128,97 @@ const Pricing = () => {
   const location = useLocation();
   const fromReport = location.state?.fromReport === true;
 
+  const payload = readFullInsightsPayload();
+  const result: AnalysisResult | null = payload?.result ?? null;
+  const url = payload?.url ?? null;
+
+  const overallScore = useMemo(() => {
+    if (!result) return null;
+    const s = result.synthesis?.overall_score;
+    if (s != null) return ensureScore(s);
+    const userScores = parseSectionScores(result.userAnalysis);
+    return weightedOverallFromSections(userScores) ?? 7.0;
+  }, [result]);
+
+  const reportContext =
+    url != null && overallScore != null
+      ? { url, overallScore, ...(payload?.paidAt ? { createdAt: payload.paidAt } : {}) }
+      : null;
+
+  const handleNav = (id: string) => {
+    if (id === "history") {
+      navigate("/history");
+      return;
+    }
+    if (id === "monitor") {
+      navigate("/monitor");
+      return;
+    }
+    if (FULL_INSIGHTS_SECTION_IDS.has(id)) {
+      navigate(auditSectionHref(id, url));
+    }
+  };
+
   const goCheckout = (planId: string) => {
     navigate(`/checkout?plan=${encodeURIComponent(planId)}`, { state: { fromReport, planId } });
   };
 
-  const handleBack = () => {
-    if (fromReport) {
-      navigate("/", { state: { restoreReport: true } });
-    } else {
-      navigate(-1);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="sticky top-0 z-20 h-14 flex items-center border-b border-border bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
-        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 flex items-center justify-between">
-          <TouchTargetButton
-            onClick={handleBack}
-            className="gap-2 px-2 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </TouchTargetButton>
-          <Link
-            to="/"
-            className={`${TOUCH_TARGET_CLASS} font-sans text-base font-semibold tracking-tight text-foreground hover:text-primary transition-colors`}
-          >
-            Landing Lens
-          </Link>
-          <ThemeToggle />
+    <DashboardPageShell
+      sidebarProps={{
+        activeNavId: "pricing",
+        onSelect: handleNav,
+        reportContext,
+        result,
+        onNewAnalysis: () => navigate("/"),
+      }}
+      headerCenter={
+        <div className="flex min-h-0 min-w-0 flex-1 items-center px-1">
+          <span className="text-sm font-semibold text-foreground">Pricing</span>
         </div>
-      </header>
-
-      <main className="flex-1 px-4 sm:px-6 py-10 sm:py-14 pb-16 max-w-[1600px] mx-auto w-full">
-        <div className="text-center mb-10 sm:mb-14">
-          <h1 className="font-display text-3xl md:text-[2rem] font-medium tracking-tight text-foreground mb-3">
+      }
+      mainClassName="overflow-y-auto px-4 py-10 pb-16 sm:px-6 sm:py-14"
+    >
+      <div className="mx-auto w-full max-w-[1600px]">
+        <div className="mb-10 text-center sm:mb-14">
+          <h1 className="font-display mb-3 text-3xl font-medium tracking-tight text-foreground md:text-[2rem]">
             LandingLens — Pricing Tiers
           </h1>
-          <p className="text-muted-foreground text-sm max-w-2xl mx-auto leading-relaxed">
+          <p className="mx-auto max-w-2xl text-sm leading-relaxed text-muted-foreground">
             From a free competitive snapshot to agency-grade intelligence. All features listed in plain English.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 lg:gap-6 items-stretch">
+        <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-4 lg:gap-6">
           {PLANS.map((plan) => (
             <CardContainer key={plan.id} highlighted={plan.default} className="h-full">
               <div className="mb-4">
                 {plan.default && (
-                  <span className="inline-block text-[10px] font-semibold uppercase tracking-wider text-primary mb-2">
+                  <span className="mb-2 inline-block text-[10px] font-semibold uppercase tracking-wider text-primary">
                     Recommended
                   </span>
                 )}
-                <div className="flex items-start gap-2 flex-wrap">
-                  <span className="text-xl leading-none shrink-0" aria-hidden>
+                <div className="flex flex-wrap items-start gap-2">
+                  <span className="shrink-0 text-xl leading-none" aria-hidden>
                     {plan.emoji}
                   </span>
                   <div>
-                    <h2 className="text-sm font-semibold text-foreground leading-tight">{plan.name}</h2>
-                    <div className="mt-1 flex items-baseline gap-1 flex-wrap">
+                    <h2 className="text-sm font-semibold leading-tight text-foreground">{plan.name}</h2>
+                    <div className="mt-1 flex flex-wrap items-baseline gap-1">
                       <span className="text-2xl font-bold tabular-nums text-foreground">{plan.price}</span>
-                      {plan.period ? (
-                        <span className="text-sm text-muted-foreground">{plan.period}</span>
-                      ) : null}
+                      {plan.period ? <span className="text-sm text-muted-foreground">{plan.period}</span> : null}
                     </div>
                   </div>
                 </div>
               </div>
-              <p className="text-xs font-medium text-primary/90 mb-1 leading-snug">&ldquo;{plan.tagline}&rdquo;</p>
-              <ul className="space-y-2 flex-1 mb-2">
+              <p className="mb-1 text-xs font-medium leading-snug text-primary/90">&ldquo;{plan.tagline}&rdquo;</p>
+              <ul className="mb-2 flex-1 space-y-2">
                 {plan.features.map((f, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs leading-relaxed">
                     {f.included ? (
-                      <Check className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" aria-hidden />
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                     ) : (
-                      <X className="w-3.5 h-3.5 text-muted-foreground/70 mt-0.5 shrink-0" aria-hidden />
+                      <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden />
                     )}
                     <span className={cn(f.included ? "text-muted-foreground" : "text-muted-foreground/75")}>{f.text}</span>
                   </li>
@@ -207,7 +228,7 @@ const Pricing = () => {
                 <TouchTargetButton
                   type="button"
                   onClick={() => goCheckout(plan.id)}
-                  className="mt-4 w-full py-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-colors touch-manipulation"
+                  className="mt-4 w-full touch-manipulation rounded-md bg-primary py-3 text-sm font-medium text-primary-foreground transition-colors hover:brightness-110"
                 >
                   {plan.cta}
                 </TouchTargetButton>
@@ -215,7 +236,7 @@ const Pricing = () => {
                 <TouchTargetButton
                   type="button"
                   onClick={() => navigate("/")}
-                  className="mt-4 w-full py-3 rounded-md border border-border bg-secondary/50 text-secondary-foreground text-sm font-medium hover:bg-secondary transition-colors touch-manipulation"
+                  className="mt-4 w-full touch-manipulation rounded-md border border-border bg-secondary/50 py-3 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary"
                 >
                   {plan.cta}
                 </TouchTargetButton>
@@ -223,8 +244,8 @@ const Pricing = () => {
             </CardContainer>
           ))}
         </div>
-      </main>
-    </div>
+      </div>
+    </DashboardPageShell>
   );
 };
 

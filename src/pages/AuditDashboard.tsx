@@ -1,16 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { useNavigate, Link, useSearchParams, useParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  ArrowRight,
-  FileDown,
-  Share2,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
-  Lightbulb,
-  Sparkles,
-} from "lucide-react";
+import { ArrowRight, TrendingUp, AlertTriangle, CheckCircle2, Lightbulb } from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
 import {
   readFullInsightsPayload,
@@ -19,7 +10,6 @@ import {
 } from "@/lib/reportSession";
 import { getAuditPage } from "@/lib/auditPageStore";
 import { auditPathForUrl, auditSlugFromUrl, auditSectionHref } from "@/lib/auditSlug";
-import { downloadFullInsightsPdf } from "@/lib/fullReportPdf";
 import { getHistory, type HistoryEntry } from "@/lib/analysisHistory";
 import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
@@ -33,7 +23,7 @@ import { BeforeAfterScoresChart } from "@/components/BeforeAfterScoresChart";
 import { StructuredSynthesis } from "@/components/StructuredSynthesis";
 import { parseSectionScores, ensureScore } from "@/lib/utils";
 import { weightedOverallFromSections, projectRatings } from "@/lib/insightsProjection";
-import { DashboardNavSidebar } from "@/components/DashboardNavSidebar";
+import { DashboardPageShell } from "@/components/DashboardPageShell";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -516,7 +506,6 @@ export default function AuditDashboard() {
   const [compareSiteIdx, setCompareSiteIdx] = useState(0);
   const compareToolbarHostRef = useRef<HTMLDivElement | null>(null);
   const [compareToolbarHost, setCompareToolbarHost] = useState<HTMLDivElement | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
   const [reauditDialogOpen, setReauditDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -672,29 +661,6 @@ export default function AuditDashboard() {
 
   const tip = getSectionTip(activeSection, result);
 
-  const handlePdf = async () => {
-    setPdfLoading(true);
-    try {
-      await downloadFullInsightsPdf(payload);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setPdfLoading(false);
-    }
-  };
-
-  const handleShare = () => {
-    try {
-      const path = auditPathForUrl(url, searchParams.toString());
-      const u = new URL(path, window.location.origin);
-      u.searchParams.set("shared", "true");
-      void navigator.clipboard.writeText(u.toString());
-      toast.success("Report link copied to clipboard");
-    } catch {
-      toast.error("Could not copy link");
-    }
-  };
-
   const handleReaudit = () => setReauditDialogOpen(true);
 
   const confirmReaudit = () => {
@@ -703,7 +669,7 @@ export default function AuditDashboard() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <>
       <AlertDialog open={reauditDialogOpen} onOpenChange={setReauditDialogOpen}>
         <AlertDialogContent className="border-border bg-card sm:max-w-md">
           <AlertDialogHeader>
@@ -719,137 +685,93 @@ export default function AuditDashboard() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <DashboardNavSidebar
-        activeNavId={activeSection}
-        onSelect={handleSidebarSelect}
-        reportContext={{ url, overallScore, createdAt: paidAt }}
-        showUpgrade={false}
-        result={result}
-        onNewAnalysis={() => navigate("/")}
-        hideSidebarNewAnalysis={activeSection === "compare"}
-      />
-
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        {/* Top bar — Compare shows competitive status instead of domain breadcrumb */}
-        <header
-          className={cn(
-            "flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 bg-background/90 backdrop-blur p-1",
-            activeSection === "compare" ? "min-h-14" : "justify-end"
-          )}
-        >
-          {activeSection === "compare" && (
+      <DashboardPageShell
+        sidebarProps={{
+          activeNavId: activeSection,
+          onSelect: handleSidebarSelect,
+          reportContext: { url, overallScore, createdAt: paidAt },
+          showUpgrade: false,
+          result,
+          onNewAnalysis: () => navigate("/"),
+          hideSidebarNewAnalysis: activeSection === "compare",
+        }}
+        headerCenter={
+          activeSection === "compare" ? (
             <div
               ref={compareToolbarHostRef}
               className="flex min-h-0 min-w-0 flex-1 basis-full items-center overflow-x-auto pb-0.5 sm:basis-auto sm:px-1"
             />
-          )}
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            <Link
-              to="/pricing"
-              state={{ fromReport: true }}
-              aria-label="Upgrade PRO"
-              className="inline-flex items-center gap-1 rounded-lg border border-amber-500/45 bg-amber-500/12 px-2.5 py-1.5 text-[11px] font-semibold text-amber-900 transition-colors hover:bg-amber-500/20 dark:text-amber-100"
-            >
-              <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Upgrade PRO</span>
-            </Link>
-            <button
-              type="button"
-              onClick={handleShare}
-              aria-label="Share report"
-              className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Share2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="hidden sm:inline">Share</span>
-            </button>
-            <button
-              type="button"
-              onClick={handlePdf}
-              disabled={pdfLoading}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground",
-                "disabled:pointer-events-none disabled:opacity-40 disabled:cursor-not-allowed"
-              )}
-            >
-              <FileDown className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span>{pdfLoading ? "Building…" : "Export PDF"}</span>
-            </button>
-          </div>
-        </header>
-
-        {isSharedView && (
-          <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-950 dark:text-amber-50">
-            <span className="min-w-0">
-              👁 You&apos;re viewing a shared report · Run your own analysis →
-            </span>
-            <Link
-              to="/"
-              className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110"
-            >
-              Get started
-            </Link>
-          </div>
+          ) : undefined
+        }
+        banner={
+          isSharedView ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-950 dark:text-amber-50">
+              <span className="min-w-0">
+                👁 You&apos;re viewing a shared report · Run your own analysis →
+              </span>
+              <Link
+                to="/"
+                className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110"
+              >
+                Get started
+              </Link>
+            </div>
+          ) : undefined
+        }
+        mainClassName={cn(
+          "px-4",
+          activeSection === "compare" ? "pb-0" : "pb-5 md:pb-7",
+          activeSection === "compare"
+            ? "flex min-h-0 flex-col overflow-hidden pt-0"
+            : "overflow-y-auto pt-4"
         )}
-
-        {/* Compare: main fills below header; flex column so ScreenshotCompare can split center | panel */}
-        <main
+      >
+        <div
           className={cn(
-            "flex-1 px-4",
-            activeSection === "compare" ? "pb-0" : "pb-5 md:pb-7",
-            activeSection === "compare"
-              ? "flex min-h-0 flex-col overflow-hidden pt-0"
-              : "overflow-y-auto pt-4"
+            activeSection === "compare" ? "flex min-h-0 w-full max-w-none flex-1 flex-col" : "mx-auto max-w-5xl"
           )}
         >
-          <div
-            className={cn(
-              activeSection === "compare"
-                ? "flex w-full max-w-none min-h-0 flex-1 flex-col"
-                : "max-w-5xl mx-auto"
-            )}
-          >
-            {activeSection !== "compare" && (
-              <>
-                <h1 className="text-lg font-bold text-foreground mb-1">
-                  {SECTION_LABELS[activeSection] ?? activeSection}
-                </h1>
-                <p className="text-xs text-muted-foreground mb-5">
-                  {getDomain(url)} · {planName}
-                </p>
-              </>
-            )}
-            {tip && (
-              <div className={cn(activeSection === "compare" && "shrink-0")}>
-                <TipCard tip={tip} />
-              </div>
-            )}
-            {activeSection === "compare" ? (
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <SectionContent
-                  id={activeSection}
-                  result={result}
-                  url={url}
-                  compareSiteIdx={compareSiteIdx}
-                  onCompareSiteIdxChange={setCompareSiteIdx}
-                  compareToolbarSlot={compareToolbarHost}
-                  compareToolbarNav={compareToolbarNav}
-                  onReaudit={handleReaudit}
-                  onNewAnalysis={() => navigate("/")}
-                />
-              </div>
-            ) : (
+          {activeSection !== "compare" && (
+            <>
+              <h1 className="mb-1 text-lg font-bold text-foreground">
+                {SECTION_LABELS[activeSection] ?? activeSection}
+              </h1>
+              <p className="mb-5 text-xs text-muted-foreground">
+                {getDomain(url)} · {planName}
+              </p>
+            </>
+          )}
+          {tip && (
+            <div className={cn(activeSection === "compare" && "shrink-0")}>
+              <TipCard tip={tip} />
+            </div>
+          )}
+          {activeSection === "compare" ? (
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <SectionContent
                 id={activeSection}
                 result={result}
                 url={url}
-                compareSiteIdx={undefined}
-                onCompareSiteIdxChange={undefined}
-                compareToolbarSlot={undefined}
+                compareSiteIdx={compareSiteIdx}
+                onCompareSiteIdxChange={setCompareSiteIdx}
+                compareToolbarSlot={compareToolbarHost}
+                compareToolbarNav={compareToolbarNav}
+                onReaudit={handleReaudit}
+                onNewAnalysis={() => navigate("/")}
               />
-            )}
-          </div>
-        </main>
-      </div>
-    </div>
+            </div>
+          ) : (
+            <SectionContent
+              id={activeSection}
+              result={result}
+              url={url}
+              compareSiteIdx={undefined}
+              onCompareSiteIdxChange={undefined}
+              compareToolbarSlot={undefined}
+            />
+          )}
+        </div>
+      </DashboardPageShell>
+    </>
   );
 }
