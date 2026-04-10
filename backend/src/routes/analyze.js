@@ -16,6 +16,7 @@ import { findCompetitors } from "../services/competitorDiscovery.js";
 import { analyzeLandingSections } from "../services/analysisService.js";
 import { synthesizeReport, parseScoreFromSection } from "../services/synthesisService.js";
 import { recordRecentComparison, getRecentComparisons } from "../services/recentComparisonsStore.js";
+import { upsertSharedAudit, getSharedAudit } from "../services/auditShareStore.js";
 import { fetchPageSpeedMetrics, fetchPageSpeedBatch } from "../services/performanceService.js";
 import { analyzeReadability } from "../services/readabilityService.js";
 import { generateCopyAlternatives } from "../services/generateCopyService.js";
@@ -199,6 +200,7 @@ async function runPipeline(jobId) {
       competitorCount: result.competitors?.length ?? 0,
       result,
     });
+    upsertSharedAudit(userUrl, result);
     return;
   }
 
@@ -524,6 +526,7 @@ async function runPipeline(jobId) {
       competitorCount: synthesisInputCompetitors.length,
       result,
     });
+    upsertSharedAudit(userUrl, result);
   } catch (err) {
     console.error("[analyze] pipeline failed", jobId, err?.message || err);
     jobStore.updateJob(jobId, {
@@ -645,6 +648,21 @@ analyzeRouter.get("/recent-comparisons", (req, res) => {
   const parsed = raw == null || raw === "" ? 3 : parseInt(String(raw), 10);
   const limit = Number.isFinite(parsed) ? parsed : 3;
   res.json(getRecentComparisons(limit));
+});
+
+/** Last completed audit for hostname slug (shareable /audit/:slug for cold visitors). */
+analyzeRouter.get("/audit-share/:slug", (req, res) => {
+  const slug = String(req.params.slug || "")
+    .trim()
+    .toLowerCase();
+  if (!slug) {
+    return res.status(400).json({ error: "Missing slug" });
+  }
+  const payload = getSharedAudit(slug);
+  if (!payload?.result) {
+    return res.status(404).json({ error: "Audit not found" });
+  }
+  res.json(payload);
 });
 
 analyzeRouter.post("/analyze", validateAnalyzeBody, (req, res) => {

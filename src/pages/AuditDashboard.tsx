@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate, Link, useSearchParams, useParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, TrendingUp, AlertTriangle, CheckCircle2, Lightbulb } from "lucide-react";
+import { ArrowRight, TrendingUp, AlertTriangle, CheckCircle2, Lightbulb, Loader2 } from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
 import { readFullInsightsPayload, writeFullInsightsPayload } from "@/lib/reportSession";
 import { getAuditPage } from "@/lib/auditPageStore";
 import { auditPathForUrl, auditSlugFromUrl, auditSectionHref, DEFAULT_AUDIT_SECTION } from "@/lib/auditSlug";
+import { fetchSharedAuditBySlug } from "@/lib/fetchSharedAudit";
 import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { CompetitiveEdgePanel } from "@/components/CompetitiveEdgePanel";
@@ -482,6 +483,7 @@ export default function AuditDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isSharedView = searchParams.get("shared") === "true";
   const [sessionRevision, setSessionRevision] = useState(0);
+  const [sharedFetch, setSharedFetch] = useState<"idle" | "loading" | "ok" | "missing">("idle");
   const payload = useMemo(() => {
     const sp = readFullInsightsPayload();
     if (!slug) return sp;
@@ -553,6 +555,43 @@ export default function AuditDashboard() {
     }
   }, [slug, slugParam]);
 
+  useEffect(() => {
+    if (!slug || !slugParam) {
+      setSharedFetch("idle");
+      return;
+    }
+    const normalized = slug.toLowerCase();
+    const fromStore = getAuditPage(slugParam);
+    if (fromStore?.result) {
+      setSharedFetch("ok");
+      return;
+    }
+    const sp = readFullInsightsPayload();
+    if (sp?.result && auditSlugFromUrl(sp.url) === normalized) {
+      setSharedFetch("ok");
+      return;
+    }
+
+    const ac = new AbortController();
+    setSharedFetch("loading");
+    fetchSharedAuditBySlug(normalized, ac.signal)
+      .then((data) => {
+        if (data?.result) {
+          writeFullInsightsPayload(data);
+          setSessionRevision((n) => n + 1);
+          setSharedFetch("ok");
+        } else {
+          setSharedFetch("missing");
+        }
+      })
+      .catch((e) => {
+        if ((e as Error)?.name === "AbortError") return;
+        setSharedFetch("missing");
+      });
+
+    return () => ac.abort();
+  }, [slug, slugParam]);
+
   /** Reset competitor column when the loaded report URL changes (must run before any early return — hooks rule). */
   useEffect(() => {
     if (!payload?.result) return;
@@ -561,6 +600,15 @@ export default function AuditDashboard() {
 
   if (!payload?.result) {
     const missingSlug = Boolean(slug);
+    const loadingShared = missingSlug && (sharedFetch === "idle" || sharedFetch === "loading");
+    if (loadingShared) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-background px-6 py-16">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" aria-label="Loading audit" />
+          <p className="mt-4 text-sm text-muted-foreground">Loading shared audit…</p>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background px-6 py-16">
         <div className="max-w-md w-full rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
@@ -569,7 +617,7 @@ export default function AuditDashboard() {
           </h1>
           <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
             {missingSlug
-              ? `No saved report for “${slug}”. Run an analysis for that site on the home page — it will get a shareable /audit/ link.`
+              ? `No saved report for “${slug}” on the server yet. Run an analysis for that site (same backend your app uses) — the latest result becomes the shareable /audit/ link.`
               : "This page shows your audit dashboard after an analysis. Run a check from the home page — your results open here automatically."}
           </p>
           <Link

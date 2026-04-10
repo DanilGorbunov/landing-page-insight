@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Mail } from "lucide-react";
 import { toast } from "sonner";
@@ -69,11 +69,23 @@ export default function MonitorPage() {
 
   const [watching, setWatching] = useState<Record<string, boolean>>({});
   const [email, setEmail] = useState("");
+  /** `readFullInsightsPayload()` returns a new object every render; avoid resetting toggles when only reference changes. */
+  const competitorDomainKeyRef = useRef<string>("");
 
   useEffect(() => {
-    const init: Record<string, boolean> = {};
-    for (const c of competitors) init[c.domain] = false;
-    setWatching(init);
+    const key = competitors
+      .map((c) => c.domain)
+      .sort()
+      .join("|");
+    if (key === competitorDomainKeyRef.current) return;
+    competitorDomainKeyRef.current = key;
+    setWatching((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const c of competitors) {
+        next[c.domain] = prev[c.domain] ?? false;
+      }
+      return next;
+    });
   }, [competitors]);
 
   const toggle = useCallback((domain: string, next: boolean) => {
@@ -113,7 +125,7 @@ export default function MonitorPage() {
                 with competitors, then open Monitor again.
               </div>
             ) : (
-              <div className="grid gap-6 sm:grid-cols-1 lg:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {competitors.map((c) => (
                   <CompetitorMonitorCard
                     key={c.url}
