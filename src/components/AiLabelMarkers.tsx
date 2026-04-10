@@ -78,7 +78,7 @@ export function AiLabelMarkers({
   const [cardPos, setCardPos] = useState<{ top: number; left: number; line: { x1: number; y1: number; x2: number; y2: number } | null } | null>(null);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Anchor for cards / tooltip — the visible AI pill, not a separate dot. */
-  const markerRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const markerRefs = useRef<Map<string, HTMLElement | null>>(new Map());
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   const [pulseSeen, setPulseSeen] = useState<Record<string, boolean>>({});
@@ -271,48 +271,42 @@ export function AiLabelMarkers({
                 setPulseSeen((p) => ({ ...p, [row.id]: true }));
               }}
             >
-              <motion.div
+              <motion.button
+                type="button"
                 ref={(el) => {
                   if (el) markerRefs.current.set(row.id, el);
                   else markerRefs.current.delete(row.id);
                 }}
-                className={cn("relative z-[21] shrink-0", hover && "z-[23]")}
+                className={cn(
+                  "relative z-[21] flex h-8 min-w-0 shrink-0 cursor-pointer items-center gap-2 rounded-full border-[1.5px] bg-white py-1 pl-2.5 pr-1 text-left transition-[box-shadow] dark:bg-zinc-950",
+                  checked && "border-primary",
+                  pulseCls,
+                  hover && "z-[23]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                )}
+                style={{
+                  ...(checked ? {} : { borderColor: fill }),
+                  boxShadow: pulseCls ? undefined : "0 2px 8px rgba(0,0,0,0.12)",
+                }}
                 initial={false}
                 whileTap={{ scale: 0.98 }}
                 transition={{ type: "spring", stiffness: 500, damping: 32 }}
+                aria-label={`Open AI suggestion for ${row.sectionLabel}${checked ? " (in Simulate)" : ""}`}
+                onClick={() => {
+                  onDotInteract();
+                  setOpenCardId(row.id);
+                }}
               >
-                <div
-                  className={cn(
-                    "flex h-8 min-w-0 items-center gap-2 rounded-full border-[1.5px] bg-white py-1 pl-2.5 pr-1 dark:bg-zinc-950",
-                    pulseCls
-                  )}
-                  style={{
-                    borderColor: checked ? DOT.green : fill,
-                    boxShadow: pulseCls ? undefined : "0 2px 8px rgba(0,0,0,0.12)",
-                  }}
+                <span className="whitespace-nowrap text-[13px] font-semibold leading-none text-foreground">
+                  {scoreEmoji(row.score)} {row.sectionLabel} · {row.score.toFixed(1)}
+                </span>
+                <span
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
+                  aria-hidden
                 >
-                  <span className="text-[13px] font-semibold leading-none text-foreground whitespace-nowrap">
-                    {checked ? "Added ✓" : `${scoreEmoji(row.score)} ${row.sectionLabel} · ${row.score.toFixed(1)}`}
-                  </span>
-                  <button
-                    type="button"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1D9E75] text-white shadow-sm hover:brightness-110"
-                    aria-label={checked ? "Remove from Simulate" : "Open suggestion"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDotInteract();
-                      if (checked) {
-                        onSimulateToggle(row.id, false);
-                        toast(`Removed ${row.sectionLabel} from Simulate`, { duration: 2500, position: "bottom-center" });
-                      } else {
-                        setOpenCardId(row.id);
-                      }
-                    }}
-                  >
-                    {checked ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />}
-                  </button>
-                </div>
-              </motion.div>
+                  {checked ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />}
+                </span>
+              </motion.button>
             </div>
           );
         })}
@@ -405,7 +399,7 @@ export function AiLabelMarkers({
                     </button>
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-lg bg-[#1D9E75] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-primary-foreground hover:brightness-110"
                       onClick={() => {
                         if (simulateChecked[openRow.id]) {
                           onSimulateToggle(openRow.id, false);
@@ -414,11 +408,10 @@ export function AiLabelMarkers({
                           onSimulateToggle(openRow.id, true);
                           toast(`Added to plan · +${openRowLift.toFixed(1)} pts`, { duration: 2500, position: "bottom-center" });
                         }
-                        closeCard();
                       }}
                     >
                       <Check className="h-3.5 w-3.5" />
-                      {simulateChecked[openRow.id] ? "✓ Added" : `Add to Simulate +${openRowLift.toFixed(1)}`}
+                      {simulateChecked[openRow.id] ? "Added" : `Add to Simulate +${openRowLift.toFixed(1)}`}
                     </button>
                   </div>
                   {previewEnabled && onPreviewImproved ? (
