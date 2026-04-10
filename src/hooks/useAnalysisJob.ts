@@ -16,6 +16,14 @@ export function useAnalysisJob(jobId: string | null, initialLive?: JobLiveState 
   }, [jobId, initialLive]);
 
   useEffect(() => {
+    if (!jobId) {
+      setResult(null);
+      setError(null);
+      doneRef.current = false;
+    }
+  }, [jobId]);
+
+  useEffect(() => {
     if (!jobId) return;
     doneRef.current = false;
     let cancelled = false;

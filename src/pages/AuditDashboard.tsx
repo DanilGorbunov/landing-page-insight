@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link, useSearchParams, useParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -11,7 +11,10 @@ import {
   X,
 } from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
-import { readFullInsightsPayload, writeFullInsightsPayload } from "@/lib/reportSession";
+import { readFullInsightsPayload, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
+import { saveToHistory } from "@/lib/analysisHistory";
+import { startAnalysis } from "@/lib/api";
+import { useAnalysisJob } from "@/hooks/useAnalysisJob";
 import { getAuditPage } from "@/lib/auditPageStore";
 import { auditPathForUrl, auditSlugFromUrl, auditSectionHref, DEFAULT_AUDIT_SECTION } from "@/lib/auditSlug";
 import { fetchSharedAuditBySlug } from "@/lib/fetchSharedAudit";
@@ -40,7 +43,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
 import { resolveDashboardNavHref } from "@/lib/dashboardNavHref";
-import type { AnalysisResult } from "@/types/api";
+import type { AnalysisResult, JobLiveState } from "@/types/api";
 
 const SHARED_REPORT_BANNER_DISMISSED_KEY = "ll_shared_report_banner_dismissed";
 
@@ -394,6 +397,8 @@ function SectionContent({
   compareSiteIdx,
   onCompareSiteIdxChange,
   onRerunWithCompetitors,
+  competitorAnalysisPending,
+  onDismissCompetitorAnalysisError,
 }: {
   id: string;
   result: AnalysisResult;
@@ -401,7 +406,13 @@ function SectionContent({
   compareSiteIdx?: number;
   onCompareSiteIdxChange?: (idx: number) => void;
   /** Re-run POST /api/analyze with this competitor list (add-competitor flow). */
-  onRerunWithCompetitors?: (competitorUrls: string[]) => void;
+  onRerunWithCompetitors?: (competitorUrls: string[]) => void | Promise<void>;
+  competitorAnalysisPending?: {
+    newUrl: string;
+    live: JobLiveState | null;
+    error: string | null;
+  } | null;
+  onDismissCompetitorAnalysisError?: () => void;
 }) {
   switch (id) {
     case "overview":
@@ -414,6 +425,8 @@ function SectionContent({
           compareSiteIdx={compareSiteIdx}
           onCompareSiteIdxChange={onCompareSiteIdxChange}
           onRerunAnalysisWithCompetitors={onRerunWithCompetitors}
+          competitorAnalysisPending={competitorAnalysisPending}
+          onDismissCompetitorAnalysisError={onDismissCompetitorAnalysisError}
         />
       );
     case "performance":
@@ -522,6 +535,13 @@ export default function AuditDashboard() {
     if (sp?.result && auditSlugFromUrl(sp.url) === normalized) return sp;
     return null;
   }, [slug, slugParam, sessionRevision]);
+
+  const reportUrlNormalized = useMemo(() => {
+    const t = (payload?.url ?? "").trim();
+    if (!t) return "";
+    return /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/\//, "")}`;
+  }, [payload?.url]);
+
   const [activeSection, setActiveSection] = useState(() => {
     const s = new URLSearchParams(window.location.search).get("section");
     if (s === "competitors") return "overview";
@@ -529,6 +549,61 @@ export default function AuditDashboard() {
   });
   const [compareSiteIdx, setCompareSiteIdx] = useState(0);
   const [reauditDialogOpen, setReauditDialogOpen] = useState(false);
+  const [pendingCompetitorJob, setPendingCompetitorJob] = useState<{
+    jobId: string;
+    initialLive: JobLiveState | null;
+    newUrl: string;
+  } | null>(null);
+
+  const {
+    live: pendingCompetitorLive,
+    result: pendingCompetitorResult,
+    error: pendingCompetitorError,
+  } = useAnalysisJob(pendingCompetitorJob?.jobId ?? null, pendingCompetitorJob?.initialLive ?? null);
+
+  const handleInlineCompetitorComplete = useCallback(
+    (newResult: AnalysisResult) => {
+      if (!reportUrlNormalized) return;
+      const meta = readFullInsightsUnlockMeta();
+      writeFullInsightsPayload({
+        url: reportUrlNormalized,
+        result: newResult,
+        planId: meta?.planId ?? "analysis",
+        planName: meta?.planName ?? "Analysis",
+        paidAt: meta?.paidAt ?? new Date().toISOString(),
+      });
+      saveToHistory(reportUrlNormalized, newResult);
+      setPendingCompetitorJob(null);
+      setSessionRevision((n) => n + 1);
+      toast.success("Report updated with new competitor.");
+    },
+    [reportUrlNormalized]
+  );
+
+  const handleRerunWithCompetitors = useCallback(
+    async (competitorUrls: string[]) => {
+      if (!reportUrlNormalized || isSharedView) return;
+      try {
+        const { jobId, live } = await startAnalysis(reportUrlNormalized, competitorUrls);
+        const newUrl = competitorUrls[competitorUrls.length - 1] ?? "";
+        setPendingCompetitorJob({ jobId, initialLive: live ?? null, newUrl });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to start analysis");
+      }
+    },
+    [reportUrlNormalized, isSharedView]
+  );
+
+  const addCompetitorDeliveredRef = useRef(false);
+  useEffect(() => {
+    addCompetitorDeliveredRef.current = false;
+  }, [pendingCompetitorJob?.jobId]);
+
+  useEffect(() => {
+    if (!pendingCompetitorResult || !pendingCompetitorJob || addCompetitorDeliveredRef.current) return;
+    addCompetitorDeliveredRef.current = true;
+    handleInlineCompetitorComplete(pendingCompetitorResult);
+  }, [pendingCompetitorResult, pendingCompetitorJob, handleInlineCompetitorComplete]);
 
   useEffect(() => {
     const s = searchParams.get("section");
@@ -663,21 +738,6 @@ export default function AuditDashboard() {
 
   const { url, result, planName, paidAt } = payload;
 
-  const reportUrlNormalized = useMemo(() => {
-    const t = (url ?? "").trim();
-    if (!t) return "";
-    return /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/\//, "")}`;
-  }, [url]);
-
-  const handleRerunWithCompetitors = useCallback(
-    (competitorUrls: string[]) => {
-      if (!reportUrlNormalized) return;
-      toast.info("Starting analysis with updated competitors…");
-      navigate("/", { state: { rerunWithCompetitors: { url: reportUrlNormalized, competitors: competitorUrls } } });
-    },
-    [navigate, reportUrlNormalized]
-  );
-
   const resolveNavHref = useCallback(
     (id: string) =>
       resolveDashboardNavHref(id, {
@@ -795,6 +855,16 @@ export default function AuditDashboard() {
                 compareSiteIdx={compareSiteIdx}
                 onCompareSiteIdxChange={setCompareSiteIdx}
                 onRerunWithCompetitors={isSharedView ? undefined : handleRerunWithCompetitors}
+                competitorAnalysisPending={
+                  pendingCompetitorJob
+                    ? {
+                        newUrl: pendingCompetitorJob.newUrl,
+                        live: pendingCompetitorLive,
+                        error: pendingCompetitorError,
+                      }
+                    : null
+                }
+                onDismissCompetitorAnalysisError={() => setPendingCompetitorJob(null)}
               />
             </div>
           ) : (

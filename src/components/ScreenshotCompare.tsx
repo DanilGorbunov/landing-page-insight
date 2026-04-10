@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { toast } from "sonner";
 import { cn, getDomain, parseScoreFromReport } from "@/lib/utils";
-import type { AnalysisResult } from "@/types/api";
+import type { AnalysisResult, JobLiveState, LiveSectionKey } from "@/types/api";
 import {
   ChevronLeft,
   ChevronRight,
@@ -33,6 +33,8 @@ import {
   RefreshCw,
   Users,
   X,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -977,6 +979,115 @@ function SplitSiteColumnPicker({
 
 // ─── Main ───────────────────────────────────────────────────────────────────────
 
+function liveSiteForPendingUrl(live: JobLiveState | null, targetUrl: string) {
+  if (!live?.sites?.length || !targetUrl.trim()) return null;
+  const want = getDomain(targetUrl);
+  return live.sites.find((s) => getDomain(s.url) === want || s.domain === want) ?? null;
+}
+
+function PendingCompetitorGridCard({
+  newUrl,
+  live,
+  error,
+  onDismiss,
+}: {
+  newUrl: string;
+  live: JobLiveState | null;
+  error: string | null;
+  onDismiss?: () => void;
+}) {
+  const domain = getDomain(newUrl);
+  const ls = liveSiteForPendingUrl(live, newUrl);
+  const scoreCount = ls ? Object.values(ls.sectionScores ?? {}).filter((v) => v != null).length : 0;
+  const statusLine = error
+    ? null
+    : live?.synthesis?.ready
+      ? "Finalizing report…"
+      : ls && scoreCount >= 5
+        ? "Synthesizing…"
+        : ls?.screenshotReady
+          ? "Scoring sections…"
+          : "Capturing screenshot…";
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn(
+        "flex flex-col gap-2 rounded-xl border p-2.5 text-left text-card-foreground shadow-sm",
+        error
+          ? "border-destructive/40 bg-destructive/5 dark:bg-destructive/10"
+          : "border-primary/40 bg-primary/[0.06] dark:border-primary/45 dark:bg-primary/10"
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <img
+          src={competitorGridFaviconUrl(domain)}
+          alt=""
+          width={24}
+          height={24}
+          className="h-6 w-6 shrink-0 rounded-md bg-muted ring-1 ring-border opacity-80 dark:bg-zinc-900 dark:ring-zinc-700/80"
+        />
+        <span className="min-w-0 truncate font-mono text-[11px] font-medium tracking-tight text-foreground">{domain}</span>
+        {!error ? <Loader2 className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden /> : null}
+      </div>
+
+      {error ? (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-[11px] leading-snug text-destructive">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>{error}</span>
+          </div>
+          {onDismiss ? (
+            <Button type="button" variant="outline" size="sm" className="h-8 w-full text-xs" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <p className="font-mono text-[9px] font-medium uppercase tracking-wide text-primary">{statusLine}</p>
+          <div className="overflow-hidden rounded-lg bg-muted ring-1 ring-border dark:bg-zinc-950 dark:ring-zinc-800/90">
+            {ls?.screenshotUrl ? (
+              <img
+                src={ls.screenshotUrl}
+                alt=""
+                className="aspect-[16/10] max-h-[min(160px,28vh)] w-full object-cover object-top"
+                draggable={false}
+              />
+            ) : (
+              <div className="flex aspect-[16/10] max-h-[min(160px,28vh)] w-full flex-col items-center justify-center gap-2 bg-muted/50 px-2">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+              </div>
+            )}
+          </div>
+          <div className="h-px w-full shrink-0 bg-border dark:bg-zinc-800" aria-hidden />
+          <p className="font-mono text-[8px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Section scores</p>
+          <ul className="flex flex-col gap-1 font-mono text-[10px]">
+            {SECTION_KEYS.map((key) => {
+              const sc = ls?.sectionScores?.[key as LiveSectionKey];
+              const v = sc != null ? Number(sc) : null;
+              return (
+                <li key={key} className="flex items-baseline justify-between gap-2 leading-tight">
+                  <span className="min-w-0 truncate text-muted-foreground">{SECTION_ZONES[key].label}</span>
+                  <span
+                    className={cn(
+                      "shrink-0 text-sm font-semibold tabular-nums",
+                      v != null ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground/50"
+                    )}
+                  >
+                    {v != null ? v.toFixed(1) : "—"}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Back + history switcher at the start of the compare toolbar (e.g. full insights header). */
 export interface CompareToolbarNavProps {
   currentDomain: string;
@@ -1001,7 +1112,10 @@ interface Props {
   /** Shown as icon-only control after the analysis history dropdown when `compareToolbarNav` is set. */
   onNewAnalysis?: () => void;
   /** Re-run full analysis (home → progress) with this competitor URL list; omit for read-only / shared views. */
-  onRerunAnalysisWithCompetitors?: (competitorUrls: string[]) => void;
+  onRerunAnalysisWithCompetitors?: (competitorUrls: string[]) => void | Promise<void>;
+  /** In-grid loading card while a new competitor analysis runs (same page). */
+  competitorAnalysisPending?: { newUrl: string; live: JobLiveState | null; error: string | null } | null;
+  onDismissCompetitorAnalysisError?: () => void;
 }
 
 export function ScreenshotCompare({
@@ -1014,6 +1128,8 @@ export function ScreenshotCompare({
   onReaudit,
   onNewAnalysis,
   onRerunAnalysisWithCompetitors,
+  competitorAnalysisPending,
+  onDismissCompetitorAnalysisError,
 }: Props) {
   const [internalIdx, setInternalIdx] = useState(0);
   const controlled = controlledIdx !== undefined && onCompareSiteIdxChange !== undefined;
@@ -1878,12 +1994,15 @@ export function ScreenshotCompare({
   );
 
   const canAddCompetitor =
-    Boolean(onRerunAnalysisWithCompetitors) && existingCompetitorUrls.length < MAX_COMPETITORS;
+    Boolean(onRerunAnalysisWithCompetitors) &&
+    existingCompetitorUrls.length < MAX_COMPETITORS &&
+    !competitorAnalysisPending;
 
   const [addCompetitorOpen, setAddCompetitorOpen] = useState(false);
   const [addCompetitorInput, setAddCompetitorInput] = useState("");
+  const [addCompetitorSubmitting, setAddCompetitorSubmitting] = useState(false);
 
-  const submitAddCompetitor = useCallback(() => {
+  const submitAddCompetitor = useCallback(async () => {
     if (!onRerunAnalysisWithCompetitors) return;
     const normalized = normalizeCompetitorUrlInput(addCompetitorInput);
     if (!normalized) {
@@ -1900,10 +2019,14 @@ export function ScreenshotCompare({
       return;
     }
     const next = [...existingCompetitorUrls, normalized].slice(0, MAX_COMPETITORS);
-    toast.success("Starting full comparison with the new competitor…");
-    onRerunAnalysisWithCompetitors(next);
-    setAddCompetitorOpen(false);
-    setAddCompetitorInput("");
+    setAddCompetitorSubmitting(true);
+    try {
+      await Promise.resolve(onRerunAnalysisWithCompetitors(next));
+      setAddCompetitorOpen(false);
+      setAddCompetitorInput("");
+    } finally {
+      setAddCompetitorSubmitting(false);
+    }
   }, [addCompetitorInput, existingCompetitorUrls, onRerunAnalysisWithCompetitors, url]);
 
   const backToCompetitorGrid = useCallback(() => {
@@ -2426,6 +2549,14 @@ export function ScreenshotCompare({
                                     </ul>
                                   </button>
                                 ))}
+                                {competitorAnalysisPending ? (
+                                  <PendingCompetitorGridCard
+                                    newUrl={competitorAnalysisPending.newUrl}
+                                    live={competitorAnalysisPending.live}
+                                    error={competitorAnalysisPending.error}
+                                    onDismiss={onDismissCompetitorAnalysisError}
+                                  />
+                                ) : null}
                                 {canAddCompetitor ? (
                                   <button
                                     type="button"
@@ -3003,8 +3134,8 @@ export function ScreenshotCompare({
         <DialogHeader>
           <DialogTitle>Add competitor</DialogTitle>
           <DialogDescription>
-            Runs the same full analysis pipeline as your main comparison: your site plus the competitors below, including
-            this URL (up to {MAX_COMPETITORS} competitors total).
+            Runs the same full analysis as your main comparison. A new card appears in the grid next to your competitors
+            with live progress (up to {MAX_COMPETITORS} competitors total).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
@@ -3017,11 +3148,12 @@ export function ScreenshotCompare({
             value={addCompetitorInput}
             onChange={(e) => setAddCompetitorInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
+              if (e.key === "Enter" && !addCompetitorSubmitting) {
                 e.preventDefault();
-                submitAddCompetitor();
+                void submitAddCompetitor();
               }
             }}
+            disabled={addCompetitorSubmitting}
             autoComplete="url"
             className="font-mono text-sm"
           />
@@ -3032,11 +3164,23 @@ export function ScreenshotCompare({
           ) : null}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setAddCompetitorOpen(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={addCompetitorSubmitting}
+            onClick={() => setAddCompetitorOpen(false)}
+          >
             Cancel
           </Button>
-          <Button type="button" onClick={submitAddCompetitor}>
-            Run comparison
+          <Button type="button" disabled={addCompetitorSubmitting} onClick={() => void submitAddCompetitor()}>
+            {addCompetitorSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Starting…
+              </>
+            ) : (
+              "Run comparison"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
