@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { DashboardPageShell } from "@/components/DashboardPageShell";
 import { HistoryListPanel } from "@/components/HistoryListPanel";
 import { readFullInsightsPayload, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
@@ -7,8 +7,8 @@ import { getHistoryCount, type HistoryEntry } from "@/lib/analysisHistory";
 import { ensureScore, parseSectionScores } from "@/lib/utils";
 import { weightedOverallFromSections } from "@/lib/insightsProjection";
 import type { AnalysisResult } from "@/types/api";
-import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
-import { auditPathForUrl, auditSectionHref } from "@/lib/auditSlug";
+import { auditPathForUrl } from "@/lib/auditSlug";
+import { resolveDashboardNavHref } from "@/lib/dashboardNavHref";
 
 export default function HistoryPage() {
   const navigate = useNavigate();
@@ -36,16 +36,10 @@ export default function HistoryPage() {
     setHistoryCount(getHistoryCount());
   }, [historyTick]);
 
-  const handleNav = (id: string) => {
-    if (id === "history") return;
-    if (id === "monitor") {
-      navigate("/monitor");
-      return;
-    }
-    if (FULL_INSIGHTS_SECTION_IDS.has(id)) {
-      navigate(auditSectionHref(id, url));
-    }
-  };
+  const resolveNavHref = useCallback(
+    (id: string) => resolveDashboardNavHref(id, { mode: "session", reportUrl: url }),
+    [url]
+  );
 
   const handleViewReport = (entry: HistoryEntry) => {
     const meta = readFullInsightsUnlockMeta();
@@ -56,30 +50,19 @@ export default function HistoryPage() {
       planName: meta?.planName ?? "Analysis",
       paidAt: entry.analyzedAt,
     });
-    navigate(auditPathForUrl(`https://${entry.domain}`, "section=compare"));
+    navigate(auditPathForUrl(`https://${entry.domain}`));
   };
 
   return (
     <DashboardPageShell
       sidebarProps={{
         activeNavId: "history",
-        onSelect: handleNav,
+        resolveNavHref,
         reportContext,
         result,
         onNewAnalysis: () => navigate("/"),
       }}
-      headerCenter={
-        <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2 px-1 text-sm">
-          <Link to={auditSectionHref("compare", url)} className="truncate text-muted-foreground hover:text-foreground">
-            Dashboard
-          </Link>
-          <span className="text-muted-foreground/60" aria-hidden>
-            /
-          </span>
-          <span className="truncate font-semibold text-foreground">History</span>
-        </div>
-      }
-      mainClassName="overflow-y-auto p-5 md:p-7"
+      mainClassName="overflow-y-auto px-4 pt-4 pb-5 md:pb-7"
     >
       <div className="mx-auto max-w-5xl">
         <h1 className="mb-1 text-lg font-bold text-foreground">Analysis history</h1>

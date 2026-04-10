@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Check, X } from "lucide-react";
 import { TouchTargetButton } from "@/components/ui/touch-target-button";
@@ -7,8 +7,7 @@ import { DashboardPageShell } from "@/components/DashboardPageShell";
 import { cn, ensureScore, parseSectionScores } from "@/lib/utils";
 import { readFullInsightsPayload } from "@/lib/reportSession";
 import { weightedOverallFromSections } from "@/lib/insightsProjection";
-import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
-import { auditSectionHref } from "@/lib/auditSlug";
+import { resolveDashboardNavHref } from "@/lib/dashboardNavHref";
 import type { AnalysisResult } from "@/types/api";
 
 type FeatureLine = { text: string; included: boolean };
@@ -145,19 +144,10 @@ const Pricing = () => {
       ? { url, overallScore, ...(payload?.paidAt ? { createdAt: payload.paidAt } : {}) }
       : null;
 
-  const handleNav = (id: string) => {
-    if (id === "history") {
-      navigate("/history");
-      return;
-    }
-    if (id === "monitor") {
-      navigate("/monitor");
-      return;
-    }
-    if (FULL_INSIGHTS_SECTION_IDS.has(id)) {
-      navigate(auditSectionHref(id, url));
-    }
-  };
+  const resolveNavHref = useCallback(
+    (id: string) => resolveDashboardNavHref(id, { mode: "session", reportUrl: url }),
+    [url]
+  );
 
   const goCheckout = (planId: string) => {
     navigate(`/checkout?plan=${encodeURIComponent(planId)}`, { state: { fromReport, planId } });
@@ -167,17 +157,12 @@ const Pricing = () => {
     <DashboardPageShell
       sidebarProps={{
         activeNavId: "pricing",
-        onSelect: handleNav,
+        resolveNavHref,
         reportContext,
         result,
         onNewAnalysis: () => navigate("/"),
       }}
-      headerCenter={
-        <div className="flex min-h-0 min-w-0 flex-1 items-center px-1">
-          <span className="text-sm font-semibold text-foreground">Pricing</span>
-        </div>
-      }
-      mainClassName="overflow-y-auto px-4 py-10 pb-16 sm:px-6 sm:py-14"
+      mainClassName="overflow-y-auto px-4 pt-4 pb-5 md:pb-7 sm:px-6"
     >
       <div className="mx-auto w-full max-w-[1600px]">
         <div className="mb-10 text-center sm:mb-14">

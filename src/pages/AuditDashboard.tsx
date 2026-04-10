@@ -1,16 +1,11 @@
-import { useState, useMemo, useEffect, useRef, useLayoutEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate, Link, useSearchParams, useParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowRight, TrendingUp, AlertTriangle, CheckCircle2, Lightbulb } from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
-import {
-  readFullInsightsPayload,
-  writeFullInsightsPayload,
-  readFullInsightsUnlockMeta,
-} from "@/lib/reportSession";
+import { readFullInsightsPayload, writeFullInsightsPayload } from "@/lib/reportSession";
 import { getAuditPage } from "@/lib/auditPageStore";
-import { auditPathForUrl, auditSlugFromUrl, auditSectionHref } from "@/lib/auditSlug";
-import { getHistory, type HistoryEntry } from "@/lib/analysisHistory";
+import { auditPathForUrl, auditSlugFromUrl, auditSectionHref, DEFAULT_AUDIT_SECTION } from "@/lib/auditSlug";
 import { PerformanceGauges } from "@/components/PerformanceGauges";
 import { CompetitiveHeatmap } from "@/components/CompetitiveHeatmap";
 import { CompetitiveEdgePanel } from "@/components/CompetitiveEdgePanel";
@@ -18,7 +13,7 @@ import { ActionPlan } from "@/components/ActionPlan";
 import { UxHintsPanel } from "@/components/UxHintsPanel";
 import { CopySuggestions } from "@/components/CopySuggestions";
 import { CompetitiveCharts } from "@/components/CompetitiveCharts";
-import { ScreenshotCompare, type CompareToolbarNavProps } from "@/components/ScreenshotCompare";
+import { ScreenshotCompare } from "@/components/ScreenshotCompare";
 import { BeforeAfterScoresChart } from "@/components/BeforeAfterScoresChart";
 import { StructuredSynthesis } from "@/components/StructuredSynthesis";
 import { parseSectionScores, ensureScore } from "@/lib/utils";
@@ -35,6 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
+import { resolveDashboardNavHref } from "@/lib/dashboardNavHref";
 import type { AnalysisResult } from "@/types/api";
 
 // ─── Score helpers ──────────────────────────────────────────────────────────────
@@ -386,20 +382,12 @@ function SectionContent({
   url,
   compareSiteIdx,
   onCompareSiteIdxChange,
-  compareToolbarSlot,
-  compareToolbarNav,
-  onReaudit,
-  onNewAnalysis,
 }: {
   id: string;
   result: AnalysisResult;
   url: string;
   compareSiteIdx?: number;
   onCompareSiteIdxChange?: (idx: number) => void;
-  compareToolbarSlot?: HTMLElement | null;
-  compareToolbarNav?: CompareToolbarNavProps | null;
-  onReaudit?: () => void;
-  onNewAnalysis?: () => void;
 }) {
   switch (id) {
     case "overview":
@@ -411,10 +399,6 @@ function SectionContent({
           url={url}
           compareSiteIdx={compareSiteIdx}
           onCompareSiteIdxChange={onCompareSiteIdxChange}
-          compareToolbarSlot={compareToolbarSlot}
-          compareToolbarNav={compareToolbarNav ?? null}
-          onReaudit={onReaudit}
-          onNewAnalysis={onNewAnalysis}
         />
       );
     case "performance":
@@ -485,7 +469,16 @@ export default function AuditDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const { slug: slugParam } = useParams<{ slug?: string }>();
-  const slug = slugParam ? decodeURIComponent(slugParam) : undefined;
+  const slug =
+    slugParam !== undefined && slugParam !== ""
+      ? (() => {
+          try {
+            return decodeURIComponent(slugParam);
+          } catch {
+            return slugParam;
+          }
+        })()
+      : undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const isSharedView = searchParams.get("shared") === "true";
   const [sessionRevision, setSessionRevision] = useState(0);
@@ -493,19 +486,17 @@ export default function AuditDashboard() {
     const sp = readFullInsightsPayload();
     if (!slug) return sp;
     const normalized = slug.toLowerCase();
-    const fromStore = getAuditPage(slug);
+    const fromStore = slugParam ? getAuditPage(slugParam) : null;
     if (fromStore?.result) return fromStore;
     if (sp?.result && auditSlugFromUrl(sp.url) === normalized) return sp;
     return null;
-  }, [slug, sessionRevision]);
+  }, [slug, slugParam, sessionRevision]);
   const [activeSection, setActiveSection] = useState(() => {
     const s = new URLSearchParams(window.location.search).get("section");
     if (s === "competitors") return "overview";
     return s && FULL_INSIGHTS_SECTION_IDS.has(s) ? s : "compare";
   });
   const [compareSiteIdx, setCompareSiteIdx] = useState(0);
-  const compareToolbarHostRef = useRef<HTMLDivElement | null>(null);
-  const [compareToolbarHost, setCompareToolbarHost] = useState<HTMLDivElement | null>(null);
   const [reauditDialogOpen, setReauditDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -522,19 +513,27 @@ export default function AuditDashboard() {
       );
       return;
     }
-    if (s && FULL_INSIGHTS_SECTION_IDS.has(s)) setActiveSection(s);
+    if (s === DEFAULT_AUDIT_SECTION) {
+      setActiveSection(DEFAULT_AUDIT_SECTION);
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.delete("section");
+          return p;
+        },
+        { replace: true }
+      );
+      return;
+    }
+    if (s && FULL_INSIGHTS_SECTION_IDS.has(s)) {
+      setActiveSection(s);
+      return;
+    }
+    setActiveSection(DEFAULT_AUDIT_SECTION);
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (activeSection !== "compare") setCompareSiteIdx(0);
-  }, [activeSection]);
-
-  useLayoutEffect(() => {
-    if (activeSection !== "compare") {
-      setCompareToolbarHost(null);
-      return;
-    }
-    setCompareToolbarHost(compareToolbarHostRef.current);
   }, [activeSection]);
 
   useEffect(() => {
@@ -546,13 +545,19 @@ export default function AuditDashboard() {
   }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
-    if (!slug) return;
-    const fromStore = getAuditPage(slug);
+    if (!slug || !slugParam) return;
+    const fromStore = getAuditPage(slugParam);
     if (fromStore?.result) {
       writeFullInsightsPayload(fromStore);
       setSessionRevision((n) => n + 1);
     }
-  }, [slug]);
+  }, [slug, slugParam]);
+
+  /** Reset competitor column when the loaded report URL changes (must run before any early return — hooks rule). */
+  useEffect(() => {
+    if (!payload?.result) return;
+    setCompareSiteIdx(0);
+  }, [payload?.url]);
 
   if (!payload?.result) {
     const missingSlug = Boolean(slug);
@@ -581,76 +586,15 @@ export default function AuditDashboard() {
 
   const { url, result, planName, paidAt } = payload;
 
-  const currentHistoryEntryId = useMemo(() => {
-    const domain = getDomain(url);
-    const jid = result.jobId;
-    const entries = getHistory();
-    if (jid != null) {
-      const hit = entries.find((e) => e.domain === domain && e.result?.jobId === jid);
-      if (hit) return hit.id;
-    }
-    const byDomain = entries.find((e) => e.domain === domain);
-    return byDomain?.id ?? null;
-  }, [url, result.jobId, sessionRevision]);
-
-  const handleOpenHistoryEntry = useCallback(
-    (entry: HistoryEntry) => {
-      const current = readFullInsightsPayload();
-      const meta = readFullInsightsUnlockMeta();
-      const nextUrl = `https://${entry.domain}`;
-      writeFullInsightsPayload({
-        url: nextUrl,
-        result: entry.result,
-        planId: meta?.planId ?? current?.planId ?? "analysis",
-        planName: meta?.planName ?? current?.planName ?? "Analysis",
-        paidAt: entry.analyzedAt,
-      });
-      setCompareSiteIdx(0);
-      setSessionRevision((n) => n + 1);
-      const q = searchParams.toString();
-      navigate(auditPathForUrl(nextUrl, q), { replace: true });
-    },
-    [navigate, searchParams]
+  const resolveNavHref = useCallback(
+    (id: string) =>
+      resolveDashboardNavHref(id, {
+        mode: "audit",
+        pathname: location.pathname,
+        searchParams: new URLSearchParams(location.search),
+      }),
+    [location.pathname, location.search]
   );
-
-  const handleCompareToolbarBack = useCallback(() => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate("/history");
-  }, [navigate]);
-
-  const compareToolbarNav: CompareToolbarNavProps | null = useMemo(
-    () => ({
-      currentDomain: getDomain(url),
-      currentHistoryEntryId,
-      historyEntries: getHistory(),
-      onBack: handleCompareToolbarBack,
-      onSelectHistoryEntry: handleOpenHistoryEntry,
-    }),
-    [url, currentHistoryEntryId, handleCompareToolbarBack, handleOpenHistoryEntry, sessionRevision]
-  );
-
-  const handleSidebarSelect = (id: string) => {
-    if (id === "history") {
-      navigate("/history");
-      return;
-    }
-    if (id === "monitor") {
-      navigate("/monitor");
-      return;
-    }
-    setActiveSection(id);
-    setSearchParams(
-      (prev) => {
-        const p = new URLSearchParams(prev);
-        p.set("section", id);
-        return p;
-      },
-      { replace: true }
-    );
-  };
 
   const overallScore = useMemo(() => {
     const s = result.synthesis?.overall_score;
@@ -686,23 +630,17 @@ export default function AuditDashboard() {
       </AlertDialog>
 
       <DashboardPageShell
+        onReaudit={handleReaudit}
         sidebarProps={{
           activeNavId: activeSection,
-          onSelect: handleSidebarSelect,
+          resolveNavHref,
+          sidebarNavReplace: true,
           reportContext: { url, overallScore, createdAt: paidAt },
-          showUpgrade: false,
           result,
           onNewAnalysis: () => navigate("/"),
-          hideSidebarNewAnalysis: activeSection === "compare",
+          hideSidebarNewAnalysis:
+            activeSection === "compare" || activeSection === "overview",
         }}
-        headerCenter={
-          activeSection === "compare" ? (
-            <div
-              ref={compareToolbarHostRef}
-              className="flex min-h-0 min-w-0 flex-1 basis-full items-center overflow-x-auto pb-0.5 sm:basis-auto sm:px-1"
-            />
-          ) : undefined
-        }
         banner={
           isSharedView ? (
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-950 dark:text-amber-50">
@@ -754,10 +692,6 @@ export default function AuditDashboard() {
                 url={url}
                 compareSiteIdx={compareSiteIdx}
                 onCompareSiteIdxChange={setCompareSiteIdx}
-                compareToolbarSlot={compareToolbarHost}
-                compareToolbarNav={compareToolbarNav}
-                onReaudit={handleReaudit}
-                onNewAnalysis={() => navigate("/")}
               />
             </div>
           ) : (
@@ -767,7 +701,6 @@ export default function AuditDashboard() {
               url={url}
               compareSiteIdx={undefined}
               onCompareSiteIdxChange={undefined}
-              compareToolbarSlot={undefined}
             />
           )}
         </div>

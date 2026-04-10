@@ -1,42 +1,100 @@
 import { useCallback, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FileDown, Share2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn, getDomain } from "@/lib/utils";
 import { DashboardNavSidebar, type DashboardNavSidebarProps } from "@/components/DashboardNavSidebar";
-import { readFullInsightsPayload } from "@/lib/reportSession";
+import { DashboardReportHeaderBar } from "@/components/DashboardReportHeaderBar";
+import {
+  readFullInsightsPayload,
+  writeFullInsightsPayload,
+  readFullInsightsUnlockMeta,
+} from "@/lib/reportSession";
 import { auditPathForUrl } from "@/lib/auditSlug";
 import { downloadFullInsightsPdf } from "@/lib/fullReportPdf";
+import { getHistory, resolveCurrentHistoryEntryId, type HistoryEntry } from "@/lib/analysisHistory";
 
 export type DashboardPageShellProps = {
   sidebarProps: DashboardNavSidebarProps;
-  /** Left / center area (compare toolbar row, breadcrumb, etc.) */
-  headerCenter?: ReactNode;
   banner?: ReactNode;
   mainClassName?: string;
   children: ReactNode;
   showHeaderActions?: boolean;
+  /**
+   * When set (e.g. audit dashboard), refresh opens the re-audit dialog instead of navigating away immediately.
+   */
+  onReaudit?: () => void;
 };
 
 export function DashboardPageShell({
   sidebarProps,
-  headerCenter,
   banner,
   mainClassName,
   children,
   showHeaderActions = true,
+  onReaudit,
 }: DashboardPageShellProps) {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [pdfLoading, setPdfLoading] = useState(false);
 
+  const payload = readFullInsightsPayload();
+  const url = payload?.url ?? null;
+  const result = payload?.result ?? null;
+
+  const currentDomain = url ? getDomain(url) : "No report";
+  const currentHistoryEntryId = url && result ? resolveCurrentHistoryEntryId(url, result) : null;
+  const historyEntries = getHistory();
+
+  const handleBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/history");
+  }, [navigate]);
+
+  const handleSelectHistoryEntry = useCallback(
+    (entry: HistoryEntry) => {
+      const current = readFullInsightsPayload();
+      const meta = readFullInsightsUnlockMeta();
+      const nextUrl = `https://${entry.domain}`;
+      writeFullInsightsPayload({
+        url: nextUrl,
+        result: entry.result,
+        planId: meta?.planId ?? current?.planId ?? "analysis",
+        planName: meta?.planName ?? current?.planName ?? "Analysis",
+        paidAt: entry.analyzedAt,
+      });
+      navigate(auditPathForUrl(nextUrl, searchParams.toString()), { replace: true });
+    },
+    [navigate, searchParams]
+  );
+
+  const handleReaudit = useCallback(() => {
+    if (onReaudit) {
+      onReaudit();
+      return;
+    }
+    if (url && result) {
+      navigate("/", { state: { startFreshAnalysis: { url } } });
+      return;
+    }
+    toast.info("Load a report from the home page first.");
+  }, [onReaudit, url, result, navigate]);
+
+  const handleNewAnalysis = useCallback(() => {
+    navigate("/");
+  }, [navigate]);
+
   const handleShare = useCallback(() => {
     try {
-      const payload = readFullInsightsPayload();
-      if (!payload?.url) {
+      const p = readFullInsightsPayload();
+      if (!p?.url) {
         toast.error("No report loaded to share");
         return;
       }
-      const path = auditPathForUrl(payload.url, searchParams.toString());
+      const path = auditPathForUrl(p.url, searchParams.toString());
       const u = new URL(path, window.location.origin);
       u.searchParams.set("shared", "true");
       void navigator.clipboard.writeText(u.toString());
@@ -47,14 +105,14 @@ export function DashboardPageShell({
   }, [searchParams]);
 
   const handlePdf = useCallback(async () => {
-    const payload = readFullInsightsPayload();
-    if (!payload?.result) {
+    const p = readFullInsightsPayload();
+    if (!p?.result) {
       toast.error("No report to export");
       return;
     }
     setPdfLoading(true);
     try {
-      await downloadFullInsightsPdf(payload);
+      await downloadFullInsightsPdf(p);
     } catch (e) {
       console.error(e);
       toast.error("Could not build PDF");
@@ -62,6 +120,8 @@ export function DashboardPageShell({
       setPdfLoading(false);
     }
   }, []);
+
+  const reauditDisabled = !result || !url;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -71,10 +131,21 @@ export function DashboardPageShell({
         <header
           className={cn(
             "flex min-h-14 shrink-0 flex-wrap items-center gap-x-2 gap-y-2 bg-background/90 py-1 pl-1 pr-4 backdrop-blur",
-            !headerCenter && showHeaderActions && "justify-end"
+            !showHeaderActions && "justify-start"
           )}
         >
-          {headerCenter}
+          <div className="flex min-h-0 min-w-0 flex-1 items-center overflow-x-auto pb-0.5 sm:px-1">
+            <DashboardReportHeaderBar
+              currentDomain={currentDomain}
+              currentHistoryEntryId={currentHistoryEntryId}
+              historyEntries={historyEntries}
+              onBack={handleBack}
+              onSelectHistoryEntry={handleSelectHistoryEntry}
+              onReaudit={handleReaudit}
+              onNewAnalysis={sidebarProps.onNewAnalysis ?? handleNewAnalysis}
+              reauditDisabled={reauditDisabled}
+            />
+          </div>
           {showHeaderActions ? (
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
               <Link

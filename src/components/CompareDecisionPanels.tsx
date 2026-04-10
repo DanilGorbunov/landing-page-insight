@@ -7,7 +7,6 @@ import {
   type ConversionLayer,
   type BehavioralUx,
   type CopyAnalysisMetrics,
-  type GapRankItem,
   type CompetitorWinNarrative,
   type CompareSiteTab,
   confidenceExplanation,
@@ -48,17 +47,16 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ClipboardCopy,
   Crown,
   Flame,
   FlaskConical,
-  Rocket,
   ScanEye,
   Sparkles,
   TrendingDown,
   TrendingUp,
-  Wrench,
   X,
 } from "lucide-react";
 import { computeSimulateProjection, type SimulateImprovementItem } from "@/lib/simulateWhatIf";
@@ -600,14 +598,9 @@ export function DecisionActionPanel({
   conversion,
   behavioral,
   copyMetrics,
-  gapItems,
   winNarrative,
   stealThree,
   abVariants,
-  fixMode,
-  setFixMode,
-  simplifyCEO,
-  setSimplifyCEO,
   dataCoveragePct,
   gapConfidence,
   userOverall,
@@ -649,14 +642,9 @@ export function DecisionActionPanel({
   conversion: ConversionLayer;
   behavioral: BehavioralUx;
   copyMetrics: CopyAnalysisMetrics;
-  gapItems: GapRankItem[];
   winNarrative: CompetitorWinNarrative | null;
   stealThree: string[];
   abVariants: string[];
-  fixMode: boolean;
-  setFixMode: (v: boolean) => void;
-  simplifyCEO: boolean;
-  setSimplifyCEO: (v: boolean) => void;
   dataCoveragePct: number;
   gapConfidence: "High" | "Medium" | "Low" | undefined;
   userOverall: number | null;
@@ -772,19 +760,7 @@ export function DecisionActionPanel({
     });
   }, [focusPlanTick]);
 
-  const gaps = useMemo(() => {
-    const raw = result.gaps ?? [];
-    return fixMode ? raw.filter((g) => g.priority === "P1") : raw;
-  }, [result.gaps, fixMode]);
-
-  const ceoBullets = useMemo(() => {
-    const p1 = result.gaps?.find((g) => g.priority === "P1");
-    return [
-      conversion.mainIssue,
-      p1 ? `${p1.area}: ${p1.problem}` : "Clarify the primary promise in the first screen.",
-      gapItems[0] ? `Close the gap on ${gapItems[0].label.toLowerCase()} before iterating minor tweaks.` : "Benchmark one competitor hero and match their clarity bar.",
-    ];
-  }, [result.gaps, conversion.mainIssue, gapItems]);
+  const gaps = useMemo(() => result.gaps ?? [], [result.gaps]);
 
   const topPlan = useMemo(() => topActionPlanRows(result), [result]);
   const riskWhyBut = useMemo(() => conversionRiskWhyBut(conversion, result), [conversion, result]);
@@ -803,7 +779,7 @@ export function DecisionActionPanel({
     return buildDeltaLensItems(result, userBy, lensVs.bySection, lensVs.domain);
   }, [result, lensAnnotations, lensVs]);
 
-  const { projected: simulateProjected, netLift: simulateGain } = useMemo(
+  const { projected: simulateProjected } = useMemo(
     () => computeSimulateProjection(userOverall, simulateItems, simulateChecked, competitorOverallScores),
     [userOverall, simulateItems, simulateChecked, competitorOverallScores]
   );
@@ -855,8 +831,7 @@ export function DecisionActionPanel({
   return (
     <div
       className={cn(
-        "rounded-lg border-0 bg-transparent overflow-hidden flex h-full min-h-0 max-h-full flex-col z-10",
-        fixMode ? "shadow-md shadow-primary/20" : "shadow-lg shadow-black/15"
+        "rounded-lg border-0 bg-transparent overflow-hidden flex h-full min-h-0 max-h-full flex-col z-10 shadow-lg shadow-black/15"
       )}
     >
       <div
@@ -865,7 +840,7 @@ export function DecisionActionPanel({
       >
         <Fragment key={toolbarContextKey}>
           <div className="space-y-3">
-            <div className="rounded-lg border border-primary/25 bg-gradient-to-b from-primary/[0.07] to-transparent px-3 py-3 space-y-3">
+            <div className="sticky top-0 z-20 space-y-3 rounded-lg border border-primary/25 bg-card/95 px-3 py-3 shadow-md ring-1 ring-primary/10 backdrop-blur-sm">
               <div className="flex items-center gap-2">
                 <FlaskConical className="h-4 w-4 text-primary shrink-0" aria-hidden />
                 <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -883,9 +858,9 @@ export function DecisionActionPanel({
                       type="button"
                       onClick={onCollapseRightPanel}
                       className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                      aria-label="Hide analysis panel"
+                      aria-label="Collapse analysis panel"
                     >
-                      <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                      <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />
                     </button>
                   </HintTooltip>
                 ) : null}
@@ -894,12 +869,7 @@ export function DecisionActionPanel({
                   <p className="text-[10px] font-bold uppercase text-muted-foreground mb-1.5">Projected overall</p>
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <span className="text-2xl font-bold tabular-nums text-primary">{animatedSimulateScore.toFixed(1)}</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      /10
-                      <span className="mx-1 text-foreground/80">
-                        {(userOverall ?? 5).toFixed(1)} → {simulateProjected.toFixed(1)} (+{simulateGain.toFixed(1)})
-                      </span>
-                    </span>
+                    <span className="text-[11px] text-muted-foreground">/10</span>
                   </div>
                   <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
                     <div
@@ -908,50 +878,6 @@ export function DecisionActionPanel({
                     />
                   </div>
                 </div>
-            </div>
-
-            {fixMode && (
-              <div className="flex items-start gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-[11px] text-foreground">
-                <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <div>
-                  <span className="font-bold text-primary">Fix mode on</span>
-                  <span className="text-muted-foreground">
-                    {" "}
-                    — only high-impact issues and P1 gaps. Turn off to see full metrics.
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tools</p>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setFixMode(!fixMode)}
-                  className={cn(
-                    "flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase",
-                    fixMode
-                      ? "bg-primary text-primary-foreground ring-2 ring-primary/60"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <Wrench className="h-3 w-3" />
-                  {fixMode ? "Fix mode on" : "Fix mode"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSimplifyCEO(!simplifyCEO)}
-                  className={cn(
-                    "rounded-full px-2 py-1 text-[10px] font-bold uppercase",
-                    simplifyCEO
-                      ? "bg-amber-500/20 text-amber-700 dark:text-amber-400"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  CEO view
-                </button>
-              </div>
             </div>
 
             <Accordion type="multiple" defaultValue={["improvements"]} className="rounded-lg border border-border bg-card/30">
@@ -1049,28 +975,7 @@ export function DecisionActionPanel({
                         ))}
                       </ol>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFixMode(true);
-                        setSimplifyCEO(false);
-                      }}
-                      className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-[11px] font-bold text-primary-foreground hover:brightness-110"
-                    >
-                      <Rocket className="h-3.5 w-3.5" />
-                      Apply fixes (focus P1)
-                    </button>
                   </div>
-                  {simplifyCEO ? (
-                    <div className="mt-2 space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-                      <p className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400">Explain like I&apos;m CEO</p>
-                      <ul className="list-disc space-y-1.5 pl-4 leading-relaxed text-foreground">
-                        {ceoBullets.map((b, i) => (
-                          <li key={i}>{b}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
                 </AccordionContent>
               </AccordionItem>
 
@@ -1080,7 +985,7 @@ export function DecisionActionPanel({
                 </AccordionTrigger>
                 <AccordionContent className="px-3 pb-3 pt-0 text-xs">
                   {gaps.length === 0 ? (
-                    <p className="text-muted-foreground">{fixMode ? "No P1 gaps in payload." : "No gaps listed in this report yet."}</p>
+                    <p className="text-muted-foreground">No gaps listed in this report yet.</p>
                   ) : (
                     <ul className="space-y-2">
                       {gaps.slice(0, 6).map((g, i) => (
@@ -1206,26 +1111,24 @@ export function DecisionActionPanel({
                 </AccordionContent>
               </AccordionItem>
 
-              {!fixMode && (
-                <AccordionItem value="confidence" className="border-b-0 border-border px-0">
-                  <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
-                    Confidence · Data coverage
-                  </AccordionTrigger>
-                  <AccordionContent className="px-3 pb-3 pt-0 text-xs">
-                    <div className="flex items-start justify-between gap-2 rounded-lg border border-border/80 p-2.5">
-                      <div>
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <InsightConfidenceBadge level={insightConf} />
-                          <p className="text-[10px] font-bold uppercase text-muted-foreground">Data coverage</p>
-                        </div>
-                        <p className="text-lg font-bold tabular-nums text-foreground">{dataCoveragePct}%</p>
-                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{confidenceExplanation(gapConfidence)}</p>
+              <AccordionItem value="confidence" className="border-b-0 border-border px-0">
+                <AccordionTrigger className="px-3 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground hover:no-underline [&[data-state=open]]:text-foreground">
+                  Confidence · Data coverage
+                </AccordionTrigger>
+                <AccordionContent className="px-3 pb-3 pt-0 text-xs">
+                  <div className="flex items-start justify-between gap-2 rounded-lg border border-border/80 p-2.5">
+                    <div>
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <InsightConfidenceBadge level={insightConf} />
+                        <p className="text-[10px] font-bold uppercase text-muted-foreground">Data coverage</p>
                       </div>
-                      <ScanEye className="h-8 w-8 shrink-0 text-muted-foreground/40" aria-hidden />
+                      <p className="text-lg font-bold tabular-nums text-foreground">{dataCoveragePct}%</p>
+                      <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{confidenceExplanation(gapConfidence)}</p>
                     </div>
-                  </AccordionContent>
-                </AccordionItem>
-              )}
+                    <ScanEye className="h-8 w-8 shrink-0 text-muted-foreground/40" aria-hidden />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
             </Accordion>
           </div>
 
@@ -1361,9 +1264,7 @@ export function DecisionActionPanel({
           </div>
 
           <div className="space-y-3 border-t border-border pt-3">
-            {!fixMode && (
-              <>
-                <div className="rounded-lg border border-border overflow-hidden">
+            <div className="rounded-lg border border-border overflow-hidden">
                   <div
                     role="button"
                     tabIndex={0}
@@ -1494,21 +1395,11 @@ export function DecisionActionPanel({
                     </div>
                   )}
                 </div>
-              </>
-            )}
 
-            {fixMode && (
-              <p className="text-muted-foreground text-[11px] leading-relaxed">
-                Turn off <span className="font-semibold text-foreground">Fix mode</span> to see hero sub-scores, behavioral UX, and copy metrics.
-              </p>
-            )}
-
-            {!fixMode && (
-              <div className="rounded-lg border border-dashed border-border/80 p-2 text-[10px] text-muted-foreground">
-                Overall score context: <span className="font-bold text-foreground">{userOverall != null ? userOverall.toFixed(1) : "—"}</span>/10 ·{" "}
-                {activeSite.isUser ? "You" : activeSite.domain} view
-              </div>
-            )}
+            <div className="rounded-lg border border-dashed border-border/80 p-2 text-[10px] text-muted-foreground">
+              Overall score context: <span className="font-bold text-foreground">{userOverall != null ? userOverall.toFixed(1) : "—"}</span>/10 ·{" "}
+              {activeSite.isUser ? "You" : activeSite.domain} view
+            </div>
           </div>
         </Fragment>
       </div>

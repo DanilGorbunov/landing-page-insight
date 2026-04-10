@@ -39,10 +39,12 @@ export async function startAnalysis(
   if (!res.ok) {
     if (res.status === 404) {
       throw new Error(
-        "Backend not found (404). On Vercel: set VITE_API_BASE_URL to your Railway backend URL in Project → Settings → Environment Variables, then redeploy."
+        import.meta.env.DEV
+          ? "API 404 — nothing handled /api on port 3002. Run the backend: npm run dev:backend (or npm run dev:all). Vite on :3001 proxies /api → http://127.0.0.1:3002."
+          : "Backend not found (404). On Vercel: set VITE_API_BASE_URL to your Railway backend URL in Project → Settings → Environment Variables, then redeploy."
       );
     }
-    /** Vite dev proxy returns 502 when nothing listens on the upstream port (default :3000). */
+    /** Vite dev proxy returns 502 when nothing listens on the upstream port (default :3002). */
     if (res.status === 502 || res.status === 503) {
       throw new Error(
         import.meta.env.DEV

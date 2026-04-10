@@ -86,6 +86,19 @@ export function getHistory(): HistoryEntry[] {
   }
 }
 
+/** Which history row matches the open report (by job id or domain). */
+export function resolveCurrentHistoryEntryId(url: string, result: AnalysisResult): string | null {
+  const domain = getDomain(url);
+  const jid = result.jobId;
+  const entries = getHistory();
+  if (jid != null) {
+    const hit = entries.find((e) => e.domain === domain && e.result?.jobId === jid);
+    if (hit) return hit.id;
+  }
+  const byDomain = entries.find((e) => e.domain === domain);
+  return byDomain?.id ?? null;
+}
+
 export function cleanExpired(): void {
   if (hasFullInsightsHistoryUnlock()) return;
   const history = getHistoryRaw();

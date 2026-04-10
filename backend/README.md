@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Runs on `http://localhost:3000` (or `PORT` from env).
+Runs on `http://localhost:3002` by default (override with `PORT` in env).
 
 ### Recent comparisons (SQLite)
 

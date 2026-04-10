@@ -9,8 +9,7 @@ function getEnv(key: string): string {
 }
 
 /**
- * API base URL (no trailing slash). In dev, empty = same origin so Vite can proxy `/api` → backend :3000.
- * Override with VITE_API_BASE_URL (e.g. full Railway URL) when needed.
+ * API base URL (no trailing slash). Empty = same-origin `/api/...` (Vite dev proxy → backend :3002).
+ * On Vercel + Railway: set `VITE_API_BASE_URL` to `https://your-service.up.railway.app` (no trailing slash).
  */
-export const VITE_API_BASE_URL =
-  getEnv("VITE_API_BASE_URL") || (import.meta.env.DEV ? "" : "");
+export const VITE_API_BASE_URL = getEnv("VITE_API_BASE_URL");

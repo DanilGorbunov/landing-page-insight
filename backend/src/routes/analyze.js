@@ -23,6 +23,7 @@ import {
   generateHeatmapFromBase64,
   generateAttentionComparison,
 } from "../services/attentionService.js";
+import { generateSectionPreview } from "../services/previewSectionService.js";
 
 export const analyzeRouter = Router();
 
@@ -554,6 +555,43 @@ analyzeRouter.post("/generate-copy", async (req, res, next) => {
     res.json({ variants });
   } catch (err) {
     next(err);
+  }
+});
+
+analyzeRouter.post("/preview-section", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const sectionKey = typeof body.sectionKey === "string" ? body.sectionKey.trim() : "";
+    const currentHtml = typeof body.currentHtml === "string" ? body.currentHtml : "";
+    const screenshotBase64 = typeof body.screenshotBase64 === "string" ? body.screenshotBase64.trim() : "";
+    const issue = typeof body.issue === "string" ? body.issue : "";
+    const recommendation = typeof body.recommendation === "string" ? body.recommendation : "";
+    const competitorExample = typeof body.competitorExample === "string" ? body.competitorExample : "";
+    const pageUrl = typeof body.pageUrl === "string" ? body.pageUrl.trim() : "";
+    const screenshotMediaType =
+      typeof body.screenshotMediaType === "string" && body.screenshotMediaType.startsWith("image/")
+        ? body.screenshotMediaType.split(";")[0].trim()
+        : "image/jpeg";
+
+    if (!pageUrl) {
+      return res.status(400).json({ error: "pageUrl is required" });
+    }
+
+    const result = await generateSectionPreview({
+      sectionKey,
+      currentHtml,
+      screenshotBase64,
+      screenshotMediaType,
+      issue,
+      recommendation,
+      competitorExample,
+      pageUrl,
+    });
+    res.json(result);
+  } catch (err) {
+    const code = err.statusCode && Number.isFinite(err.statusCode) ? err.statusCode : 500;
+    console.error("[preview-section]", err?.message || err);
+    res.status(code).json({ error: err.message || "Section preview failed" });
   }
 });
 

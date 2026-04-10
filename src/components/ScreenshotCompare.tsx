@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { createRoot } from "react-dom/client";
+import { toast } from "sonner";
 import { cn, getDomain, parseScoreFromReport } from "@/lib/utils";
 import type { AnalysisResult } from "@/types/api";
 import {
@@ -52,6 +54,9 @@ import {
   type CompareOverlayLayerMode,
 } from "@/components/CompareDecisionPanels";
 import { AiLabelMarkers } from "@/components/AiLabelMarkers";
+import { SectionAiPreviewModal } from "@/components/SectionAiPreviewModal";
+import { useSectionPreview } from "@/hooks/useSectionPreview";
+import { cropSectionToJpegBase64 } from "@/lib/sectionScreenshotCrop";
 import { HeatmapOverlay } from "@/components/HeatmapOverlay";
 import { buildSimulateAiLabelRows } from "@/lib/simulateAiLabels";
 import { buildUnifiedAiLabelRowsForMode } from "@/lib/unifiedAiLabels";
@@ -189,6 +194,10 @@ function buildAnnotations(analysis: Record<string, string>): Annotation[] {
       height: zone.height,
     };
   });
+}
+
+function competitorGridFaviconUrl(domain: string) {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
 }
 
 function sColor(s: number | null) {
@@ -1019,8 +1028,6 @@ export function ScreenshotCompare({
   /** Per-site: attention heatmap on that screenshot; when non-empty, analyze mode is attention (fetch + panel). */
   const [heatmapEnabledUrls, setHeatmapEnabledUrls] = useState<string[]>([]);
 
-  const [fixMode, setFixMode] = useState(false);
-  const [simplifyCEO, setSimplifyCEO] = useState(false);
   const [planFocusTick, setPlanFocusTick] = useState(0);
   const [quickWinDismissed, setQuickWinDismissed] = useState(false);
   /** Stacked “what / problem / how” cards from toolbar clicks; newest first. */
@@ -1089,6 +1096,34 @@ export function ScreenshotCompare({
   const userSite = sites[0];
   const activeSite = sites[activeIdx] ?? sites[0];
 
+  const captureUserSectionCrop = useCallback(
+    async (sectionKey: SectionOrderKey) => {
+      if (!userSite?.screenshotUrl) return null;
+      const cta = userSite.annotations.find((a) => a.sectionKey === "CTA");
+      return cropSectionToJpegBase64(
+        userSite.screenshotUrl,
+        sectionKey,
+        cta ? { top: cta.top, height: cta.height } : null
+      );
+    },
+    [userSite?.screenshotUrl, userSite?.annotations]
+  );
+
+  const {
+    previewOpen,
+    previewLoading,
+    previewBtnLoading,
+    previewData,
+    cropDataUrl,
+    previewTargetRow,
+    runSectionPreviewForRow,
+    closePreview,
+  } = useSectionPreview({
+    pageUrl: url,
+    result,
+    captureSectionCrop: captureUserSectionCrop,
+  });
+
   const { safeLeft, safeRight } = useMemo(() => {
     const n = sites.length;
     if (n < 2) return { safeLeft: 0, safeRight: 0 };
@@ -1099,6 +1134,28 @@ export function ScreenshotCompare({
 
   const splitLeftSite = sites[safeLeft];
   const splitRightSite = sites.length > 1 ? sites[safeRight] : null;
+
+  const sectionPreviewPlacement = useMemo((): "inline-right" | "popup" | "modal" => {
+    if (viewMode === "single") {
+      return activeSite.isUser ? "popup" : "modal";
+    }
+    if (viewMode === "split" || viewMode === "compare") {
+      if (!splitLeftSite || !splitRightSite) return "modal";
+      if (wideSoloSide !== null) return "popup";
+      if (splitRightSite.isUser) return "popup";
+      if (splitLeftSite.isUser && !splitRightSite.isUser) return "inline-right";
+    }
+    return "modal";
+  }, [viewMode, activeSite, splitLeftSite, splitRightSite, wideSoloSide]);
+
+  const showInlineSectionPreview = useMemo(
+    () =>
+      previewOpen &&
+      sectionPreviewPlacement === "inline-right" &&
+      (viewMode === "split" || viewMode === "compare") &&
+      wideSoloSide === null,
+    [previewOpen, sectionPreviewPlacement, viewMode, wideSoloSide]
+  );
 
   /** Competitor (or other column) for user-centric metrics when the right column is your site. */
   const vsSite = useMemo(() => {
@@ -1380,6 +1437,94 @@ export function ScreenshotCompare({
     setSimulateChecked((prev) => ({ ...prev, [id]: checked }));
   }, []);
 
+  const sectionPreviewPopupRootRef = useRef<ReturnType<typeof createRoot> | null>(null);
+  const sectionPreviewPopupWinRef = useRef<Window | null>(null);
+
+  useEffect(() => {
+    if (!previewOpen || sectionPreviewPlacement !== "popup") {
+      if (sectionPreviewPopupRootRef.current) {
+        try {
+          sectionPreviewPopupRootRef.current.unmount();
+        } catch {
+          /* ignore */
+        }
+        sectionPreviewPopupRootRef.current = null;
+      }
+      if (sectionPreviewPopupWinRef.current && !sectionPreviewPopupWinRef.current.closed) {
+        sectionPreviewPopupWinRef.current.close();
+      }
+      sectionPreviewPopupWinRef.current = null;
+      return;
+    }
+    const w = window.open("", "_blank", "width=960,height=800,scrollbars=yes");
+    if (!w) {
+      toast.error("Не вдалося відкрити вікно. Дозвольте спливаючі вікна для перегляду прев’ю.");
+      closePreview();
+      return;
+    }
+    sectionPreviewPopupWinRef.current = w;
+    w.document.documentElement.innerHTML = "";
+    const htmlEl = w.document.documentElement;
+    htmlEl.setAttribute("lang", "en");
+    const head = w.document.createElement("head");
+    const meta = w.document.createElement("meta");
+    meta.setAttribute("charset", "utf-8");
+    head.appendChild(meta);
+    document.querySelectorAll('link[rel="stylesheet"], style').forEach((el) => {
+      head.appendChild(el.cloneNode(true));
+    });
+    w.document.documentElement.insertBefore(head, w.document.body);
+    w.document.body.className = document.body.className;
+    const root = createRoot(w.document.body);
+    sectionPreviewPopupRootRef.current = root;
+    return () => {
+      try {
+        root.unmount();
+      } catch {
+        /* ignore */
+      }
+      if (!w.closed) w.close();
+      sectionPreviewPopupRootRef.current = null;
+      sectionPreviewPopupWinRef.current = null;
+    };
+  }, [previewOpen, sectionPreviewPlacement, closePreview]);
+
+  useEffect(() => {
+    if (!previewOpen || sectionPreviewPlacement !== "popup" || !sectionPreviewPopupRootRef.current) return;
+    sectionPreviewPopupRootRef.current.render(
+      <SectionAiPreviewModal
+        embedded
+        open
+        onClose={() => {
+          closePreview();
+          if (sectionPreviewPopupWinRef.current && !sectionPreviewPopupWinRef.current.closed) {
+            sectionPreviewPopupWinRef.current.close();
+          }
+        }}
+        sectionTitle={previewTargetRow?.sectionLabel ?? "Section"}
+        estFallback={previewTargetRow?.estAfter ?? 0}
+        cropDataUrl={cropDataUrl}
+        preview={previewData}
+        loading={previewLoading}
+        onAddToPlan={() => {
+          if (previewTargetRow) {
+            onSimulateToggle(previewTargetRow.id, true);
+            toast(`Added to plan · ${previewTargetRow.sectionLabel}`, { duration: 2500, position: "bottom-center" });
+          }
+        }}
+      />
+    );
+  }, [
+    previewOpen,
+    sectionPreviewPlacement,
+    previewData,
+    previewLoading,
+    cropDataUrl,
+    previewTargetRow,
+    closePreview,
+    onSimulateToggle,
+  ]);
+
   const simulateAiLabelRows = useMemo(
     () =>
       buildSimulateAiLabelRows(result, simulateItems, {
@@ -1534,6 +1679,9 @@ export function ScreenshotCompare({
           userOverall={site.isUser ? decisionBundle.overall : site.overallScore ?? null}
           simulateItems={siteItems}
           competitorOverallScores={competitorOverallScores}
+          previewEnabled={site.isUser}
+          onPreviewImproved={runSectionPreviewForRow}
+          previewBtnLoading={previewBtnLoading}
         />
       );
     },
@@ -1548,6 +1696,8 @@ export function ScreenshotCompare({
       onSimulateToggle,
       decisionBundle.overall,
       competitorOverallScores,
+      runSectionPreviewForRow,
+      previewBtnLoading,
     ]
   );
 
@@ -1749,14 +1899,9 @@ export function ScreenshotCompare({
       conversion={decisionBundle.conversion}
       behavioral={decisionBundle.behavioral}
       copyMetrics={decisionBundle.copyMetrics}
-      gapItems={decisionBundle.gapItems}
       winNarrative={decisionBundle.winNarrative}
       stealThree={decisionBundle.stealThree}
       abVariants={decisionBundle.abVariants}
-      fixMode={fixMode}
-      setFixMode={setFixMode}
-      simplifyCEO={simplifyCEO}
-      setSimplifyCEO={setSimplifyCEO}
       dataCoveragePct={decisionBundle.dataCoverage}
       gapConfidence={decisionBundle.gapConfidence}
       userOverall={decisionBundle.overall}
@@ -1912,6 +2057,7 @@ export function ScreenshotCompare({
   );
 
   return (
+    <>
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
       {!controlled && (
         <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
@@ -1955,11 +2101,13 @@ export function ScreenshotCompare({
         </div>
       )}
 
-      {compareToolbarSlot === undefined
-        ? compareToolbarEl
-        : compareToolbarSlot
-          ? createPortal(compareToolbarEl, compareToolbarSlot)
-          : null}
+      {compareToolbarNav
+        ? compareToolbarSlot === undefined
+          ? compareToolbarEl
+          : compareToolbarSlot
+            ? createPortal(compareToolbarEl, compareToolbarSlot)
+            : null
+        : null}
 
       {/* Center (scrollable) | Right panel — left column fit-content height; right fills viewport band */}
       <div
@@ -2098,7 +2246,58 @@ export function ScreenshotCompare({
                         </div>
                       </div>
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                        {showCompetitorPickGrid ? (
+                        {showInlineSectionPreview ? (
+                          <>
+                            <div className="flex min-w-0 max-w-full shrink-0 items-stretch justify-start gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  pushToolbarHelp("ai-preview-close", HINT_CONTROLS.vsSelect);
+                                  closePreview();
+                                }}
+                                aria-label="Close AI preview"
+                                className={cn(
+                                  "inline-flex shrink-0 items-center justify-center rounded-lg border border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground",
+                                  COMPACT_TOOLBAR_ROW,
+                                  "w-7 px-0"
+                                )}
+                              >
+                                <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                              </button>
+                              <div className="flex min-h-7 min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-muted/15 px-2.5 py-1">
+                                <span className="truncate text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                                  AI preview
+                                </span>
+                                {previewTargetRow ? (
+                                  <span className="truncate text-[10px] font-semibold text-foreground" title={previewTargetRow.sectionLabel}>
+                                    {previewTargetRow.sectionLabel}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                              <SectionAiPreviewModal
+                                variant="compareColumn"
+                                open
+                                onClose={closePreview}
+                                sectionTitle={previewTargetRow?.sectionLabel ?? "Section"}
+                                estFallback={previewTargetRow?.estAfter ?? 0}
+                                cropDataUrl={cropDataUrl}
+                                preview={previewData}
+                                loading={previewLoading}
+                                onAddToPlan={() => {
+                                  if (previewTargetRow) {
+                                    onSimulateToggle(previewTargetRow.id, true);
+                                    toast(`Added to plan · ${previewTargetRow.sectionLabel}`, {
+                                      duration: 2500,
+                                      position: "bottom-center",
+                                    });
+                                  }
+                                }}
+                              />
+                            </div>
+                          </>
+                        ) : showCompetitorPickGrid ? (
                           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
                             <div className="min-w-0 shrink-0">
                               <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -2119,29 +2318,60 @@ export function ScreenshotCompare({
                                       pickCompetitorFromGrid(siteIndex);
                                     }}
                                     className={cn(
-                                      "flex flex-col gap-1.5 rounded-lg border border-border bg-card p-2 text-left transition-colors",
-                                      "hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                                      "flex flex-col gap-2 rounded-xl border border-border bg-card p-2.5 text-left text-card-foreground shadow-sm transition-colors",
+                                      "hover:border-primary/45 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                      "dark:border-zinc-600/70 dark:bg-[#0a0a0a] dark:shadow-none dark:hover:border-primary/50 dark:hover:bg-zinc-950"
                                     )}
                                   >
-                                    <div className="relative aspect-[9/20] max-h-[min(200px,40vh)] w-full overflow-hidden rounded-md border border-border/80 bg-background">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                      <img
+                                        src={competitorGridFaviconUrl(site.domain)}
+                                        alt=""
+                                        width={24}
+                                        height={24}
+                                        className="h-6 w-6 shrink-0 rounded-md bg-muted ring-1 ring-border dark:bg-zinc-900 dark:ring-zinc-700/80"
+                                      />
+                                      <span className="min-w-0 truncate font-mono text-[11px] font-medium tracking-tight text-foreground">
+                                        {site.domain}
+                                      </span>
+                                    </div>
+                                    <div className="overflow-hidden rounded-lg bg-muted ring-1 ring-border dark:bg-zinc-950 dark:ring-zinc-800/90">
                                       {site.screenshotUrl ? (
                                         <img
                                           src={site.screenshotUrl}
                                           alt=""
-                                          className="h-full w-full object-cover object-top"
+                                          className="aspect-[16/10] max-h-[min(160px,28vh)] w-full object-cover object-top"
                                           loading="lazy"
                                           draggable={false}
                                         />
                                       ) : (
-                                        <div className="flex h-full items-center justify-center px-2 text-center text-[10px] text-muted-foreground">
+                                        <div className="flex aspect-[16/10] max-h-[min(160px,28vh)] w-full items-center justify-center px-2 text-center font-mono text-[10px] text-muted-foreground">
                                           No screenshot
                                         </div>
                                       )}
                                     </div>
-                                    <span className="text-[11px] font-semibold text-foreground truncate">{site.domain}</span>
-                                    <span className={cn("text-[10px] font-mono font-bold tabular-nums", sColor(site.overallScore))}>
-                                      {site.overallScore != null ? `${site.overallScore.toFixed(1)}/10` : "—"}
-                                    </span>
+                                    <div className="h-px w-full shrink-0 bg-border dark:bg-zinc-800" aria-hidden />
+                                    <p className="font-mono text-[8px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                                      Section scores
+                                    </p>
+                                    <ul className="flex flex-col gap-1 font-mono text-[10px]">
+                                      {SECTION_KEYS.map((key) => {
+                                        const sc = sectionScoreForScreenshot(site.analysis, key);
+                                        return (
+                                          <li
+                                            key={key}
+                                            className="flex items-baseline justify-between gap-2 leading-tight"
+                                          >
+                                            <span className="min-w-0 truncate text-muted-foreground">
+                                              {SECTION_ZONES[key].label}
+                                            </span>
+                                            <span className="shrink-0 text-sm font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                                              {sc.toFixed(1)}
+                                            </span>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
                                   </button>
                                 ))}
                               </div>
@@ -2671,5 +2901,24 @@ export function ScreenshotCompare({
         </div>
       )}
     </div>
+
+    {sectionPreviewPlacement === "modal" && previewOpen ? (
+      <SectionAiPreviewModal
+        open
+        onClose={closePreview}
+        sectionTitle={previewTargetRow?.sectionLabel ?? "Section"}
+        estFallback={previewTargetRow?.estAfter ?? 0}
+        cropDataUrl={cropDataUrl}
+        preview={previewData}
+        loading={previewLoading}
+        onAddToPlan={() => {
+          if (previewTargetRow) {
+            onSimulateToggle(previewTargetRow.id, true);
+            toast(`Added to plan · ${previewTargetRow.sectionLabel}`, { duration: 2500, position: "bottom-center" });
+          }
+        }}
+      />
+    ) : null}
+    </>
   );
 }

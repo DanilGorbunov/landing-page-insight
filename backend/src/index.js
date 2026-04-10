@@ -24,11 +24,12 @@ app.use(corsMiddleware);
 // Request id and structured logging (no body/headers logged to avoid leaking secrets)
 app.use(requestIdMiddleware);
 app.use(requestLogger);
-app.use(express.json());
+/** Base64 section crops + JSON can exceed default 100kb (preview-section, attention-heatmap). */
+app.use(express.json({ limit: "15mb" }));
 
 app.get("/", (_req, res) => {
   res.type("text/plain").send(
-    "LandingLens API is running. Use POST /api/analyze or GET /api/analyze/job/:jobId. Frontend is usually on port 3003."
+    "LandingLens API is running. Use POST /api/analyze or GET /api/analyze/job/:jobId. Frontend dev is usually on port 3001 (Vite)."
   );
 });
 

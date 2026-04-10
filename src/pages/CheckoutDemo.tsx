@@ -1,6 +1,6 @@
-import { useState, useMemo, type FormEvent } from "react";
+import { useState, useMemo, useCallback, type FormEvent } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CreditCard, Lock, Loader2 } from "lucide-react";
+import { CreditCard, Loader2 } from "lucide-react";
 import { TouchTargetButton } from "@/components/ui/touch-target-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,8 +13,8 @@ import {
   type FullInsightsPayload,
 } from "@/lib/reportSession";
 import { enableFullInsightsHistoryPersistence } from "@/lib/analysisHistory";
-import { auditPathForUrl, auditSectionHref } from "@/lib/auditSlug";
-import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
+import { auditPathForUrl } from "@/lib/auditSlug";
+import { resolveDashboardNavHref } from "@/lib/dashboardNavHref";
 import { ensureScore, parseSectionScores } from "@/lib/utils";
 import { weightedOverallFromSections } from "@/lib/insightsProjection";
 import type { AnalysisResult } from "@/types/api";
@@ -48,8 +48,6 @@ export default function CheckoutDemo() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const planId = searchParams.get("plan") || (location.state as { planId?: string })?.planId || "pro";
-  const fromReport = (location.state as { fromReport?: boolean })?.fromReport === true;
-
   const [email, setEmail] = useState(DEMO.email);
   const [name, setName] = useState(DEMO.name);
   const [card, setCard] = useState(DEMO.card);
@@ -75,27 +73,10 @@ export default function CheckoutDemo() {
       ? { url, overallScore, ...(payload?.paidAt ? { createdAt: payload.paidAt } : {}) }
       : null;
 
-  const handleNav = (id: string) => {
-    if (id === "history") {
-      navigate("/history");
-      return;
-    }
-    if (id === "monitor") {
-      navigate("/monitor");
-      return;
-    }
-    if (FULL_INSIGHTS_SECTION_IDS.has(id)) {
-      navigate(auditSectionHref(id, url));
-    }
-  };
-
-  const handleBack = () => {
-    if (fromReport) {
-      navigate("/", { state: { restoreReport: true } });
-    } else {
-      navigate("/pricing", { state: { fromReport } });
-    }
-  };
+  const resolveNavHref = useCallback(
+    (id: string) => resolveDashboardNavHref(id, { mode: "session", reportUrl: url }),
+    [url]
+  );
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -124,35 +105,19 @@ export default function CheckoutDemo() {
     });
     enableFullInsightsHistoryPersistence();
     setBusy(false);
-    navigate(auditPathForUrl(nextPayload.url, "section=compare"), { replace: true });
+    navigate(auditPathForUrl(nextPayload.url), { replace: true });
   };
 
   return (
     <DashboardPageShell
       sidebarProps={{
         activeNavId: "checkout",
-        onSelect: handleNav,
+        resolveNavHref,
         reportContext,
         result,
         onNewAnalysis: () => navigate("/"),
       }}
-      headerCenter={
-        <div className="flex min-h-0 min-w-0 flex-1 flex-wrap items-center gap-2 px-1 text-sm">
-          <TouchTargetButton
-            type="button"
-            onClick={handleBack}
-            className="gap-2 rounded-lg px-2 py-2 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </TouchTargetButton>
-          <span className="inline-flex items-center gap-1.5 font-medium text-muted-foreground">
-            <Lock className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-            Secure demo checkout
-          </span>
-        </div>
-      }
-      mainClassName="overflow-y-auto px-4 py-10"
+      mainClassName="overflow-y-auto px-4 pt-4 pb-5 md:pb-7"
     >
       <div className="mx-auto flex w-full max-w-lg flex-col items-center">
         <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-[#1a1a24] shadow-2xl">

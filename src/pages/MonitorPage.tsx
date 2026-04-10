@@ -1,15 +1,14 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { Bell, Mail } from "lucide-react";
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { Mail } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardPageShell } from "@/components/DashboardPageShell";
+import { CompetitorMonitorCard } from "@/components/CompetitorMonitorCard";
 import { getDomain, ensureScore, parseSectionScores } from "@/lib/utils";
-import { readFullInsightsPayload } from "@/lib/reportSession";
+import { readFullInsightsPayload, writeFullInsightsPayload } from "@/lib/reportSession";
 import { weightedOverallFromSections } from "@/lib/insightsProjection";
-import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
-import { auditSectionHref } from "@/lib/auditSlug";
+import { resolveDashboardNavHref } from "@/lib/dashboardNavHref";
 import type { AnalysisResult } from "@/types/api";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -19,16 +18,21 @@ function pseudoDaysSinceCheck(domain: string): number {
   return (h % 10) + 1;
 }
 
-function competitorsFromResult(result: AnalysisResult | null): { domain: string; url: string }[] {
+function competitorsFromResult(
+  result: AnalysisResult | null
+): {
+  domain: string;
+  url: string;
+  analysis: Record<string, string>;
+  screenshotUrl?: string | null;
+}[] {
   if (!result?.competitors?.length) return [];
   return result.competitors.map((c) => ({
     url: c.url,
     domain: getDomain(c.url),
+    analysis: c.analysis ?? {},
+    screenshotUrl: c.screenshotUrl,
   }));
-}
-
-function faviconUrl(domain: string) {
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
 }
 
 export default function MonitorPage() {
@@ -52,16 +56,16 @@ export default function MonitorPage() {
       ? { url, overallScore, ...(payload?.paidAt ? { createdAt: payload.paidAt } : {}) }
       : null;
 
-  const handleNav = (id: string) => {
-    if (id === "monitor") return;
-    if (id === "history") {
-      navigate("/history");
-      return;
-    }
-    if (FULL_INSIGHTS_SECTION_IDS.has(id)) {
-      navigate(auditSectionHref(id, url));
-    }
-  };
+  const resolveNavHref = useCallback(
+    (id: string) => resolveDashboardNavHref(id, { mode: "session", reportUrl: url }),
+    [url]
+  );
+
+  /** Re-persist session + localStorage audit map so /audit/:slug loads after leaving Monitor. */
+  useLayoutEffect(() => {
+    const p = readFullInsightsPayload();
+    if (p?.result && p.url?.trim()) writeFullInsightsPayload(p);
+  }, []);
 
   const [watching, setWatching] = useState<Record<string, boolean>>({});
   const [email, setEmail] = useState("");
@@ -86,28 +90,15 @@ export default function MonitorPage() {
     <DashboardPageShell
       sidebarProps={{
         activeNavId: "monitor",
-        onSelect: handleNav,
+        resolveNavHref,
         reportContext,
         result,
         onNewAnalysis: () => navigate("/"),
+        hideSidebarNewAnalysis: true,
       }}
-      headerCenter={
-        <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2 px-1 text-sm">
-          <Link to={auditSectionHref("compare", url)} className="truncate text-muted-foreground hover:text-foreground">
-            Dashboard
-          </Link>
-          <span className="text-muted-foreground/60" aria-hidden>
-            /
-          </span>
-          <span className="inline-flex min-w-0 items-center gap-1.5 truncate font-semibold text-foreground">
-            <Bell className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            Monitor
-          </span>
-        </div>
-      }
-      mainClassName="overflow-y-auto p-5 md:p-7"
+      mainClassName="overflow-y-auto px-4 pt-4 pb-5 md:pb-7"
     >
-      <div id="main" className="mx-auto w-full max-w-2xl space-y-8">
+      <div id="main" className="mx-auto w-full max-w-6xl space-y-8">
             <div>
               <h1 className="text-2xl font-bold text-foreground">Competitor Monitor</h1>
               <p className="text-sm text-muted-foreground mt-1">Track when competitors update their landing pages</p>
@@ -122,37 +113,20 @@ export default function MonitorPage() {
                 with competitors, then open Monitor again.
               </div>
             ) : (
-              <ul className="space-y-3">
+              <div className="grid gap-6 sm:grid-cols-1 lg:grid-cols-2">
                 {competitors.map((c) => (
-                  <li key={c.domain} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4">
-                    <img
-                      src={faviconUrl(c.domain)}
-                      alt=""
-                      width={32}
-                      height={32}
-                      className="h-8 w-8 rounded-md bg-muted shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-foreground truncate">{c.domain}</span>
-                        {watching[c.domain] && (
-                          <span className="text-[10px] font-bold uppercase rounded-full border border-primary/40 bg-primary/15 px-2 py-0.5 text-primary">
-                            Watching
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Last checked: {pseudoDaysSinceCheck(c.domain)} days ago
-                      </p>
-                    </div>
-                    <Switch
-                      checked={!!watching[c.domain]}
-                      onCheckedChange={(v) => toggle(c.domain, v)}
-                      aria-label={`Watch ${c.domain}`}
-                    />
-                  </li>
+                  <CompetitorMonitorCard
+                    key={c.url}
+                    domain={c.domain}
+                    url={c.url}
+                    screenshotUrl={c.screenshotUrl}
+                    analysis={c.analysis}
+                    watching={!!watching[c.domain]}
+                    onWatchChange={(v) => toggle(c.domain, v)}
+                    lastCheckedDays={pseudoDaysSinceCheck(c.domain)}
+                  />
                 ))}
-              </ul>
+              </div>
             )}
 
             <div className="rounded-2xl border border-primary/35 bg-gradient-to-br from-[hsl(0,0%,4%)] via-[hsl(0,0%,8%)] to-[hsl(205,35%,20%)] p-6 text-[hsl(210,25%,96%)] shadow-lg">

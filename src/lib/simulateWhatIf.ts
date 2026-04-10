@@ -232,8 +232,8 @@ export function projectOverallScore(base: number | null, gain: number): number {
 }
 
 /**
- * Hard ceiling: never above best competitor + 1.0, and never above 9.5/10.
- * When there are no competitors, only the 9.5 cap applies.
+ * Hard ceiling: never above best competitor + 1.0, and never above 10/10 (full rubric).
+ * When there are no competitors, the rubric max (10) applies.
  */
 export function applyProjectedCeiling(
   rawProjected: number,
@@ -241,7 +241,7 @@ export function applyProjectedCeiling(
 ): { projected: number; wasCapped: boolean } {
   const comps = competitorScores.filter((n): n is number => n != null && !Number.isNaN(n));
   const topComp = comps.length > 0 ? Math.max(...comps) : null;
-  const ceiling = topComp != null ? Math.min(topComp + 1.0, 9.5) : 9.5;
+  const ceiling = topComp != null ? Math.min(topComp + 1.0, 10) : 10;
   const projected = Math.round(Math.min(rawProjected, ceiling) * 10) / 10;
   const wasCapped = projected + 1e-9 < rawProjected;
   return { projected, wasCapped };

@@ -19,7 +19,7 @@ const required = [
 
 const optional = [
   { key: "TAVILY_API_KEY", envKey: "TAVILY_API_KEY", description: "Tavily API key for competitor discovery" },
-  { key: "PORT", envKey: "PORT", default: "3000", description: "Server port" },
+  { key: "PORT", envKey: "PORT", default: "3002", description: "Server port" },
 ];
 
 function getEnv(key, altKey) {
@@ -46,10 +46,10 @@ export function validateEnv() {
  * Return a safe config object for the app. Never includes secret values in logs.
  */
 export function getConfig() {
-  const port = getEnv("PORT") || "3000";
+  const port = getEnv("PORT") || "3002";
   const portNum = parseInt(port, 10);
   return {
-    port: Number.isFinite(portNum) && portNum > 0 ? portNum : 3000,
+    port: Number.isFinite(portNum) && portNum > 0 ? portNum : 3002,
     hasTavily: !!getEnv("TAVILY_API_KEY"),
     // Keys are intentionally not exposed; services read process.env themselves
   };

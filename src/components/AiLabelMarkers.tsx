@@ -57,6 +57,9 @@ export function AiLabelMarkers({
   userOverall,
   simulateItems,
   competitorOverallScores,
+  previewEnabled,
+  onPreviewImproved,
+  previewBtnLoading,
 }: {
   rows: SimulateAiLabelRow[];
   simulateChecked: Record<string, boolean>;
@@ -64,6 +67,11 @@ export function AiLabelMarkers({
   userOverall: number | null;
   simulateItems: SimulateImprovementItem[];
   competitorOverallScores: number[];
+  /** Only user site — preview button */
+  previewEnabled: boolean;
+  /** Opens section preview (parent handles placement: inline / popup / modal) */
+  onPreviewImproved?: (row: SimulateAiLabelRow) => void | Promise<void>;
+  previewBtnLoading?: boolean;
 }) {
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
@@ -381,42 +389,59 @@ export function AiLabelMarkers({
                     </p>
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2 pb-1">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[11px] font-semibold hover:bg-muted"
-                    onClick={() => {
-                      const t = openRow.suggestedCopy || openRow.whatISee;
-                      void navigator.clipboard.writeText(t);
-                      toast("Copied", { duration: 2000, position: "bottom-center" });
-                    }}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    Copy
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded-lg bg-[#1D9E75] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
-                    onClick={() => {
-                      if (simulateChecked[openRow.id]) {
-                        onSimulateToggle(openRow.id, false);
-                        toast(`Removed ${openRow.sectionLabel}`, { duration: 2500, position: "bottom-center" });
-                      } else {
-                        onSimulateToggle(openRow.id, true);
-                        toast(`Added to plan · +${openRowLift.toFixed(1)} pts`, { duration: 2500, position: "bottom-center" });
-                      }
-                      closeCard();
-                    }}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    {simulateChecked[openRow.id] ? "✓ Added" : `Add to Simulate +${openRowLift.toFixed(1)}`}
-                  </button>
+                <div className="flex flex-col gap-2 pb-1">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[11px] font-semibold hover:bg-muted"
+                      onClick={() => {
+                        const t = openRow.suggestedCopy || openRow.whatISee;
+                        void navigator.clipboard.writeText(t);
+                        toast("Copied", { duration: 2000, position: "bottom-center" });
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-lg bg-[#1D9E75] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:brightness-110"
+                      onClick={() => {
+                        if (simulateChecked[openRow.id]) {
+                          onSimulateToggle(openRow.id, false);
+                          toast(`Removed ${openRow.sectionLabel}`, { duration: 2500, position: "bottom-center" });
+                        } else {
+                          onSimulateToggle(openRow.id, true);
+                          toast(`Added to plan · +${openRowLift.toFixed(1)} pts`, { duration: 2500, position: "bottom-center" });
+                        }
+                        closeCard();
+                      }}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {simulateChecked[openRow.id] ? "✓ Added" : `Add to Simulate +${openRowLift.toFixed(1)}`}
+                    </button>
+                  </div>
+                  {previewEnabled && onPreviewImproved ? (
+                    <button
+                      type="button"
+                      disabled={!!previewBtnLoading}
+                      className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-2 text-[11px] font-semibold text-primary hover:bg-primary/15 disabled:opacity-60"
+                      onClick={() => {
+                        closeCard();
+                        void onPreviewImproved(openRow);
+                      }}
+                    >
+                      <span aria-hidden>✨</span>
+                      {previewBtnLoading ? "Generating preview…" : "Preview improved version"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
           </>,
           document.body
         )}
+
     </>
   );
 }

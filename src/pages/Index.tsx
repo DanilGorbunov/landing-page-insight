@@ -31,7 +31,7 @@ const Index = () => {
       planName: meta?.planName ?? "Analysis",
       paidAt: paidAtOverride ?? meta?.paidAt ?? new Date().toISOString(),
     });
-    navigate(auditPathForUrl(normalized, "section=compare"));
+    navigate(auditPathForUrl(normalized));
   }, [navigate]);
 
   // Auto-start analysis when navigated here with ?url= param (e.g. from Monitor "Re-check")
@@ -64,7 +64,7 @@ const Index = () => {
             paidAt: meta?.paidAt ?? data.savedEntry?.analyzedAt ?? new Date().toISOString(),
           });
           sessionStorage.removeItem(REPORT_RETURN_KEY);
-          navigate(auditPathForUrl(data.url.startsWith("http") ? data.url : `https://${data.url}`, "section=compare"), {
+          navigate(auditPathForUrl(data.url.startsWith("http") ? data.url : `https://${data.url}`), {
             replace: true,
           });
           return;
