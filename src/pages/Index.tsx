@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import InputScreen from "@/components/InputScreen";
 import ProgressiveReportView from "@/components/ProgressiveReportView";
 import { startAnalysis, fetchRecentComparisonsFromApi, type JobLiveState } from "@/lib/api";
+import { MAX_COMPETITORS } from "@/lib/constants";
 import { saveToHistory, getHistory, getHistoryCount, type HistoryEntry, type AnalysisResult } from "@/lib/analysisHistory";
 import { getDefaultRecentComparisons } from "@/lib/demoRecentComparisons";
 import { REPORT_RETURN_KEY, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
@@ -114,8 +115,13 @@ const Index = () => {
 
   /** Full-insights “Re-audit”: navigate here with state to run a fresh pipeline (no cached competitors). */
   const reauditHandledRef = useRef(false);
+  /** Compare → add competitor: same analyze job with an explicit competitor list. */
+  const rerunWithCompetitorsHandledRef = useRef(false);
   useEffect(() => {
-    if (location.pathname !== "/") reauditHandledRef.current = false;
+    if (location.pathname !== "/") {
+      reauditHandledRef.current = false;
+      rerunWithCompetitorsHandledRef.current = false;
+    }
   }, [location.pathname]);
 
   useEffect(() => {
@@ -127,6 +133,18 @@ const Index = () => {
     const rawUrl = st.startFreshAnalysis.url;
     navigate("/", { replace: true, state: {} });
     void handleAnalyze(rawUrl, []);
+  }, [location.pathname, location.state, navigate, handleAnalyze]);
+
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+    const st = location.state as { rerunWithCompetitors?: { url: string; competitors: string[] } } | undefined;
+    if (!st?.rerunWithCompetitors?.url) return;
+    if (rerunWithCompetitorsHandledRef.current) return;
+    rerunWithCompetitorsHandledRef.current = true;
+    const { url: rawUrl, competitors } = st.rerunWithCompetitors;
+    const list = (competitors ?? []).map((u) => String(u ?? "").trim()).filter(Boolean).slice(0, MAX_COMPETITORS);
+    navigate("/", { replace: true, state: {} });
+    void handleAnalyze(rawUrl, list);
   }, [location.pathname, location.state, navigate, handleAnalyze]);
 
   const handleComplete = useCallback(

@@ -393,12 +393,15 @@ function SectionContent({
   url,
   compareSiteIdx,
   onCompareSiteIdxChange,
+  onRerunWithCompetitors,
 }: {
   id: string;
   result: AnalysisResult;
   url: string;
   compareSiteIdx?: number;
   onCompareSiteIdxChange?: (idx: number) => void;
+  /** Re-run POST /api/analyze with this competitor list (add-competitor flow). */
+  onRerunWithCompetitors?: (competitorUrls: string[]) => void;
 }) {
   switch (id) {
     case "overview":
@@ -410,6 +413,7 @@ function SectionContent({
           url={url}
           compareSiteIdx={compareSiteIdx}
           onCompareSiteIdxChange={onCompareSiteIdxChange}
+          onRerunAnalysisWithCompetitors={onRerunWithCompetitors}
         />
       );
     case "performance":
@@ -659,6 +663,21 @@ export default function AuditDashboard() {
 
   const { url, result, planName, paidAt } = payload;
 
+  const reportUrlNormalized = useMemo(() => {
+    const t = (url ?? "").trim();
+    if (!t) return "";
+    return /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/\//, "")}`;
+  }, [url]);
+
+  const handleRerunWithCompetitors = useCallback(
+    (competitorUrls: string[]) => {
+      if (!reportUrlNormalized) return;
+      toast.info("Starting analysis with updated competitors…");
+      navigate("/", { state: { rerunWithCompetitors: { url: reportUrlNormalized, competitors: competitorUrls } } });
+    },
+    [navigate, reportUrlNormalized]
+  );
+
   const resolveNavHref = useCallback(
     (id: string) =>
       resolveDashboardNavHref(id, {
@@ -775,6 +794,7 @@ export default function AuditDashboard() {
                 url={url}
                 compareSiteIdx={compareSiteIdx}
                 onCompareSiteIdxChange={setCompareSiteIdx}
+                onRerunWithCompetitors={isSharedView ? undefined : handleRerunWithCompetitors}
               />
             </div>
           ) : (

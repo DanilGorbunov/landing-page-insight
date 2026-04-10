@@ -41,6 +41,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { MAX_COMPETITORS } from "@/lib/constants";
 import { HintTooltip } from "@/components/HintTooltip";
 import {
   HINT_ANALYZE,
@@ -198,6 +209,13 @@ function buildAnnotations(analysis: Record<string, string>): Annotation[] {
 
 function competitorGridFaviconUrl(domain: string) {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+function normalizeCompetitorUrlInput(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  if (/^https?:\/\//i.test(t)) return t;
+  return `https://${t}`;
 }
 
 function sColor(s: number | null) {
@@ -982,6 +1000,8 @@ interface Props {
   onReaudit?: () => void;
   /** Shown as icon-only control after the analysis history dropdown when `compareToolbarNav` is set. */
   onNewAnalysis?: () => void;
+  /** Re-run full analysis (home → progress) with this competitor URL list; omit for read-only / shared views. */
+  onRerunAnalysisWithCompetitors?: (competitorUrls: string[]) => void;
 }
 
 export function ScreenshotCompare({
@@ -993,6 +1013,7 @@ export function ScreenshotCompare({
   compareToolbarNav,
   onReaudit,
   onNewAnalysis,
+  onRerunAnalysisWithCompetitors,
 }: Props) {
   const [internalIdx, setInternalIdx] = useState(0);
   const controlled = controlledIdx !== undefined && onCompareSiteIdxChange !== undefined;
@@ -1848,6 +1869,43 @@ export function ScreenshotCompare({
     [setActiveIdx]
   );
 
+  const existingCompetitorUrls = useMemo(
+    () =>
+      result.competitors
+        .map((c) => c.url)
+        .filter((u): u is string => typeof u === "string" && Boolean(u.trim())),
+    [result.competitors]
+  );
+
+  const canAddCompetitor =
+    Boolean(onRerunAnalysisWithCompetitors) && existingCompetitorUrls.length < MAX_COMPETITORS;
+
+  const [addCompetitorOpen, setAddCompetitorOpen] = useState(false);
+  const [addCompetitorInput, setAddCompetitorInput] = useState("");
+
+  const submitAddCompetitor = useCallback(() => {
+    if (!onRerunAnalysisWithCompetitors) return;
+    const normalized = normalizeCompetitorUrlInput(addCompetitorInput);
+    if (!normalized) {
+      toast.error("Enter a competitor URL or domain.");
+      return;
+    }
+    const newDomain = getDomain(normalized);
+    if (getDomain(url) === newDomain) {
+      toast.error("That's your own site — pick a competitor.");
+      return;
+    }
+    if (existingCompetitorUrls.some((u) => getDomain(u) === newDomain)) {
+      toast.error("That competitor is already in this report.");
+      return;
+    }
+    const next = [...existingCompetitorUrls, normalized].slice(0, MAX_COMPETITORS);
+    toast.success("Starting full comparison with the new competitor…");
+    onRerunAnalysisWithCompetitors(next);
+    setAddCompetitorOpen(false);
+    setAddCompetitorInput("");
+  }, [addCompetitorInput, existingCompetitorUrls, onRerunAnalysisWithCompetitors, url]);
+
   const backToCompetitorGrid = useCallback(() => {
     setRightPaneMode("grid");
     setActiveIdx(0);
@@ -2299,15 +2357,9 @@ export function ScreenshotCompare({
                           </>
                         ) : showCompetitorPickGrid ? (
                           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                            <div className="min-w-0 shrink-0">
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                Competitors
-                              </p>
-                              <p className="mt-0.5 text-[10px] text-muted-foreground leading-snug">
-                                Tap a site to open the full screenshot beside yours.
-                              </p>
-                            </div>
-                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl bg-muted/15 p-2 scrollbar-hide">
+                            {/* Spacer: same height as left toolbar row so card grid aligns with screenshot */}
+                            <div className={cn("min-w-0 shrink-0", COMPACT_TOOLBAR_ROW)} aria-hidden />
+                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl bg-muted/15 px-2 pb-2 pt-0 scrollbar-hide">
                               <div className="grid grid-cols-2 gap-2">
                                 {competitorSiteEntries.map(({ site, siteIndex }) => (
                                   <button
@@ -2374,6 +2426,26 @@ export function ScreenshotCompare({
                                     </ul>
                                   </button>
                                 ))}
+                                {canAddCompetitor ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setAddCompetitorOpen(true)}
+                                    className={cn(
+                                      "flex min-h-[min(280px,40vh)] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-card/40 p-4 text-center shadow-none transition-colors",
+                                      "hover:border-primary/50 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                      "dark:border-zinc-600/80 dark:bg-[#0a0a0a]/80 dark:hover:border-primary/45 dark:hover:bg-zinc-950/80"
+                                    )}
+                                    aria-label="Add competitor"
+                                  >
+                                    <span className="flex h-12 w-12 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 bg-muted/30 text-muted-foreground dark:border-zinc-600 dark:bg-zinc-900">
+                                      <Plus className="h-6 w-6" strokeWidth={2} aria-hidden />
+                                    </span>
+                                    <span className="font-mono text-[11px] font-semibold text-foreground">Add competitor</span>
+                                    <span className="max-w-[11rem] font-mono text-[9px] leading-snug text-muted-foreground">
+                                      Full re-analysis with your site + current competitors + this URL
+                                    </span>
+                                  </button>
+                                ) : null}
                               </div>
                             </div>
                           </div>
@@ -2919,6 +2991,56 @@ export function ScreenshotCompare({
         }}
       />
     ) : null}
+
+    <Dialog
+      open={addCompetitorOpen}
+      onOpenChange={(open) => {
+        setAddCompetitorOpen(open);
+        if (!open) setAddCompetitorInput("");
+      }}
+    >
+      <DialogContent className="border-border bg-card sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add competitor</DialogTitle>
+          <DialogDescription>
+            Runs the same full analysis pipeline as your main comparison: your site plus the competitors below, including
+            this URL (up to {MAX_COMPETITORS} competitors total).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <label htmlFor="add-competitor-url" className="sr-only">
+            Competitor URL
+          </label>
+          <Input
+            id="add-competitor-url"
+            placeholder="competitor.com or https://…"
+            value={addCompetitorInput}
+            onChange={(e) => setAddCompetitorInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitAddCompetitor();
+              }
+            }}
+            autoComplete="url"
+            className="font-mono text-sm"
+          />
+          {existingCompetitorUrls.length > 0 ? (
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Keeping: {existingCompetitorUrls.map((u) => getDomain(u)).join(", ")}
+            </p>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setAddCompetitorOpen(false)}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={submitAddCompetitor}>
+            Run comparison
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }
