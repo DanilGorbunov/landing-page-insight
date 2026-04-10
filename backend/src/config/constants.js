@@ -9,8 +9,21 @@ export const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 /** Cache competitor discovery per user domain (Sonnet); skip repeat LLM calls. */
 export const DISCOVERY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-/** Max competitors (user + auto-discovered) per analysis. */
-export const MAX_COMPETITORS = 3;
+/**
+ * Max competitor URLs per analysis job (manual list + discovery combined).
+ * Override with env MAX_COMPETITORS (1–500). Default allows many manual adds on Compare.
+ */
+export const MAX_COMPETITORS = (() => {
+  const raw = process.env.MAX_COMPETITORS;
+  if (raw != null && raw !== "") {
+    const n = Number.parseInt(String(raw), 10);
+    if (Number.isFinite(n) && n >= 1 && n <= 500) return n;
+  }
+  return 100;
+})();
+
+/** When auto-discovery runs, total competitors = min(this, MAX_COMPETITORS) if manual list is shorter. */
+export const DISCOVERY_TARGET_COMPETITORS = 3;
 
 /** Timeout for competitor discovery (Claude + optional Tavily) in ms. */
 export const DISCOVERY_TIMEOUT_MS = 15000;
@@ -32,11 +45,11 @@ export const SCRAPE_TIMEOUT_MS = (() => {
 /** Timeout for pre-fetching screenshot URL to base64 in ms. */
 export const PREFETCH_TIMEOUT_MS = 10000;
 
-/** Max concurrent Vision analysis tasks (user + up to MAX_COMPETITORS). */
+/** Max concurrent Vision analysis tasks across competitor scrapes. */
 export const ANALYSIS_CONCURRENCY = 6;
 
-/** Job store TTL: job data expires after this (ms). */
-export const JOB_TTL_MS = 60 * 60 * 1000; // 1 hour
+/** Job store TTL: job data expires after this (ms). Long analyses + add-competitor reruns need headroom. */
+export const JOB_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 /** Max length of URL string to accept (avoid huge payloads). */
 export const MAX_URL_LENGTH = 2048;

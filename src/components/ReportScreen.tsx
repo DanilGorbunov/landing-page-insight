@@ -19,6 +19,7 @@ import {
   inferScoreFromAnalysis,
   type SectionScoreKey,
 } from "@/lib/utils";
+import { MAX_COMPETITORS } from "@/lib/constants";
 import { containerVariants, itemVariants } from "@/lib/motion";
 import { CompetitiveCharts } from "@/components/CompetitiveCharts";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -684,7 +685,7 @@ const ReportScreen = ({
                       variants={itemVariants}
                     />
                     {/* 3 competitors — score from X/10 in sections, or inferred from pass/fail bullets */}
-                    {(apiResult.competitors ?? []).slice(0, 3).map((comp) => (
+                    {(apiResult.competitors ?? []).slice(0, MAX_COMPETITORS).map((comp) => (
                       <SectionCard
                         key={comp.url}
                         domain={getDomain(comp.url)}
@@ -751,7 +752,7 @@ const ReportScreen = ({
                     analysis={apiResult.userAnalysis}
                     variants={itemVariants}
                   />
-                  {(apiResult.competitors ?? []).slice(0, 3).map((comp) => (
+                  {(apiResult.competitors ?? []).slice(0, MAX_COMPETITORS).map((comp) => (
                     <SiteSectionMetricsCard
                       key={comp.url}
                       domain={getDomain(comp.url)}

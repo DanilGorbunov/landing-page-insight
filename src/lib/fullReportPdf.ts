@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import type { FullInsightsPayload } from "@/lib/reportSession";
 import type { AnalysisResult } from "@/types/api";
+import { MAX_COMPETITORS } from "@/lib/constants";
 import { getDomain, parseSectionScores, stripMarkdownFormatting, type SectionScoreKey } from "@/lib/utils";
 import { parseSynthesisReport, type SynthesisBlock } from "@/lib/parseSynthesisReport";
 import { weightedOverallFromSections, projectRatings } from "@/lib/insightsProjection";
@@ -172,7 +173,7 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
     y += 4;
   }
 
-  for (const comp of result.competitors?.slice(0, 3) ?? []) {
+  for (const comp of result.competitors?.slice(0, MAX_COMPETITORS) ?? []) {
     const d = getDomain(comp.url);
     const shot = await loadImageDataUrl(comp.screenshotUrl);
     if (shot) {
@@ -280,7 +281,7 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
       }
     }
   }
-  for (const comp of result.competitors?.slice(0, 3) ?? []) {
+  for (const comp of result.competitors?.slice(0, MAX_COMPETITORS) ?? []) {
     const d = getDomain(comp.url);
     const ps = parseSectionScores(comp.analysis);
     const parts = order.map((sk) => `${SECTION_LABELS[sk]}:${ps?.[sk] != null ? ps[sk]!.toFixed(1) : "—"}`);
@@ -327,7 +328,7 @@ export async function downloadFullInsightsPdf(payload: FullInsightsPayload): Pro
     const userText = result.userAnalysis?.[key];
     y = addWrapped(doc, userText ? truncateBlock(userText, MAX_SECTION_CHARS) : "—", margin, y, maxW, 3.8);
     y += 3;
-    for (const comp of result.competitors?.slice(0, 3) ?? []) {
+    for (const comp of result.competitors?.slice(0, MAX_COMPETITORS) ?? []) {
       const d = getDomain(comp.url);
       doc.setFont("helvetica", "bold");
       y = addWrapped(doc, d, margin, y, maxW, 4);

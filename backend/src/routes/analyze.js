@@ -8,6 +8,7 @@ import {
   PREFETCH_TIMEOUT_MS,
   ANALYSIS_CONCURRENCY,
   MAX_COMPETITORS,
+  DISCOVERY_TARGET_COMPETITORS,
 } from "../config/constants.js";
 import { validateAnalyzeBody } from "../middleware/validateAnalyze.js";
 import { jobStore } from "../utils/jobStore.js";
@@ -184,8 +185,10 @@ async function runPipeline(jobId) {
     return;
   }
   const userUrl = job.url;
+  /** Result cache is keyed by target URL + day only — never reuse it when the client sent explicit competitor URLs (e.g. Compare → add competitor). */
+  const hasManualCompetitors = (job.competitors || []).some((c) => c && String(c).trim());
   const cacheKey = getCacheKey(userUrl);
-  const cached = resultCache.get(cacheKey);
+  const cached = !hasManualCompetitors ? resultCache.get(cacheKey) : null;
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
     const result = cached.result;
     jobStore.updateJob(jobId, {
@@ -227,10 +230,11 @@ async function runPipeline(jobId) {
         ),
       ]);
 
-    if (manualUrls.length >= MAX_COMPETITORS) {
+    if (manualUrls.length >= DISCOVERY_TARGET_COMPETITORS) {
       combined = manualUrls.slice(0, MAX_COMPETITORS);
     } else {
       const userDomain = getDomain(userUrl);
+      const discoveryCap = Math.min(DISCOVERY_TARGET_COMPETITORS, MAX_COMPETITORS);
 
       const userScrapeTask = scrapeWithTimeout({ url: userUrl, isUser: true }).then(
         (data) => ({ ok: true, data }),
@@ -274,7 +278,7 @@ async function runPipeline(jobId) {
 
       combined = [...manualUrls];
       for (const c of autoDiscovered) {
-        if (combined.length >= MAX_COMPETITORS) break;
+        if (combined.length >= discoveryCap) break;
         const u = c.url;
         const d = getDomain(u);
         if (d && d !== userDomain && !combined.some((x) => getDomain(x) === d)) combined.push(u);

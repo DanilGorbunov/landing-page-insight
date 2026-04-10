@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, AlertTriangle, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getJobStatus, type AnalysisResult, type CriticalGap, type JobLiveState, type LiveSiteState } from "@/lib/api";
+import { ANALYSIS_POLL_MAX_FAILURES } from "@/lib/constants";
 import {
   getDomain,
   cn,
@@ -21,7 +22,6 @@ import { CompetitiveBarChart } from "@/components/CompetitiveBarChart";
 /** Faster ticks until synthesis is ready; slower afterward to reduce load. */
 const POLL_MS_FAST = 750;
 const POLL_MS_SLOW = 2200;
-const MAX_POLL_FAILURES = 8;
 
 const FAVICON = (domain: string) =>
   `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
@@ -210,6 +210,10 @@ export default function ProgressiveReportView({
             setTimeout(() => onComplete(job.result as AnalysisResult), 400);
             return;
           }
+          if (job.status === "completed" && !job.result) {
+            setStreamError("Analysis finished without a report. Try again from the home page.");
+            return;
+          }
           if (job.status === "failed") {
             const err = job.error || "Analysis failed.";
             setStreamError(err);
@@ -218,14 +222,28 @@ export default function ProgressiveReportView({
 
           const nextDelay = job.live?.synthesis?.ready ? POLL_MS_SLOW : POLL_MS_FAST;
           await new Promise((r) => setTimeout(r, nextDelay));
-        } catch {
+        } catch (e) {
           if (cancelled || doneRef.current) return;
-          failCount += 1;
-          if (failCount >= MAX_POLL_FAILURES) {
-            setStreamError("Connection failed. Back to try again.");
+          const name = e instanceof Error ? e.name : "";
+          if (name === "JobNotFound") {
+            setStreamError(
+              import.meta.env.DEV
+                ? "Job not found — run the API (npm run dev:backend) or the job expired on the server."
+                : "Could not load this run. Set VITE_API_BASE_URL to your live API, or start a new analysis."
+            );
             return;
           }
-          await new Promise((r) => setTimeout(r, POLL_MS_FAST));
+          failCount += 1;
+          if (failCount >= ANALYSIS_POLL_MAX_FAILURES) {
+            setStreamError(
+              import.meta.env.DEV
+                ? "Lost connection while polling the API. Run npm run dev:backend (or dev:all) and try again."
+                : "Lost connection to the analysis server. Check hosting and VITE_API_BASE_URL, then try again."
+            );
+            return;
+          }
+          const backoffMs = name === "ServiceUnavailable" ? 4000 : POLL_MS_FAST;
+          await new Promise((r) => setTimeout(r, backoffMs));
         }
       }
     };

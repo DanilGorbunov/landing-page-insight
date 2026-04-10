@@ -35,6 +35,7 @@ import {
   X,
   Loader2,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -1113,6 +1114,8 @@ interface Props {
   onNewAnalysis?: () => void;
   /** Re-run full analysis (home → progress) with this competitor URL list; omit for read-only / shared views. */
   onRerunAnalysisWithCompetitors?: (competitorUrls: string[]) => void | Promise<void>;
+  /** Remove a competitor from the in-memory report (no API re-run); omit for read-only / shared views. */
+  onRemoveCompetitor?: (competitorUrl: string) => void;
   /** In-grid loading card while a new competitor analysis runs (same page). */
   competitorAnalysisPending?: { newUrl: string; live: JobLiveState | null; error: string | null } | null;
   onDismissCompetitorAnalysisError?: () => void;
@@ -1128,6 +1131,7 @@ export function ScreenshotCompare({
   onReaudit,
   onNewAnalysis,
   onRerunAnalysisWithCompetitors,
+  onRemoveCompetitor,
   competitorAnalysisPending,
   onDismissCompetitorAnalysisError,
 }: Props) {
@@ -2485,69 +2489,91 @@ export function ScreenshotCompare({
                             <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain rounded-xl bg-muted/15 px-2 pb-2 pt-0 scrollbar-hide">
                               <div className="grid grid-cols-2 gap-2">
                                 {competitorSiteEntries.map(({ site, siteIndex }) => (
-                                  <button
+                                  <div
                                     key={site.url}
-                                    type="button"
-                                    onClick={() => {
-                                      pushToolbarHelp(`competitor-grid-${site.domain}`, HINT_CONTROLS.vsSelect);
-                                      pickCompetitorFromGrid(siteIndex);
-                                    }}
                                     className={cn(
-                                      "flex flex-col gap-2 rounded-xl border border-border bg-card p-2.5 text-left text-card-foreground shadow-sm transition-colors",
-                                      "hover:border-primary/45 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
-                                      "dark:border-zinc-600/70 dark:bg-[#0a0a0a] dark:shadow-none dark:hover:border-primary/50 dark:hover:bg-zinc-950"
+                                      "group relative flex flex-col rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-colors",
+                                      "hover:border-primary/45 dark:border-zinc-600/70 dark:bg-[#0a0a0a] dark:shadow-none dark:hover:border-primary/50"
                                     )}
                                   >
-                                    <div className="flex min-w-0 items-center gap-2">
-                                      <img
-                                        src={competitorGridFaviconUrl(site.domain)}
-                                        alt=""
-                                        width={24}
-                                        height={24}
-                                        className="h-6 w-6 shrink-0 rounded-md bg-muted ring-1 ring-border dark:bg-zinc-900 dark:ring-zinc-700/80"
-                                      />
-                                      <span className="min-w-0 truncate font-mono text-[11px] font-medium tracking-tight text-foreground">
-                                        {site.domain}
-                                      </span>
-                                    </div>
-                                    <div className="overflow-hidden rounded-lg bg-muted ring-1 ring-border dark:bg-zinc-950 dark:ring-zinc-800/90">
-                                      {site.screenshotUrl ? (
-                                        <img
-                                          src={site.screenshotUrl}
-                                          alt=""
-                                          className="aspect-[16/10] max-h-[min(160px,28vh)] w-full object-cover object-top"
-                                          loading="lazy"
-                                          draggable={false}
-                                        />
-                                      ) : (
-                                        <div className="flex aspect-[16/10] max-h-[min(160px,28vh)] w-full items-center justify-center px-2 text-center font-mono text-[10px] text-muted-foreground">
-                                          No screenshot
-                                        </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        pushToolbarHelp(`competitor-grid-${site.domain}`, HINT_CONTROLS.vsSelect);
+                                        pickCompetitorFromGrid(siteIndex);
+                                      }}
+                                      className={cn(
+                                        "flex flex-col gap-2 rounded-xl p-2.5 text-left transition-colors",
+                                        "hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                                        "dark:hover:bg-zinc-950"
                                       )}
-                                    </div>
-                                    <div className="h-px w-full shrink-0 bg-border dark:bg-zinc-800" aria-hidden />
-                                    <p className="font-mono text-[8px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                                      Section scores
-                                    </p>
-                                    <ul className="flex flex-col gap-1 font-mono text-[10px]">
-                                      {SECTION_KEYS.map((key) => {
-                                        const sc = sectionScoreForScreenshot(site.analysis, key);
-                                        return (
-                                          <li
-                                            key={key}
-                                            className="flex items-baseline justify-between gap-2 leading-tight"
-                                          >
-                                            <span className="min-w-0 truncate text-muted-foreground">
-                                              {SECTION_ZONES[key].label}
-                                            </span>
-                                            <span className="shrink-0 text-sm font-semibold tabular-nums text-amber-700 dark:text-amber-400">
-                                              {sc.toFixed(1)}
-                                            </span>
-                                          </li>
-                                        );
-                                      })}
-                                    </ul>
-                                  </button>
+                                    >
+                                      <div className="flex min-w-0 items-center gap-2 pr-7">
+                                        <img
+                                          src={competitorGridFaviconUrl(site.domain)}
+                                          alt=""
+                                          width={24}
+                                          height={24}
+                                          className="h-6 w-6 shrink-0 rounded-md bg-muted ring-1 ring-border dark:bg-zinc-900 dark:ring-zinc-700/80"
+                                        />
+                                        <span className="min-w-0 truncate font-mono text-[11px] font-medium tracking-tight text-foreground">
+                                          {site.domain}
+                                        </span>
+                                      </div>
+                                      <div className="overflow-hidden rounded-lg bg-muted ring-1 ring-border dark:bg-zinc-950 dark:ring-zinc-800/90">
+                                        {site.screenshotUrl ? (
+                                          <img
+                                            src={site.screenshotUrl}
+                                            alt=""
+                                            className="aspect-[16/10] max-h-[min(160px,28vh)] w-full object-cover object-top"
+                                            loading="lazy"
+                                            draggable={false}
+                                          />
+                                        ) : (
+                                          <div className="flex aspect-[16/10] max-h-[min(160px,28vh)] w-full items-center justify-center px-2 text-center font-mono text-[10px] text-muted-foreground">
+                                            No screenshot
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="h-px w-full shrink-0 bg-border dark:bg-zinc-800" aria-hidden />
+                                      <p className="font-mono text-[8px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+                                        Section scores
+                                      </p>
+                                      <ul className="flex flex-col gap-1 font-mono text-[10px]">
+                                        {SECTION_KEYS.map((key) => {
+                                          const sc = sectionScoreForScreenshot(site.analysis, key);
+                                          return (
+                                            <li
+                                              key={key}
+                                              className="flex items-baseline justify-between gap-2 leading-tight"
+                                            >
+                                              <span className="min-w-0 truncate text-muted-foreground">
+                                                {SECTION_ZONES[key].label}
+                                              </span>
+                                              <span className="shrink-0 text-sm font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                                                {sc.toFixed(1)}
+                                              </span>
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    </button>
+                                    {onRemoveCompetitor ? (
+                                      <button
+                                        type="button"
+                                        onClick={(ev) => {
+                                          ev.preventDefault();
+                                          ev.stopPropagation();
+                                          onRemoveCompetitor(site.url);
+                                        }}
+                                        className="absolute right-1.5 top-1.5 z-10 flex size-7 items-center justify-center rounded-md border border-border bg-background/95 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        aria-label={`Remove ${site.domain} from report`}
+                                        title="Remove from report"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                                      </button>
+                                    ) : null}
+                                  </div>
                                 ))}
                                 {competitorAnalysisPending ? (
                                   <PendingCompetitorGridCard

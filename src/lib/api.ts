@@ -1,5 +1,5 @@
 import { VITE_API_BASE_URL } from "@/lib/env";
-import { API_TIMEOUT_MS, MAX_COMPETITORS } from "@/lib/constants";
+import { API_TIMEOUT_MS, JOB_STATUS_POLL_TIMEOUT_MS, MAX_COMPETITORS } from "@/lib/constants";
 import type { HistoryEntry } from "@/lib/analysisHistory";
 import type { AnalysisResult, CriticalGap, JobProgressEntry, JobLiveState, JobStatus } from "@/types/api";
 import type { AttentionHeatmapResponse } from "@/types/attention";
@@ -62,9 +62,30 @@ export function getStreamUrl(jobId: string): string {
   return `${API_BASE}/api/analyze/stream/${jobId}`;
 }
 
-export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetchWithTimeout(`${API_BASE}/api/analyze/job/${jobId}`, DEFAULT_FETCH_OPTIONS);
-  if (!res.ok) throw new Error("Job not found");
+export async function getJobStatus(
+  jobId: string,
+  options?: { timeoutMs?: number }
+): Promise<JobStatus> {
+  const timeoutMs = options?.timeoutMs ?? JOB_STATUS_POLL_TIMEOUT_MS;
+  const res = await fetchWithTimeout(`${API_BASE}/api/analyze/job/${jobId}`, {
+    ...DEFAULT_FETCH_OPTIONS,
+    timeoutMs,
+  });
+  if (!res.ok) {
+    if (res.status === 404) {
+      const err = new Error("JOB_NOT_FOUND");
+      err.name = "JobNotFound";
+      throw err;
+    }
+    if (res.status === 502 || res.status === 503) {
+      const err = new Error(`SERVICE_${res.status}`);
+      err.name = "ServiceUnavailable";
+      throw err;
+    }
+    const err = new Error(`Job status ${res.status}`);
+    err.name = "JobStatusError";
+    throw err;
+  }
   return res.json();
 }
 

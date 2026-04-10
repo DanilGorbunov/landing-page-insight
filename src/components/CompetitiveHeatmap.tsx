@@ -1,5 +1,6 @@
 import type { AnalysisResult } from "@/types/api";
 import { cn, getDomain } from "@/lib/utils";
+import { MAX_COMPETITORS } from "@/lib/constants";
 
 const SECTION_KEYS = ["hero", "value proposition", "features", "social proof", "CTA"] as const;
 
@@ -31,9 +32,15 @@ interface Props {
 }
 
 export function CompetitiveHeatmap({ userUrl, result }: Props) {
-  const sites: { label: string; isUser: boolean; analysis: Record<string, string> | undefined }[] = [
-    { label: getDomain(userUrl), isUser: true, analysis: result.userAnalysis },
-    ...(result.competitors ?? []).slice(0, 3).map((c) => ({
+  const sites: {
+    key: string;
+    label: string;
+    isUser: boolean;
+    analysis: Record<string, string> | undefined;
+  }[] = [
+    { key: "__user__", label: getDomain(userUrl), isUser: true, analysis: result.userAnalysis },
+    ...(result.competitors ?? []).slice(0, MAX_COMPETITORS).map((c) => ({
+      key: c.url,
       label: getDomain(c.url),
       isUser: false,
       analysis: c.analysis,
@@ -50,7 +57,7 @@ export function CompetitiveHeatmap({ userUrl, result }: Props) {
             <th className="text-left text-xs font-medium text-muted-foreground py-2 pr-3 min-w-[100px]">Section</th>
             {sites.map((site) => (
               <th
-                key={site.label}
+                key={site.key}
                 className={cn(
                   "text-center text-xs font-medium py-2 px-3 min-w-[80px]",
                   site.isUser ? "text-primary" : "text-muted-foreground"
@@ -69,7 +76,7 @@ export function CompetitiveHeatmap({ userUrl, result }: Props) {
               {sites.map((site) => {
                 const score = parseScore(site.analysis?.[key]);
                 return (
-                  <td key={site.label} className="py-2 px-3 text-center">
+                  <td key={site.key} className="py-2 px-3 text-center">
                     <span className={cn("inline-block rounded-md px-2 py-1 text-xs font-bold tabular-nums min-w-[40px]", scoreColor(score))}>
                       {score !== null ? score.toFixed(1) : "—"}
                     </span>
@@ -86,11 +93,11 @@ export function CompetitiveHeatmap({ userUrl, result }: Props) {
               {sites.map((site) => {
                 const perfSite = site.isUser
                   ? result.performance?.user
-                  : result.performance?.competitors?.find((c) => getDomain(c.url) === site.label);
+                  : result.performance?.competitors?.find((c) => c.url === site.key);
                 const score = perfSite?.scores?.performance ?? null;
                 const mapped = score !== null ? score / 10 : null;
                 return (
-                  <td key={site.label} className="py-2 px-3 text-center">
+                  <td key={site.key} className="py-2 px-3 text-center">
                     <span className={cn("inline-block rounded-md px-2 py-1 text-xs font-bold tabular-nums min-w-[40px]", scoreColor(mapped))}>
                       {score !== null ? score : "—"}
                     </span>

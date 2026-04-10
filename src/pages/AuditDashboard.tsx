@@ -13,6 +13,7 @@ import {
 import { cn, getDomain } from "@/lib/utils";
 import { readFullInsightsPayload, writeFullInsightsPayload, readFullInsightsUnlockMeta } from "@/lib/reportSession";
 import { saveToHistory } from "@/lib/analysisHistory";
+import { analysisResultWithoutCompetitor } from "@/lib/analysisResultMutations";
 import { startAnalysis } from "@/lib/api";
 import { useAnalysisJob } from "@/hooks/useAnalysisJob";
 import { getAuditPage } from "@/lib/auditPageStore";
@@ -397,6 +398,7 @@ function SectionContent({
   compareSiteIdx,
   onCompareSiteIdxChange,
   onRerunWithCompetitors,
+  onRemoveCompetitor,
   competitorAnalysisPending,
   onDismissCompetitorAnalysisError,
 }: {
@@ -407,6 +409,8 @@ function SectionContent({
   onCompareSiteIdxChange?: (idx: number) => void;
   /** Re-run POST /api/analyze with this competitor list (add-competitor flow). */
   onRerunWithCompetitors?: (competitorUrls: string[]) => void | Promise<void>;
+  /** Remove one competitor from the saved report (no new API run). */
+  onRemoveCompetitor?: (competitorUrl: string) => void;
   competitorAnalysisPending?: {
     newUrl: string;
     live: JobLiveState | null;
@@ -425,6 +429,7 @@ function SectionContent({
           compareSiteIdx={compareSiteIdx}
           onCompareSiteIdxChange={onCompareSiteIdxChange}
           onRerunAnalysisWithCompetitors={onRerunWithCompetitors}
+          onRemoveCompetitor={onRemoveCompetitor}
           competitorAnalysisPending={competitorAnalysisPending}
           onDismissCompetitorAnalysisError={onDismissCompetitorAnalysisError}
         />
@@ -590,6 +595,37 @@ export default function AuditDashboard() {
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to start analysis");
       }
+    },
+    [reportUrlNormalized, isSharedView]
+  );
+
+  const handleRemoveCompetitor = useCallback(
+    (competitorUrl: string) => {
+      if (!reportUrlNormalized || isSharedView) return;
+      const currentResult = readFullInsightsPayload()?.result;
+      if (!currentResult) return;
+      const compIdx = currentResult.competitors.findIndex(
+        (c) => getDomain(c.url) === getDomain(competitorUrl) || c.url.trim() === competitorUrl.trim()
+      );
+      if (compIdx < 0) return;
+      const removedSiteIdx = compIdx + 1;
+      const newResult = analysisResultWithoutCompetitor(currentResult, competitorUrl);
+      const meta = readFullInsightsUnlockMeta();
+      writeFullInsightsPayload({
+        url: reportUrlNormalized,
+        result: newResult,
+        planId: meta?.planId ?? "analysis",
+        planName: meta?.planName ?? "Analysis",
+        paidAt: meta?.paidAt ?? new Date().toISOString(),
+      });
+      saveToHistory(reportUrlNormalized, newResult);
+      setCompareSiteIdx((prev) => {
+        if (prev === removedSiteIdx) return 0;
+        if (prev > removedSiteIdx) return prev - 1;
+        return prev;
+      });
+      setSessionRevision((n) => n + 1);
+      toast.success("Competitor removed from this report.");
     },
     [reportUrlNormalized, isSharedView]
   );
@@ -855,6 +891,7 @@ export default function AuditDashboard() {
                 compareSiteIdx={compareSiteIdx}
                 onCompareSiteIdxChange={setCompareSiteIdx}
                 onRerunWithCompetitors={isSharedView ? undefined : handleRerunWithCompetitors}
+                onRemoveCompetitor={isSharedView ? undefined : handleRemoveCompetitor}
                 competitorAnalysisPending={
                   pendingCompetitorJob
                     ? {

@@ -6,6 +6,7 @@ import { staggerContainer, staggerItem } from "@/lib/motion";
 import { cn, isValidHttpUrl, normalizeInputUrl, DEFAULT_SCORE } from "@/lib/utils";
 import type { HistoryEntry } from "@/lib/analysisHistory";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { MAX_COMPETITORS } from "@/lib/constants";
 
 const SAMPLE_SITES = ["apollo.io", "linear.app", "hubspot.com", "notion.so"];
 
@@ -90,7 +91,7 @@ const InputScreen = ({
   };
 
   const addCompetitor = () => {
-    if (competitors.length < 3) setCompetitors([...competitors, ""]);
+    if (competitors.length < MAX_COMPETITORS) setCompetitors([...competitors, ""]);
   };
 
   const removeCompetitor = (i: number) => {
@@ -266,7 +267,7 @@ const InputScreen = ({
                   )}
                 </div>
               ))}
-              {competitors.length < 3 && (
+              {competitors.length < MAX_COMPETITORS && (
                 <button
                   onClick={addCompetitor}
                   className="text-xs text-muted-foreground hover:text-primary transition-colors"
@@ -298,7 +299,7 @@ const InputScreen = ({
             </div>
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
               {recentAnalyses.slice(0, 3).map((entry) => {
-                const nComp = Math.min(3, entry.result?.competitors?.length ?? 0);
+                const nComp = entry.result?.competitors?.length ?? 0;
                 const score = entry.score ?? DEFAULT_SCORE;
                 return (
                   <li key={entry.id}>

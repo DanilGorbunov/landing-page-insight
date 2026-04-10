@@ -8,6 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { MAX_COMPETITORS } from "@/lib/constants";
 import { readFullInsightsPayload } from "@/lib/reportSession";
 import { getHistoryCount, enableFullInsightsHistoryPersistence } from "@/lib/analysisHistory";
 import { downloadFullInsightsPdf } from "@/lib/fullReportPdf";
@@ -181,7 +182,7 @@ export default function FullInsightsReport() {
   const sites: { label: string; isUser: boolean; analysis: Record<string, string> | undefined; urlHref: string }[] =
     [
       { label: domain, isUser: true, analysis: result.userAnalysis, urlHref: url },
-      ...(result.competitors ?? []).slice(0, 3).map((c) => ({
+      ...(result.competitors ?? []).slice(0, MAX_COMPETITORS).map((c) => ({
         label: getDomain(c.url),
         isUser: false,
         analysis: c.analysis,
@@ -444,7 +445,7 @@ export default function FullInsightsReport() {
                       ))}
                     </ul>
                   </div>
-                  {(result.competitors ?? []).slice(0, 3).map((c) => (
+                  {(result.competitors ?? []).slice(0, MAX_COMPETITORS).map((c) => (
                     <div key={c.url} className="pt-4 border-t border-border">
                       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                         {getDomain(c.url)}
@@ -565,7 +566,7 @@ export default function FullInsightsReport() {
                 <img src={result.targetScreenshotUrl} alt={`Full page screenshot of ${domain}`} className="w-full h-auto block" />
               </a>
             </div>
-            {(result.competitors ?? []).slice(0, 3).map((comp) => comp.screenshotUrl && (
+            {(result.competitors ?? []).slice(0, MAX_COMPETITORS).map((comp) => comp.screenshotUrl && (
               <div key={comp.url} className="rounded-lg border border-border overflow-hidden bg-card/25">
                 <div className="px-3 py-2 border-b border-border flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-muted-foreground" />
@@ -730,7 +731,7 @@ export default function FullInsightsReport() {
                     analysisText={result.userAnalysis?.[SECTION_TO_BACKEND[activeSection]]}
                     variants={itemVariants}
                   />
-                  {(result.competitors ?? []).slice(0, 3).map((comp) => (
+                  {(result.competitors ?? []).slice(0, MAX_COMPETITORS).map((comp) => (
                     <SectionCard
                       key={comp.url}
                       domain={getDomain(comp.url)}
@@ -767,7 +768,7 @@ export default function FullInsightsReport() {
                     analysis={result.userAnalysis}
                     variants={itemVariants}
                   />
-                  {(result.competitors ?? []).slice(0, 3).map((comp) => (
+                  {(result.competitors ?? []).slice(0, MAX_COMPETITORS).map((comp) => (
                     <SiteSectionMetricsCard
                       key={comp.url}
                       domain={getDomain(comp.url)}

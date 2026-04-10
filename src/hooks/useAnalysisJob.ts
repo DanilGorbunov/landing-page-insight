@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { getJobStatus, type AnalysisResult, type JobLiveState } from "@/lib/api";
+import { ANALYSIS_POLL_MAX_FAILURES } from "@/lib/constants";
 
 const POLL_MS_FAST = 750;
 const POLL_MS_SLOW = 2200;
-const MAX_POLL_FAILURES = 8;
 
 export function useAnalysisJob(jobId: string | null, initialLive?: JobLiveState | null) {
   const [live, setLive] = useState<JobLiveState | null>(initialLive ?? null);
@@ -42,6 +42,11 @@ export function useAnalysisJob(jobId: string | null, initialLive?: JobLiveState 
             doneRef.current = true;
             return;
           }
+          if (job.status === "completed" && !job.result) {
+            setError("Analysis finished without a report payload. Try again.");
+            doneRef.current = true;
+            return;
+          }
           if (job.status === "failed") {
             setError(job.error || "Analysis failed.");
             return;
@@ -49,14 +54,26 @@ export function useAnalysisJob(jobId: string | null, initialLive?: JobLiveState 
 
           const nextDelay = job.live?.synthesis?.ready ? POLL_MS_SLOW : POLL_MS_FAST;
           await new Promise((r) => setTimeout(r, nextDelay));
-        } catch {
+        } catch (e) {
           if (cancelled || doneRef.current) return;
-          failCount += 1;
-          if (failCount >= MAX_POLL_FAILURES) {
-            setError("Connection failed. Check the API and try again.");
+          const name = e instanceof Error ? e.name : "";
+          if (name === "JobNotFound") {
+            setError(
+              "This analysis job is no longer on the server (expired or restarted). Add the competitor again."
+            );
             return;
           }
-          await new Promise((r) => setTimeout(r, POLL_MS_FAST));
+          failCount += 1;
+          if (failCount >= ANALYSIS_POLL_MAX_FAILURES) {
+            setError(
+              import.meta.env.DEV
+                ? "Lost connection while polling. Run npm run dev:backend (or dev:all)."
+                : "Lost connection to the analysis server. Check VITE_API_BASE_URL and try again."
+            );
+            return;
+          }
+          const backoffMs = name === "ServiceUnavailable" ? 4000 : POLL_MS_FAST;
+          await new Promise((r) => setTimeout(r, backoffMs));
         }
       }
     };
