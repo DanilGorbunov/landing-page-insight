@@ -1,7 +1,15 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate, Link, useSearchParams, useParams, useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowRight, TrendingUp, AlertTriangle, CheckCircle2, Lightbulb, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
+  Lightbulb,
+  Loader2,
+  X,
+} from "lucide-react";
 import { cn, getDomain } from "@/lib/utils";
 import { readFullInsightsPayload, writeFullInsightsPayload } from "@/lib/reportSession";
 import { getAuditPage } from "@/lib/auditPageStore";
@@ -33,6 +41,8 @@ import {
 import { FULL_INSIGHTS_SECTION_IDS } from "@/lib/dashboardNavRoutes";
 import { resolveDashboardNavHref } from "@/lib/dashboardNavHref";
 import type { AnalysisResult } from "@/types/api";
+
+const SHARED_REPORT_BANNER_DISMISSED_KEY = "ll_shared_report_banner_dismissed";
 
 // ─── Score helpers ──────────────────────────────────────────────────────────────
 
@@ -482,6 +492,21 @@ export default function AuditDashboard() {
       : undefined;
   const [searchParams, setSearchParams] = useSearchParams();
   const isSharedView = searchParams.get("shared") === "true";
+  const [sharedBannerDismissed, setSharedBannerDismissed] = useState(() => {
+    try {
+      return typeof window !== "undefined" && sessionStorage.getItem(SHARED_REPORT_BANNER_DISMISSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const dismissSharedBanner = useCallback(() => {
+    try {
+      sessionStorage.setItem(SHARED_REPORT_BANNER_DISMISSED_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setSharedBannerDismissed(true);
+  }, []);
   const [sessionRevision, setSessionRevision] = useState(0);
   const [sharedFetch, setSharedFetch] = useState<"idle" | "loading" | "ok" | "missing">("idle");
   const payload = useMemo(() => {
@@ -690,17 +715,27 @@ export default function AuditDashboard() {
             activeSection === "compare" || activeSection === "overview",
         }}
         banner={
-          isSharedView ? (
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-950 dark:text-amber-50">
-              <span className="min-w-0">
-                👁 You&apos;re viewing a shared report · Run your own analysis →
-              </span>
-              <Link
-                to="/"
-                className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110"
+          isSharedView && !sharedBannerDismissed ? (
+            <div className="flex shrink-0 items-start gap-2 border-b border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-950 dark:text-amber-50 sm:items-center">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-2">
+                <span className="min-w-0">
+                  👁 You&apos;re viewing a shared report · Run your own analysis →
+                </span>
+                <Link
+                  to="/"
+                  className="inline-flex shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110"
+                >
+                  Get started
+                </Link>
+              </div>
+              <button
+                type="button"
+                onClick={dismissSharedBanner}
+                className="shrink-0 rounded-md p-1 text-amber-900/70 transition-colors hover:bg-amber-500/20 hover:text-amber-950 dark:text-amber-100/80 dark:hover:bg-amber-500/15 dark:hover:text-amber-50"
+                aria-label="Dismiss banner"
               >
-                Get started
-              </Link>
+                <X className="h-4 w-4" aria-hidden />
+              </button>
             </div>
           ) : undefined
         }
